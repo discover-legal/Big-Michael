@@ -337,6 +337,22 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     return roundState;
   });
 
+  // Health check
+  app.get("/health", async () => {
+    const tasks = orchestrator.listTasks();
+    return {
+      status: "ok",
+      version: "0.1.0",
+      uptime: Math.floor(process.uptime()),
+      tasks: {
+        total: tasks.length,
+        running: tasks.filter((t) => t.status === "running").length,
+        awaiting_gate: tasks.filter((t) => t.status === "awaiting_gate").length,
+        complete: tasks.filter((t) => t.status === "complete").length,
+      },
+    };
+  });
+
   // Audit REST routes
   app.get("/audit", async (req) => {
     const { taskId, limit } = req.query as Record<string, string>;
