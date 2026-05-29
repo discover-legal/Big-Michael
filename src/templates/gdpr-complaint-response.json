@@ -1,0 +1,13 @@
+{
+  "id": "gdpr-complaint-response",
+  "name": "GDPR Complaint Response",
+  "description": "Draft a formal response to a GDPR complaint filed with a supervisory authority (DPA). Covers lawful basis, data subject rights, proportionality, and recommended corrective measures.",
+  "taskDescriptionTemplate": "Draft a formal response to the following GDPR complaint:\n\n{{description}}\n\nComplaint document(s): {{document}}\n\nThe response must:\n1. Identify all GDPR provisions engaged (lawful basis, Chapter III rights, Articles 5–11, 24–26 as applicable).\n2. Confirm or dispute the factual allegations with specific evidence from the documents.\n3. Identify any relevant EDPB guidelines, DPA decisions, or CJEU judgments on point.\n4. Assess proportionality and necessity of the processing complained of.\n5. Propose corrective measures or explain why none are required.\n6. Set out the legal arguments for the DPA clearly and concisely.",
+  "workflowType": "adversarial",
+  "preferredDomains": ["analysis", "compliance", "drafting"],
+  "source": "custom",
+  "metadata": {
+    "jurisdiction": "EU",
+    "practiceArea": "data-protection"
+  }
+}

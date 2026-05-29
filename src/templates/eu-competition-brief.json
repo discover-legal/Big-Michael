@@ -1,0 +1,13 @@
+{
+  "id": "eu-competition-brief",
+  "name": "EU Competition Law Brief",
+  "description": "Comprehensive brief analysing Article 101 and/or Article 102 TFEU issues raised by a commercial arrangement or conduct. Suitable for counsel submissions, internal advice memos, and regulatory self-assessments.",
+  "taskDescriptionTemplate": "Prepare a comprehensive EU competition law brief analysing the following matter:\n\n{{description}}\n\nDocuments provided: {{document}}\n\nThe brief should:\n1. Identify all potentially relevant TFEU provisions (Art 101, 102, merger regulation if applicable).\n2. Analyse market definition and competitive effects.\n3. Address any applicable exemptions or defences.\n4. Consider relevant CJEU and General Court precedents.\n5. Assess enforcement risk and likelihood of Commission or NCA scrutiny.\n6. Recommend next steps with prioritisation.",
+  "workflowType": "full_bench",
+  "preferredDomains": ["analysis", "research", "drafting"],
+  "source": "custom",
+  "metadata": {
+    "jurisdiction": "EU",
+    "practiceArea": "competition"
+  }
+}

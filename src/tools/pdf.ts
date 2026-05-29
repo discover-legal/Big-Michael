@@ -1,0 +1,217 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Discover Legal
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 3.
+// See <https://www.gnu.org/licenses/gpl-3.0.html>
+
+/**
+ * PDF tool implementations — wraps scripts/pdf_tools.py via child_process.
+ *
+ * Three tools:
+ *   pdf_extract_text   — PyMuPDF: text + block structure from any PDF
+ *   pdf_extract_tables — Camelot: table extraction (lattice → stream fallback)
+ *   pdf_generate       — PyMuPDF Story: create paginated legal PDFs from
+ *                         markdown strings or structured section arrays
+ */
+
+import { spawn } from "child_process";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { Config } from "../config.js";
+import { logger } from "../logger.js";
+import type { ToolImpl } from "./index.js";
+
+const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "../../scripts/pdf_tools.py");
+
+// ─── Shared python runner ─────────────────────────────────────────────────────
+
+async function runPython(operation: string, args: unknown): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const python = Config.pdf.pythonBin;
+    const child = spawn(python, [SCRIPT, operation, JSON.stringify(args)]);
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => { stdout += d; });
+    child.stderr.on("data", (d) => { stderr += d; });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        logger.error("pdf_tools.py exited with error", { operation, code, stderr: stderr.slice(0, 500) });
+        try {
+          resolve(JSON.parse(stdout)); // script writes error JSON to stdout
+        } catch {
+          reject(new Error(`pdf_tools.py failed (exit ${code}): ${stderr.slice(0, 200)}`));
+        }
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        reject(new Error(`Failed to parse pdf_tools.py output: ${stdout.slice(0, 200)}`));
+      }
+    });
+
+    child.on("error", (err) => {
+      reject(new Error(`Failed to spawn ${python}: ${err.message}. Is Python 3 installed?`));
+    });
+  });
+}
+
+// ─── pdf_extract_text ─────────────────────────────────────────────────────────
+
+export const pdfExtractTextTool: ToolImpl = {
+  name: "pdf_extract_text",
+  schema: {
+    name: "pdf_extract_text",
+    description:
+      "Extract full text and block structure from a PDF file using PyMuPDF. " +
+      "Returns page-by-page text and bounding-box blocks for layout analysis.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Absolute or relative path to the PDF file" },
+        pages: {
+          type: "string",
+          description: "Optional page range to extract, e.g. '1-5' or '3'. Defaults to all pages.",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  async execute(input, _ctx) {
+    return runPython("extract_text", {
+      path: input.path,
+      pages: input.pages,
+    });
+  },
+};
+
+// ─── pdf_extract_tables ───────────────────────────────────────────────────────
+
+export const pdfExtractTablesTool: ToolImpl = {
+  name: "pdf_extract_tables",
+  schema: {
+    name: "pdf_extract_tables",
+    description:
+      "Extract tables from a PDF using Camelot. Returns each table as an array of rows " +
+      "with headers and data cells. Automatically falls back from lattice to stream mode " +
+      "if no bordered tables are found.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Absolute or relative path to the PDF file" },
+        pages: {
+          type: "string",
+          description: "Pages to scan, e.g. 'all', '1', '1-3'. Defaults to 'all'.",
+        },
+        flavor: {
+          type: "string",
+          enum: ["lattice", "stream"],
+          description:
+            "lattice (default): bordered tables with ruled lines. " +
+            "stream: whitespace-separated columns (no visible borders).",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  async execute(input, _ctx) {
+    return runPython("extract_tables", {
+      path: input.path,
+      pages: input.pages ?? "all",
+      flavor: input.flavor ?? "lattice",
+    });
+  },
+};
+
+// ─── pdf_generate ─────────────────────────────────────────────────────────────
+
+export const pdfGenerateTool: ToolImpl = {
+  name: "pdf_generate",
+  schema: {
+    name: "pdf_generate",
+    description:
+      "Generate a properly formatted legal PDF document using PyMuPDF. " +
+      "Accepts either a markdown string or a structured sections array. " +
+      "Handles automatic pagination, justified text, headings, and bullet lists. " +
+      "Returns the output file path and page count.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Document title (rendered as H1 on first page)" },
+        filename: {
+          type: "string",
+          description: "Output filename, e.g. 'competition-brief-2026.pdf'",
+        },
+        content: {
+          description:
+            "Document body as a markdown string, " +
+            "or a structured array: [{heading, content, subsections?}]",
+        },
+        author: { type: "string", description: "Optional author / firm name for the metadata line" },
+        confidential: {
+          type: "boolean",
+          description: "If true, adds a CONFIDENTIAL — LEGALLY PRIVILEGED banner",
+        },
+      },
+      required: ["title", "filename", "content"],
+    },
+  },
+  async execute(input, _ctx) {
+    return runPython("generate", {
+      title: input.title,
+      filename: input.filename,
+      content: input.content,
+      output_dir: Config.pdf.outputDir,
+      author: input.author,
+      confidential: input.confidential ?? false,
+    });
+  },
+};
+
+// ─── pdf_ocr ──────────────────────────────────────────────────────────────────
+
+export const pdfOcrTool: ToolImpl = {
+  name: "pdf_ocr",
+  schema: {
+    name: "pdf_ocr",
+    description:
+      "OCR a scanned PDF or image file using Tesseract 5. " +
+      "PDF pages are rasterised at 300 DPI via PyMuPDF before OCR so quality " +
+      "is consistent for any scan resolution. Returns full text and per-page breakdown. " +
+      "Useful for scanned regulatory filings, court documents, and client contracts " +
+      "that contain no embedded selectable text.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Absolute path to the PDF or image file (PNG/JPEG/TIFF)" },
+        lang: {
+          type: "string",
+          description:
+            "Tesseract language code(s). Default 'eng'. " +
+            "Multi-language: 'eng+fra', 'eng+deu', etc. " +
+            "Available: eng, fra, deu, ita, spa, nld, por",
+        },
+        pages: {
+          type: "string",
+          description: "Page range for PDFs, e.g. '1-3' or '2'. Defaults to all pages.",
+        },
+        dpi: {
+          type: "number",
+          description: "Rasterisation DPI for PDF pages. Default 300. Higher = better OCR, slower.",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  async execute(input, _ctx) {
+    return runPython("ocr", {
+      path: input.path,
+      lang: input.lang ?? "eng",
+      pages: input.pages,
+      dpi: input.dpi ?? 300,
+    });
+  },
+};

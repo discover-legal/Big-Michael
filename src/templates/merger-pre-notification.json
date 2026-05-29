@@ -1,0 +1,13 @@
+{
+  "id": "merger-pre-notification",
+  "name": "EU Merger Pre-Notification Assessment",
+  "description": "Pre-notification assessment of a proposed concentration under the EU Merger Regulation (EUMR). Covers jurisdictional thresholds, market definition, competitive effects, and notification strategy.",
+  "taskDescriptionTemplate": "Prepare a pre-notification assessment for the following proposed concentration:\n\n{{description}}\n\nTransaction documents: {{document}}\n\nThe assessment must:\n1. Determine whether the EUMR jurisdictional thresholds are met (Art 1 EUMR).\n2. Define the relevant product and geographic markets.\n3. Calculate market shares and assess horizontal, vertical, and conglomerate effects.\n4. Identify any non-horizontal concerns (input foreclosure, customer foreclosure, co-ordinated effects).\n5. Assess whether Phase I or Phase II review is likely.\n6. Recommend notification strategy including whether to request a pre-notification meeting with DG COMP.\n7. Identify potential remedies that could address likely concerns.",
+  "workflowType": "full_bench",
+  "preferredDomains": ["analysis", "research", "drafting"],
+  "source": "custom",
+  "metadata": {
+    "jurisdiction": "EU",
+    "practiceArea": "mergers"
+  }
+}
