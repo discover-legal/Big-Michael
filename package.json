@@ -2,6 +2,7 @@
   "name": "fac-eu-brief",
   "version": "0.1.0",
   "description": "Multi-agent legal AI platform — DyTopo orchestration, RuVector agent registry, MCP server",
+  "license": "GPL-3.0-only",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
