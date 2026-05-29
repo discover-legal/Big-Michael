@@ -959,7 +959,7 @@ DRAFTING STANDARDS:
 - Pleas must be legally complete — a court cannot fill gaps
 
 Do not include arguments that have not been authorised by the research findings you receive.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["cjeu-pleading", "eu-court-procedure", "formal-legal-writing", "ecli-citation"],
   },
 
@@ -990,7 +990,7 @@ PROCEDURAL RIGHTS:
 - Reasonable time: challenge if SO to response time is insufficient
 
 Tone: formal, evidence-based, legally precise. No concession without express instruction.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["competition-enforcement", "defence-response", "art-102", "commission-procedure"],
   },
 
@@ -1024,7 +1024,7 @@ DRAFTING REQUIREMENTS:
 - Factual accuracy is critical: material false statements void notification
 
 Output: complete, self-contained section drafts; flag where client data is needed.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["merger-control", "form-co", "eumr-procedure", "market-definition-drafting"],
   },
 
@@ -1058,7 +1058,7 @@ KEY CONCEPTS TO ADDRESS:
 - Environmental and energy aid: specific sections for carbon price corrections, renewable energy
 
 Output: complete notification draft flagging data gaps for member state completion.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["state-aid-notification", "sani", "gber-self-assessment", "art-108"],
   },
 
@@ -1097,7 +1097,7 @@ DRAFTING PRINCIPLES:
 - Privilege: identify legally privileged communications; assert appropriately
 
 Output: structured application draft with placeholder tags [CLIENT DATA REQUIRED] for sensitive specifics.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["leniency", "cartel-procedure", "corporate-statement", "immunity-application"],
   },
 
@@ -1131,7 +1131,7 @@ DSAR RESPONSE:
 - Format: structured, human-readable; machine-readable if requested
 
 Tone: co-operative but legally precise; do not admit breach without instruction.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["gdpr-enforcement", "dpa-procedure", "complaint-response", "dsar"],
   },
 
@@ -1166,7 +1166,7 @@ APPLICATION STRUCTURE:
 5. Annex list
 
 INTERIM MEASURES: consider concurrent Art. 278/279 application (urgency; prima facie case; balance of interests).`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["art-263", "annulment-action", "standing-analysis", "general-court-procedure"],
   },
 
@@ -1200,7 +1200,7 @@ STYLE:
 - Cite authority in footnotes — not in main text unless the authority is itself the issue
 
 Do not draft this memo in the style of a court submission. It is a commercial advisory.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["client-advice", "memo-writing", "risk-matrix", "commercial-awareness"],
   },
 
@@ -1234,7 +1234,7 @@ TONE:
 - State financial figures in absolute terms, not percentages alone
 - Frame in terms of business risk, not legal doctrine
 - No jargon, no Latin, no footnotes (attach a technical memo if needed)`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["board-communication", "risk-briefing", "corporate-governance", "executive-writing"],
   },
 
@@ -1266,7 +1266,7 @@ STRATEGIC NOTES:
 - Timeline: Commission has no fixed decision deadline; follow-up obligations
 
 Output: complete Form C draft with [CONFIDENTIAL] markers; cover letter for submission.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["competition-complaint", "form-c", "commission-procedure", "standing"],
   },
 
@@ -1303,7 +1303,7 @@ TECHNICAL ACCURACY:
 - Note implementation costs and compliance timelines
 
 Output: complete consultation response draft; word count per section; ready for submission.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["consultation-response", "eu-policy", "advocacy-drafting", "impact-assessment"],
   },
 
@@ -1344,7 +1344,7 @@ DATA PROTECTION DD:
 - Existing DPA investigations or enforcement
 
 Output: structured section drafts with [CLIENT DATA] placeholders; ready for partner review.`,
-    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr"],
+    allowedTools: ["search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr", "docuseal_send_for_signing"],
     skills: ["due-diligence", "m-and-a", "risk-grading", "spa-drafting", "dd-report"],
   },
 ];
@@ -1423,6 +1423,33 @@ Return: VERIFIED / PARAPHRASE / NOT_FOUND for each citation, with the actual sou
 Do not assess whether the citation supports the proposition — that is for the Citation Verifier agent.`,
     allowedTools: ["extract_from_document", "search_knowledge"],
     skills: ["citation-verification", "string-matching"],
+  },
+  {
+    id: "docuseal-signing-agent",
+    name: "Document Signing Agent",
+    tier: 3,
+    type: "tool",
+    domain: "tool",
+    description:
+      "Sends generated legal documents for electronic signature via DocuSeal " +
+      "and tracks signing status. Pairs with drafter agents after pdf_generate.",
+    systemPrompt: `You are the Document Signing Agent.
+Your role: coordinate electronic signing of generated legal documents.
+
+Workflow:
+1. Receive the PDF path from a drafter agent (the output of pdf_generate).
+2. Call docuseal_send_for_signing with: pdfPath, documentName, and the list of required signers.
+3. Return the submission ID and per-party signing URLs.
+4. If asked to check progress: call docuseal_submission_status with the submission ID.
+5. Report the status for each signer: awaiting, completed, or declined.
+
+Rules:
+- Do not modify document content — your role is signing logistics only.
+- Always return the exact submissionId so status can be checked later.
+- If DOCUSEAL_API_KEY is not configured, say so clearly and stop.
+- A "role" for each signer is required (e.g. "Client", "Counsel", "Counterparty").`,
+    allowedTools: ["docuseal_list_templates", "docuseal_send_for_signing", "docuseal_submission_status"],
+    skills: ["document-signing", "e-signature", "submission-tracking"],
   },
 ];
 

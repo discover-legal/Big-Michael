@@ -27,6 +27,7 @@ import { auditLogger } from "../audit/index.js";
 import type { KnowledgeStore } from "../knowledge/index.js";
 import type { InterRoundMemoryStore } from "../memory/index.js";
 import { pdfExtractTextTool, pdfExtractTablesTool, pdfGenerateTool, pdfOcrTool } from "./pdf.js";
+import { docusealListTemplatesTool, docusealSendForSigningTool, docusealSubmissionStatusTool } from "./docuseal.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -311,6 +312,9 @@ const ALL_TOOLS: ToolImpl[] = [
   pdfExtractTablesTool,
   pdfGenerateTool,
   pdfOcrTool,
+  docusealListTemplatesTool,
+  docusealSendForSigningTool,
+  docusealSubmissionStatusTool,
 ];
 
 export class ToolRegistry {

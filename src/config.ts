@@ -103,4 +103,24 @@ export const Config = {
     enabled: optional("AUDIT_ENABLED", "true") === "true",
     logFile: optional("AUDIT_LOG_FILE", "./audit.jsonl"),
   },
+
+  // DocuSeal — open-source e-signature (https://www.docuseal.com)
+  // Self-host: docker run -d -p 3000:3000 docuseal/docuseal
+  // API key from: Settings → API in the DocuSeal admin panel
+  docuseal: {
+    apiKey: process.env.DOCUSEAL_API_KEY ?? "",
+    url: optional("DOCUSEAL_URL", "http://localhost:3000"),
+  },
+
+  // Infisical — open-source secrets manager (https://infisical.com)
+  // Self-host: docker compose up (see https://infisical.com/docs/self-hosting)
+  // These values are bootstrap-only; all other secrets are fetched from Infisical at startup.
+  infisical: {
+    url: optional("INFISICAL_URL", "https://app.infisical.com"),
+    clientId: process.env.INFISICAL_CLIENT_ID ?? "",
+    clientSecret: process.env.INFISICAL_CLIENT_SECRET ?? "",
+    projectId: process.env.INFISICAL_PROJECT_ID ?? "",
+    environment: optional("INFISICAL_ENV", "production"),
+    path: optional("INFISICAL_PATH", "/"),
+  },
 } as const;

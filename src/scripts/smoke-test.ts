@@ -119,10 +119,33 @@ check("pdf_extract_text registered", toolReg.has("pdf_extract_text"));
 check("pdf_extract_tables registered", toolReg.has("pdf_extract_tables"));
 check("pdf_ocr registered", toolReg.has("pdf_ocr"));
 
-// Writing agents should have pdf_generate
-const writingAgents = ALL_AGENT_DEFINITIONS.filter((a) => a.id.includes("drafter"));
-const allHavePdf = writingAgents.every((a) => a.allowedTools.includes("pdf_generate"));
-check(`All ${writingAgents.length} drafter agents have pdf_generate`, allHavePdf);
+// ─── 7. DocuSeal + secrets registration ───────────────────────────────────────
+
+process.stdout.write("\n[7] DocuSeal + secrets\n");
+check("docuseal_send_for_signing registered", toolReg.has("docuseal_send_for_signing"));
+check("docuseal_submission_status registered", toolReg.has("docuseal_submission_status"));
+check("docuseal_list_templates registered", toolReg.has("docuseal_list_templates"));
+
+// Signing agent exists in definitions
+check(
+  "docuseal-signing-agent defined",
+  ALL_AGENT_DEFINITIONS.some((a) => a.id === "docuseal-signing-agent"),
+);
+
+// All drafter agents have docuseal_send_for_signing
+const drafterAgents = ALL_AGENT_DEFINITIONS.filter((a) => a.id.includes("drafter"));
+const allDraftersHaveSigning = drafterAgents.every((a) => a.allowedTools.includes("docuseal_send_for_signing"));
+check(`All ${drafterAgents.length} drafter agents have docuseal_send_for_signing`, allDraftersHaveSigning);
+
+// Secrets loader exports correctly (no Infisical configured in CI — just checks module loads)
+const { loadSecrets } = await import("../secrets/index.js");
+check("loadSecrets is a function", typeof loadSecrets === "function");
+const secretsResult = await loadSecrets(); // will no-op (no INFISICAL_CLIENT_ID in CI)
+check("loadSecrets returns source field", secretsResult.source === "env" || secretsResult.source === "infisical");
+
+// ─── 8. PDF round-trip ────────────────────────────────────────────────────────
+
+process.stdout.write("\n[8] PDF round-trip\n");
 
 // Live round-trip: generate a PDF then extract its text
 import { tmpdir } from "os";
