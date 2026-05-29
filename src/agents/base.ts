@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { v4 as uuidv4 } from "uuid";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
+import { selectModel, estimateComplexity, ModelLabels } from "../routing/model.js";
 import type {
   AgentDefinition,
   AgentMessage,
@@ -33,32 +34,58 @@ export class Agent {
   }
 
   /**
-   * Generate Need and Offer descriptors for this round.
-   * These are embedded and matched by the DyTopo engine to form the comm graph.
+   * Generate Need/Offer descriptors — always uses Haiku (lightweight, per-round, many calls).
    */
   async generateNeedOffer(ctx: AgentContext): Promise<{
     need: NeedDescriptor;
     offer: OfferDescriptor;
   }> {
+    const model = selectModel({
+      tier: this.definition.tier,
+      type: this.definition.type,
+      taskType: "descriptor",  // always Haiku
+    });
     const prompt = buildNeedOfferPrompt(this.definition, ctx);
-    const response = await this.callClaude(prompt, 400);
-    const parsed = parseNeedOffer(response, this.definition.id);
-    return parsed;
+    const response = await this.callClaude(prompt, 200, model);
+    return parseNeedOffer(response, this.definition.id);
   }
 
   /**
-   * Process the round goal + routed messages + memory, and produce findings.
+   * Process round context and produce findings.
+   * Model selected based on tier + task type + estimated complexity.
    */
   async process(ctx: AgentContext): Promise<Finding[]> {
+    const taskType = inferTaskType(this.definition);
+    const complexity = estimateComplexity(ctx.roundGoal.description);
+
+    const model = selectModel({
+      tier: this.definition.tier,
+      type: this.definition.type,
+      taskType,
+      complexity,
+    });
+
     const prompt = buildProcessingPrompt(this.definition, ctx);
-    const response = await this.callClaude(prompt, 2000);
+    const maxTokens = this.definition.tier === 3 ? 600 : this.definition.tier === 0 ? 4000 : 2500;
+
+    logger.debug("Agent processing", {
+      agent: this.definition.name,
+      model: ModelLabels[model] ?? model,
+      taskType,
+      complexity,
+    });
+
+    const response = await this.callClaude(prompt, maxTokens, model);
     return parseFindings(response, this.definition);
   }
 
-  private async callClaude(userMessage: string, maxTokens: number): Promise<string> {
-    logger.debug("Agent LLM call", { agent: this.definition.id, maxTokens });
+  private async callClaude(
+    userMessage: string,
+    maxTokens: number,
+    model: string,
+  ): Promise<string> {
     const msg = await anthropic.messages.create({
-      model: Config.anthropic.model,
+      model,
       max_tokens: maxTokens,
       system: this.definition.systemPrompt,
       messages: [{ role: "user", content: userMessage }],
@@ -69,6 +96,17 @@ export class Agent {
   }
 }
 
+// ─── Task type inference ──────────────────────────────────────────────────────
+
+function inferTaskType(def: AgentDefinition): import("../routing/model.js").TaskType {
+  if (def.tier === 3) return "extraction";
+  if (def.id.includes("drafter") || def.id.includes("writer")) return "drafting";
+  if (def.id.includes("analyst") || def.id.includes("agent")) return "reasoning";
+  if (def.type === "root") return "synthesis";
+  if (def.type === "manager") return "routing";
+  return "reasoning";
+}
+
 // ─── Prompt builders ──────────────────────────────────────────────────────────
 
 function buildNeedOfferPrompt(def: AgentDefinition, ctx: AgentContext): string {
@@ -77,15 +115,14 @@ function buildNeedOfferPrompt(def: AgentDefinition, ctx: AgentContext): string {
 CURRENT ROUND GOAL (Round ${ctx.roundGoal.round}, Phase: ${ctx.roundGoal.phase}):
 ${ctx.roundGoal.description}
 
-YOUR ROLE: ${def.name} (${def.domain})
+YOUR ROLE: ${def.name} — ${def.description}
 
-INTER-ROUND MEMORY (relevant past findings):
+RELEVANT MEMORY FROM PRIOR ROUNDS:
 ${ctx.memoryEntries.length ? ctx.memoryEntries.map((e) => `[Round ${e.round}] ${e.content}`).join("\n") : "None yet."}
 
-Based on the round goal and your role, output in this exact format:
-
-NEED: <one sentence describing what information or expertise you currently require from other agents>
-OFFER: <one sentence describing what knowledge or capability you can contribute this round>`;
+Output exactly:
+NEED: <one sentence — what information or expertise you currently need from other agents>
+OFFER: <one sentence — what you can contribute this round given your role>`;
 }
 
 function buildProcessingPrompt(def: AgentDefinition, ctx: AgentContext): string {
@@ -96,37 +133,37 @@ function buildProcessingPrompt(def: AgentDefinition, ctx: AgentContext): string 
     : "No messages routed to you this round.";
 
   const memory = ctx.memoryEntries.length
-    ? ctx.memoryEntries.map((e) => `[Round ${e.round}, Phase: ${e.phase}] ${e.content}`).join("\n")
-    : "No prior memory entries.";
+    ? ctx.memoryEntries.map((e) => `[Round ${e.round} — ${e.phase}] ${e.content}`).join("\n")
+    : "No prior memory.";
 
   return `TASK: ${ctx.taskDescription}
 
-ROUND GOAL (Round ${ctx.roundGoal.round}, Phase: ${ctx.roundGoal.phase}):
+ROUND GOAL (Round ${ctx.roundGoal.round} — Phase: ${ctx.roundGoal.phase}):
 ${ctx.roundGoal.description}
 
 EXPECTED OUTPUTS THIS ROUND:
 ${ctx.roundGoal.expectedOutputs.map((o, i) => `${i + 1}. ${o}`).join("\n")}
 
-INTER-ROUND MEMORY:
+INTER-ROUND MEMORY (what has been established in prior rounds):
 ${memory}
 
-MESSAGES ROUTED TO YOU THIS ROUND:
+MESSAGES ROUTED TO YOU THIS ROUND (from other agents whose offers matched your needs):
 ${incoming}
 
-─────────────────────────────────────────────────
-Produce your findings below. For each finding:
-1. State your finding clearly.
-2. Provide at least one verbatim citation (source, quote, page if known).
-3. State your confidence (0.0–1.0).
+────────────────────────────────────────────────────────────────
+Produce your findings. For each distinct finding:
 
-Format each finding as:
 FINDING:
-Content: <your finding>
-Citation: SOURCE=<source> | QUOTE=<verbatim text> | PAGE=<page if known>
+Content: <finding — state your conclusion or analysis clearly>
+Citation: SOURCE=<document ID or URL or case ECLI> | QUOTE=<verbatim text> | PAGE=<page/para if known>
 Confidence: <0.0–1.0>
 END_FINDING
 
-If you have no findings, output: NO_FINDINGS`;
+Rules:
+- Each finding must have at least one Citation.
+- Quote must be verbatim — not paraphrased.
+- Multiple Citations allowed per finding (repeat Citation: lines).
+- If you have no findings this round: NO_FINDINGS`;
 }
 
 // ─── Response parsers ─────────────────────────────────────────────────────────
@@ -138,13 +175,13 @@ function parseNeedOffer(
   const needMatch = text.match(/NEED:\s*(.+)/i);
   const offerMatch = text.match(/OFFER:\s*(.+)/i);
   return {
-    need: { agentId, text: needMatch?.[1]?.trim() ?? "No specific need stated." },
-    offer: { agentId, text: offerMatch?.[1]?.trim() ?? "No specific offer stated." },
+    need: { agentId, text: needMatch?.[1]?.trim() ?? "No specific need this round." },
+    offer: { agentId, text: offerMatch?.[1]?.trim() ?? "General domain expertise available." },
   };
 }
 
 function parseFindings(text: string, def: AgentDefinition): Finding[] {
-  if (text.includes("NO_FINDINGS")) return [];
+  if (/NO_FINDINGS/i.test(text)) return [];
 
   const blocks = text.split(/FINDING:/gi).slice(1);
   const findings: Finding[] = [];
@@ -153,8 +190,12 @@ function parseFindings(text: string, def: AgentDefinition): Finding[] {
     const end = block.indexOf("END_FINDING");
     const body = end >= 0 ? block.slice(0, end) : block;
 
-    const contentMatch = body.match(/Content:\s*([\s\S]+?)(?=Citation:|Confidence:|$)/i);
-    const citationMatches = [...body.matchAll(/Citation:\s*SOURCE=(.+?)\s*\|\s*QUOTE=(.+?)(?:\s*\|\s*PAGE=(.+?))?(?=Citation:|Confidence:|END_FINDING|$)/gi)];
+    const contentMatch = body.match(/Content:\s*([\s\S]+?)(?=Citation:|Confidence:|END_FINDING|$)/i);
+    const citationMatches = [
+      ...body.matchAll(
+        /Citation:\s*SOURCE=(.+?)\s*\|\s*QUOTE=(.+?)(?:\s*\|\s*PAGE=(.+?))?(?=\nCitation:|\nConfidence:|END_FINDING|$)/gis,
+      ),
+    ];
     const confidenceMatch = body.match(/Confidence:\s*([\d.]+)/i);
 
     const content = contentMatch?.[1]?.trim();
@@ -164,11 +205,11 @@ function parseFindings(text: string, def: AgentDefinition): Finding[] {
       source: m[1].trim(),
       quote: m[2].trim(),
       page: m[3] ? parseInt(m[3].trim()) : undefined,
-      mechanicallyVerified: false, // verified later by citation-verifier-agent
+      mechanicallyVerified: false,
     }));
 
     findings.push({
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       agentId: def.id,
       agentName: def.name,
       content,
@@ -176,7 +217,7 @@ function parseFindings(text: string, def: AgentDefinition): Finding[] {
       confidence: parseFloat(confidenceMatch?.[1] ?? "0.7"),
       challenged: false,
       resolved: false,
-      round: 0, // set by caller
+      round: 0, // caller sets this
       timestamp: new Date(),
     });
   }

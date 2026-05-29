@@ -1,0 +1,104 @@
+/**
+ * Smart model router.
+ *
+ * Routes LLM calls to the appropriate Claude model based on:
+ *   - Agent tier (T0 → Opus, T3 → Haiku)
+ *   - Task type (synthesis / reasoning → Opus; extraction / routing → Haiku)
+ *   - Declared complexity override
+ *
+ * Keeps costs proportionate: Need/Offer descriptors (cheap, many calls) use Haiku;
+ * adversarial debate and final synthesis (critical, few calls) use Opus.
+ */
+
+import type { AgentTier, AgentType } from "../types.js";
+
+export type TaskType =
+  | "synthesis"     // final output generation, root orchestrator reasoning
+  | "reasoning"     // complex legal analysis, multi-step logical chains
+  | "drafting"      // producing structured legal prose
+  | "debate"        // adversarial challenge + resolution
+  | "verification"  // checking correctness
+  | "descriptor"    // generating Need/Offer descriptors (lightweight)
+  | "extraction"    // structured data extraction from documents
+  | "routing"       // classification, decision routing
+  | "translation";  // language conversion
+
+export type Complexity = "high" | "medium" | "low";
+
+const OPUS   = "claude-opus-4-8";
+const SONNET = "claude-sonnet-4-6";
+const HAIKU  = "claude-haiku-4-5-20251001";
+
+/**
+ * Select the appropriate Claude model for a given agent + task combination.
+ *
+ * Decision matrix:
+ *   T3 (tool) agents          → Haiku  (simple, high-volume, single-tool tasks)
+ *   descriptor generation     → Haiku  (one-sentence need/offer, cheap per-round)
+ *   extraction / routing      → Haiku  (structured, no deep reasoning)
+ *   T0 (root) + synthesis     → Opus   (final output, irreversible decisions)
+ *   debate / high-complexity  → Opus   (adversarial correctness critical)
+ *   T1 managers + T2 analysts → Sonnet (primary workhorse for legal reasoning)
+ *   drafting (long-form)      → Sonnet (quality prose without Opus cost)
+ */
+export function selectModel(params: {
+  tier: AgentTier;
+  type: AgentType;
+  taskType: TaskType;
+  complexity?: Complexity;
+}): string {
+  const { tier, type, taskType, complexity } = params;
+
+  // Always Haiku for lightweight tasks regardless of tier
+  if (taskType === "descriptor") return HAIKU;
+  if (taskType === "extraction") return HAIKU;
+  if (taskType === "routing")    return HAIKU;
+  if (taskType === "translation") return HAIKU;
+
+  // T3 tool agents always Haiku — they wrap a single tool call
+  if (tier === 3) return HAIKU;
+
+  // Root orchestrator and debate always Opus
+  if (tier === 0)                 return OPUS;
+  if (taskType === "synthesis")   return OPUS;
+  if (taskType === "debate")      return OPUS;
+  if (complexity === "high")      return OPUS;
+
+  // Everything else (T1 managers, T2 specialists, drafting, verification) → Sonnet
+  return SONNET;
+}
+
+/**
+ * Estimate task complexity from a prompt string.
+ * Simple heuristic: multi-step, multi-jurisdiction, novel legal theory → high.
+ */
+export function estimateComplexity(text: string): Complexity {
+  const lower = text.toLowerCase();
+  const highSignals = [
+    "novel",
+    "unprecedented",
+    "balance",
+    "proportionality",
+    "multi-jurisdict",
+    "conflict",
+    "fundamental right",
+    "constitutional",
+    "abuse of dominance",
+    "state aid",
+    "gatekeeper",
+  ];
+  const lowSignals = ["extract", "list", "identify", "translate", "summarise", "count"];
+
+  const highScore = highSignals.filter((s) => lower.includes(s)).length;
+  const lowScore  = lowSignals.filter((s) => lower.includes(s)).length;
+
+  if (highScore >= 2) return "high";
+  if (lowScore >= 2)  return "low";
+  return "medium";
+}
+
+export const ModelLabels: Record<string, string> = {
+  [OPUS]:   "Opus 4.8",
+  [SONNET]: "Sonnet 4.6",
+  [HAIKU]:  "Haiku 4.5",
+};
