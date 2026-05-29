@@ -23,7 +23,7 @@ import { Config } from "../config.js";
 import { logger } from "../logger.js";
 import type { KnowledgeStore } from "../knowledge/index.js";
 import type { InterRoundMemoryStore } from "../memory/index.js";
-import { pdfExtractTextTool, pdfExtractTablesTool, pdfGenerateTool } from "./pdf.js";
+import { pdfExtractTextTool, pdfExtractTablesTool, pdfGenerateTool, pdfOcrTool } from "./pdf.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -305,6 +305,7 @@ const ALL_TOOLS: ToolImpl[] = [
   pdfExtractTextTool,
   pdfExtractTablesTool,
   pdfGenerateTool,
+  pdfOcrTool,
 ];
 
 export class ToolRegistry {

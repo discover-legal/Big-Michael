@@ -170,3 +170,48 @@ export const pdfGenerateTool: ToolImpl = {
     });
   },
 };
+
+// ─── pdf_ocr ──────────────────────────────────────────────────────────────────
+
+export const pdfOcrTool: ToolImpl = {
+  name: "pdf_ocr",
+  schema: {
+    name: "pdf_ocr",
+    description:
+      "OCR a scanned PDF or image file using Tesseract 5. " +
+      "PDF pages are rasterised at 300 DPI via PyMuPDF before OCR so quality " +
+      "is consistent for any scan resolution. Returns full text and per-page breakdown. " +
+      "Useful for scanned regulatory filings, court documents, and client contracts " +
+      "that contain no embedded selectable text.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Absolute path to the PDF or image file (PNG/JPEG/TIFF)" },
+        lang: {
+          type: "string",
+          description:
+            "Tesseract language code(s). Default 'eng'. " +
+            "Multi-language: 'eng+fra', 'eng+deu', etc. " +
+            "Available: eng, fra, deu, ita, spa, nld, por",
+        },
+        pages: {
+          type: "string",
+          description: "Page range for PDFs, e.g. '1-3' or '2'. Defaults to all pages.",
+        },
+        dpi: {
+          type: "number",
+          description: "Rasterisation DPI for PDF pages. Default 300. Higher = better OCR, slower.",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  async execute(input, _ctx) {
+    return runPython("ocr", {
+      path: input.path,
+      lang: input.lang ?? "eng",
+      pages: input.pages,
+      dpi: input.dpi ?? 300,
+    });
+  },
+};

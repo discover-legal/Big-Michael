@@ -245,6 +245,74 @@ def _sections_to_html(sections: list) -> str:
     return "\n".join(parts)
 
 
+# ─── ocr ──────────────────────────────────────────────────────────────────────
+
+def ocr(args: dict) -> dict:
+    """
+    OCR a PDF (via PyMuPDF page rendering) or an image file (PNG/JPEG/TIFF).
+    Uses Tesseract 5 via pytesseract.
+
+    For scanned PDFs, each page is rasterised at 300 DPI before OCR so text
+    quality is consistent regardless of original scan resolution.
+    """
+    import pytesseract
+    from PIL import Image
+    import fitz  # PyMuPDF
+
+    path = args["path"]
+    lang = args.get("lang", "eng")  # Tesseract language code(s), e.g. "eng+fra"
+    dpi = int(args.get("dpi", 300))
+    page_range = args.get("pages")
+
+    ext = os.path.splitext(path)[1].lower()
+
+    if ext == ".pdf":
+        doc = fitz.open(path)
+        total = len(doc)
+        indices = _parse_page_range(page_range, total) if page_range else range(total)
+        pages_out = []
+
+        scale = dpi / 72.0  # 72 pt/inch → target DPI
+        mat = fitz.Matrix(scale, scale)
+
+        for i in indices:
+            page = doc[i]
+            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
+            # PIL from raw bytes — avoids writing temp files
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            text = pytesseract.image_to_string(img, lang=lang)
+            pages_out.append({
+                "page": i + 1,
+                "text": text.strip(),
+                "width_px": pix.width,
+                "height_px": pix.height,
+            })
+
+        doc.close()
+        full_text = "\n\n".join(p["text"] for p in pages_out if p["text"])
+        return {
+            "path": path,
+            "type": "pdf",
+            "pageCount": total,
+            "extractedPages": len(pages_out),
+            "lang": lang,
+            "dpi": dpi,
+            "text": full_text,
+            "pages": pages_out,
+        }
+
+    else:
+        # Direct image OCR (PNG, JPEG, TIFF, BMP, etc.)
+        img = Image.open(path)
+        text = pytesseract.image_to_string(img, lang=lang)
+        return {
+            "path": path,
+            "type": "image",
+            "lang": lang,
+            "text": text.strip(),
+        }
+
+
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -260,6 +328,8 @@ if __name__ == "__main__":
             result = extract_tables(args)
         elif operation == "generate":
             result = generate(args)
+        elif operation == "ocr":
+            result = ocr(args)
         else:
             result = {"error": f"Unknown operation: {operation}"}
 

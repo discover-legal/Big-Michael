@@ -117,6 +117,7 @@ const { globalToolRegistry: toolReg } = await import("../tools/index.js");
 check("pdf_generate registered", toolReg.has("pdf_generate"));
 check("pdf_extract_text registered", toolReg.has("pdf_extract_text"));
 check("pdf_extract_tables registered", toolReg.has("pdf_extract_tables"));
+check("pdf_ocr registered", toolReg.has("pdf_ocr"));
 
 // Writing agents should have pdf_generate
 const writingAgents = ALL_AGENT_DEFINITIONS.filter((a) => a.id.includes("drafter"));
@@ -142,6 +143,11 @@ if (genResult.outputPath) {
   check("pdf_extract_text reads back content", typeof extractResult.pageCount === "number");
   const allText = (extractResult.pages as Array<{text: string}>)?.[0]?.text ?? "";
   check("pdf_extract_text finds document title", allText.includes("Smoke Test Brief") || allText.includes("Introduction"));
+
+  // OCR round-trip
+  const ocrResult = await toolReg.execute("pdf_ocr", { path: genResult.outputPath }, mockCtx) as Record<string, unknown>;
+  check("pdf_ocr returns text", typeof ocrResult.text === "string" && (ocrResult.text as string).length > 0);
+  check("pdf_ocr finds title via Tesseract", (ocrResult.text as string).includes("Smoke Test") || (ocrResult.text as string).includes("Introduction"));
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────────────

@@ -185,7 +185,7 @@ const TOOLS = [
 
 export async function startMcpServer(orchestrator: Orchestrator): Promise<void> {
   const server = new Server(
-    { name: "fac-eu-brief", version: "0.1.0" },
+    { name: "big-michael", version: "0.1.0" },
     { capabilities: { tools: {} } },
   );
 
