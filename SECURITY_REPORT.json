@@ -1,0 +1,113 @@
+{
+  "vulnerabilities": [
+    {
+      "severity": "high",
+      "file": "src/mcp/server.ts",
+      "line": 197,
+      "description": "No authentication on MCP server. The CallToolRequestSchema handler (around line 205) executes all tools without verifying caller identity. Any MCP-compatible client can submit tasks, approve/reject gates, and ingest documents without credentials."
+    },
+    {
+      "severity": "high",
+      "file": "src/mcp/server.ts",
+      "line": 232,
+      "description": "No authentication/authorization on REST API endpoints. POST /tasks, POST /documents, POST /approve-gate, POST /reject-gate accept requests without identity verification. Missing fastify-auth or similar middleware."
+    },
+    {
+      "severity": "high",
+      "file": "src/protocols/index.ts",
+      "line": null,
+      "description": "Prompt injection risk in debate/verification protocols. Finding.content and citation.quote are passed directly to Claude without sanitization. Malicious findings can embed prompt injection payloads to manipulate model behavior or leak sensitive data."
+    },
+    {
+      "severity": "high",
+      "file": "src/adapters/lavern.ts",
+      "line": 42,
+      "description": "Path traversal vulnerability in LavernAdapter.load(sourcePath). If sourcePath is user-controlled, attacker can use '../' sequences (e.g., '../../sensitive.json') to read arbitrary files. Although .json filter exists, combined with traversal it's bypassable."
+    },
+    {
+      "severity": "medium",
+      "file": "src/audit/index.ts",
+      "line": 44,
+      "description": "Sensitive data exposure in audit logs. The 'data' field accepts any Record<string, unknown>. Can log API responses, findings containing PII, or other sensitive information. Persisted to disk unencrypted (audit.jsonl)."
+    },
+    {
+      "severity": "medium",
+      "file": "src/mcp/server.ts",
+      "line": 240,
+      "description": "No input validation on parameters. Task IDs, gate IDs, and other parameters are used directly without UUID or format validation. Accepts any string, enabling potential abuse."
+    },
+    {
+      "severity": "medium",
+      "file": "src/mcp/server.ts",
+      "line": 233,
+      "description": "No size limits on document ingestion. The /documents endpoint accepts unbounded 'content' field. Enables DoS attacks via huge document uploads (e.g., 1GB file crashes server or fills disk)."
+    },
+    {
+      "severity": "medium",
+      "file": "src/mcp/server.ts",
+      "line": 267,
+      "description": "No rate limiting on search and query endpoints. /documents/search, /agents, /query-memory can be called unlimited times. Enables enumeration attacks, resource exhaustion, or inference cost abuse."
+    },
+    {
+      "severity": "medium",
+      "file": "src/config.ts",
+      "line": 28,
+      "description": "Empty fallback for optional API keys. OPENAI_API_KEY, DOCUSEAL_API_KEY, TAVILY_API_KEY default to ''. Code silently fails instead of erroring on misconfiguration. Masks deployment bugs."
+    },
+    {
+      "severity": "medium",
+      "file": "src/adapters/lavern.ts",
+      "line": 50,
+      "description": "Unvalidated JSON parsing of external configs. JSON.parse() on LavernAgentConfig without schema validation. Malformed JSON crashes process; loaded configs not validated for required fields (e.g., systemPrompt could be missing)."
+    },
+    {
+      "severity": "medium",
+      "file": "src/providers/anthropic.ts",
+      "line": 16,
+      "description": "API key stored in singleton class without encryption. ANTHROPIC_API_KEY held in plaintext in _client field. Process memory dump or inspection reveals key. No cleanup on shutdown."
+    },
+    {
+      "severity": "medium",
+      "file": "src/audit/index.ts",
+      "line": 60,
+      "description": "Silent error suppression in audit logging. appendFile errors are swallowed with .catch(() => undefined). Disk write failures are hidden; audit trail integrity is not verified."
+    },
+    {
+      "severity": "low",
+      "file": "src/agents/base.ts",
+      "line": 70,
+      "description": "Information disclosure via debug logging. Agent processing logs include model names, task types, tool counts, and tier info. Reveals internal system architecture useful for reconnaissance."
+    },
+    {
+      "severity": "low",
+      "file": "src/mcp/server.ts",
+      "line": 229,
+      "description": "Missing CORS configuration on Fastify REST API. No X-Access-Control headers set. CORS allow-all default could enable unauthorized cross-origin requests."
+    },
+    {
+      "severity": "low",
+      "file": "src/mcp/server.ts",
+      "line": 230,
+      "description": "Missing security headers on REST API. No X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, or Content-Security-Policy headers. Vulnerable to clickjacking and XSS if frontend is served from same origin."
+    }
+  ],
+  "riskScore": 78,
+  "recommendations": [
+    "CRITICAL: Implement authentication on all endpoints. Add API key or JWT authentication middleware to Fastify and MCP server. Validate credentials on every request before tool execution.",
+    "CRITICAL: Sanitize finding content before prompt use. In src/protocols/index.ts, escape finding.content and citation.quote before passing to LLMs. Remove or escape: 'system:', 'ignore previous:', '{{', '}}', control characters.",
+    "CRITICAL: Add authorization checks for sensitive operations. Implement role-based access control. Gate approval/rejection should require 'reviewer' role. Document ingestion should require 'admin' role. Enforce at controller level.",
+    "HIGH: Fix path traversal in LavernAdapter.load(). Reject sourcePath containing '..' or starting with '/'. Use path.resolve() and assert result stays within expected directory: `assert(resolved.startsWith(basePath))`.",
+    "HIGH: Add input validation on all REST API parameters. Use Fastify JSON schema validation. Validate task IDs as UUIDs with uuid.validate(). Add maximum content length: 10MB per document, 1000 chars per query.",
+    "HIGH: Implement rate limiting. Add @fastify/rate-limit plugin. Example limits: 100 requests per 15 minutes per IP, 10 document uploads per hour per user, 50 searches per minute per user.",
+    "HIGH: Validate and sanitize agent configs after loading. After JSON.parse() in LavernAdapter, add Zod schema validation for LaverneAgentConfig. Reject configs with: empty systemPrompt, invalid tier, mcpTools not in whitelist.",
+    "MEDIUM: Remove sensitive data from audit logs. Log only action type, agent ID, round number, status. Never log full document content, API responses, or findings with PII. Implement data masking for sensitive fields.",
+    "MEDIUM: Add proper error handling for disk I/O. Replace .catch(() => undefined) in audit logging with: logger.warn('Audit write failed', {error: e.message, file}). Emit alerts on repeated failures.",
+    "MEDIUM: Add security headers to REST API responses. Configure Fastify helmet plugin: X-Content-Type-Options: 'nosniff', X-Frame-Options: 'DENY', Content-Security-Policy: 'default-src \"self\"'.",
+    "MEDIUM: Require explicit API keys for optional services. Change empty string fallbacks to throw on use. Example: `if (!Config.embeddings.apiKey && useOpenAI) throw new Error('OPENAI_API_KEY required')`.",
+    "MEDIUM: Protect API keys in runtime. In AnthropicProvider, do not store apiKey in class field. Fetch from Config only on each chat() call. Mark fields as readonly private. Implement graceful shutdown to clear memory.",
+    "MEDIUM: Set CORS policy explicitly. Add Fastify @fastify/cors plugin with: origin: 'https://yourdomain.com', credentials: true, methods: ['POST']. Reject requests from other origins.",
+    "LOW: Reduce information disclosure in logs. Avoid logging model names, tool lists, agent IDs in info/debug logs visible to users. Log only: 'Processing task', not 'Agent=specialist, Model=opus'.",
+    "LOW: Add Content-Security-Policy for HTML frontends. If serving HTML from same origin, add: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:.",
+    "PROCESS: Implement code review for agent system prompts. Before deploying new agents, review systemPrompt for prompt injection markers. Establish agent prompt template guidelines and lint rules."
+  ]
+}

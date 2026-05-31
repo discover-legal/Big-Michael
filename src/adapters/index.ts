@@ -1,30 +1,30 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2026 Discover Legal
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, version 3.
-// See <https://www.gnu.org/licenses/gpl-3.0.html>
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//     http://www.apache.org/licenses/LICENSE-2.0
 
 /**
  * Adapter / harness interface.
  *
  * fac-eu-brief acts as a meta-orchestrator harness. External agent systems
- * (Laverne, Mike OSS, custom) expose their agents via adapters that convert
+ * (Lavern, Mike OSS, custom) expose their agents via adapters that convert
  * their native formats into AgentDefinition records.
  *
  * Once imported, external agents are seeded into the RuVector/Qdrant registry
  * and participate in DyTopo rounds like any native agent.
  *
  * Usage:
- *   const laverne = new LavorneAdapter();
- *   const agents  = await laverne.load('./laverne/src/agents');
+ *   const lavern = new LavernAdapter();
+ *   const agents  = await lavern.load('./lavern/src/agents');
  *   await registry.registerAll(agents);
  */
 
 import type { AgentDefinition } from "../types.js";
 
 export interface AgentHarness {
-  /** Unique identifier for this harness (e.g. "laverne", "mikeoss") */
+  /** Unique identifier for this harness (e.g. "lavern", "mikeoss") */
   readonly name: string;
   readonly version: string;
 

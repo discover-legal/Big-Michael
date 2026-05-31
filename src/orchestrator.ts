@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2026 Discover Legal
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, version 3.
-// See <https://www.gnu.org/licenses/gpl-3.0.html>
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//     http://www.apache.org/licenses/LICENSE-2.0
 
 /**
  * Top-level orchestrator — ties the full system together.
@@ -33,8 +33,8 @@ import { DyTopoEngine } from "./dytopo/engine.js";
 import { InterRoundMemoryStore } from "./memory/index.js";
 import { KnowledgeStore } from "./knowledge/index.js";
 import { TemplateStore } from "./templates/store.js";
-import { LaverneAdapter, instantiateTemplate, fromExternalConfig } from "./adapters/laverne.js";
-import type { TaskTemplate, ExternalAgentConfig } from "./adapters/laverne.js";
+import { LavernAdapter, instantiateTemplate, fromExternalConfig, fromMikeOSSWorkflow } from "./adapters/lavern.js";
+import type { TaskTemplate, ExternalAgentConfig, MikeOSSWorkflow } from "./adapters/lavern.js";
 import {
   applyCitationGate,
   runDebate,
@@ -43,12 +43,9 @@ import {
 } from "./protocols/index.js";
 import type {
   Task,
-  TaskStatus,
   WorkflowType,
   TaskPhase,
   RoundGoal,
-  Finding,
-  GateRequest,
 } from "./types.js";
 
 const PHASE_SEQUENCES: Record<WorkflowType, TaskPhase[]> = {
@@ -94,8 +91,11 @@ export class Orchestrator {
       await this.registry.registerAll(ALL_AGENT_DEFINITIONS);
     }
 
-    // Load external and Laverne agents from filesystem
+    // Load external and Lavern agents from filesystem
     await this.loadExternalAgents();
+
+    // Load MikeOSS workflow presets (native format) and register as templates
+    await this.loadMikeOSSWorkflows();
 
     // Restore persisted tasks
     await this.restoreTasks();
@@ -211,12 +211,12 @@ export class Orchestrator {
   // ─── External agent loader ────────────────────────────────────────────────
 
   private async loadExternalAgents(): Promise<void> {
-    const dirs: Array<{ path: string; type: "external" | "laverne" }> = [
+    const dirs: Array<{ path: string; type: "external" | "lavern" }> = [
       { path: join(process.cwd(), "agents", "external"), type: "external" },
-      { path: join(process.cwd(), "agents", "laverne"), type: "laverne" },
+      { path: join(process.cwd(), "agents", "lavern"), type: "lavern" },
     ];
 
-    const laverneAdapter = new LaverneAdapter();
+    const lavernAdapter = new LavernAdapter();
 
     for (const { path: dir, type } of dirs) {
       let entries: string[];
@@ -233,8 +233,8 @@ export class Orchestrator {
           const raw = await readFile(join(dir, entry), "utf8");
           const parsed = JSON.parse(raw);
           const items = Array.isArray(parsed) ? parsed : [parsed];
-          if (type === "laverne") {
-            defs.push(...laverneAdapter.fromConfigs(items));
+          if (type === "lavern") {
+            defs.push(...lavernAdapter.fromConfigs(items));
           } else {
             defs.push(...(items as ExternalAgentConfig[]).map(fromExternalConfig));
           }
@@ -248,6 +248,42 @@ export class Orchestrator {
         logger.info("External agents registered", { source: type, count: defs.length });
       }
     }
+  }
+
+  // ─── MikeOSS workflow loader ──────────────────────────────────────────────
+
+  /**
+   * Load MikeOSS workflow presets (native MikeOSSWorkflow format) from
+   * workflows/mikeoss/ and register each as a TaskTemplate via the adapter.
+   * MikeOSS workflows are task specifications, not agents — our agent system
+   * executes them. Files may contain a single workflow or an array.
+   */
+  private async loadMikeOSSWorkflows(): Promise<void> {
+    const dir = join(process.cwd(), "workflows", "mikeoss");
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      return; // directory doesn't exist — skip silently
+    }
+
+    let loaded = 0;
+    for (const entry of entries) {
+      if (extname(entry) !== ".json") continue;
+      try {
+        const raw = await readFile(join(dir, entry), "utf8");
+        const parsed = JSON.parse(raw) as MikeOSSWorkflow | MikeOSSWorkflow[];
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        for (const wf of items) {
+          this.templates.add(fromMikeOSSWorkflow(wf));
+          loaded++;
+        }
+      } catch (err) {
+        logger.warn("Failed to load MikeOSS workflow file", { file: entry, error: (err as Error).message });
+      }
+    }
+
+    if (loaded) logger.info("MikeOSS workflows registered as templates", { count: loaded });
   }
 
   // ─── Internal task runner ─────────────────────────────────────────────────
@@ -312,8 +348,9 @@ export class Orchestrator {
       passed.map((f) => runDebate(f, "adversarial-challenger")),
     );
 
-    // Verification pipeline
-    const verified = await Promise.all(
+    // Verification pipeline — mutates each finding in place, attaching its
+    // verificationResult (read downstream by identifyGateRequests).
+    await Promise.all(
       debated.map((f) => runVerificationPipeline(f)),
     );
 

@@ -1,0 +1,34 @@
+[
+  {
+    "id": "contract-risk-review",
+    "name": "Contract Risk Review",
+    "description": "Single-pass risk review of a commercial contract: identifies high-risk clauses, missing protections, and EU-law compliance issues, with a prioritised remediation list.",
+    "promptTemplate": "Conduct a risk review of the following commercial contract.\n\nContext: {{description}}\n\nContract document(s): {{document}}\n\nProduce:\n1. A clause-by-clause risk register (clause → risk → severity High/Medium/Low).\n2. Missing or inadequate protections (liability caps, indemnities, IP, data protection, termination).\n3. EU-law compliance flags (competition restraints, GDPR processing terms, consumer-law if B2C, unfair-terms exposure).\n4. Governing-law and jurisdiction assessment, including Rome I/Brussels Ia implications.\n5. A prioritised remediation list with suggested redlines.",
+    "workflowType": "review",
+    "preferredDomains": ["analysis", "review", "drafting"]
+  },
+  {
+    "id": "dpia-assessment",
+    "name": "Data Protection Impact Assessment",
+    "description": "Produces a GDPR Art. 35 DPIA for a processing activity: necessity and proportionality, risk to data subjects, and mitigation measures.",
+    "promptTemplate": "Prepare a Data Protection Impact Assessment under GDPR Art. 35 for the following processing activity.\n\nProcessing description: {{description}}\n\nSupporting document(s): {{document}}\n\nThe DPIA must:\n1. Describe the processing, its purposes, and the controller/processor roles.\n2. Confirm whether a DPIA is mandatory (Art. 35(3) + national/EDPB lists).\n3. Assess necessity and proportionality against the purpose.\n4. Identify and rate risks to the rights and freedoms of data subjects.\n5. Identify the lawful basis and, for special categories, the Art. 9 condition.\n6. Propose technical and organisational mitigation measures and residual-risk rating.\n7. Indicate whether prior consultation with the supervisory authority (Art. 36) is required.",
+    "workflowType": "full_bench",
+    "preferredDomains": ["compliance", "analysis", "drafting"]
+  },
+  {
+    "id": "regulatory-horizon-scan",
+    "name": "Regulatory Horizon Scan",
+    "description": "Scans the forthcoming and recent EU regulatory landscape relevant to a business activity and produces an impact-ranked action list.",
+    "promptTemplate": "Perform a regulatory horizon scan for the following business activity.\n\nActivity / sector: {{description}}\n\nReference material: {{document}}\n\nProduce:\n1. The EU instruments (in force, in transition, and proposed) most material to this activity.\n2. For each, the key obligations and the compliance deadline or expected timeline.\n3. An impact ranking (High/Medium/Low) with the rationale.\n4. The concrete actions required to prepare, with suggested owners and sequencing.",
+    "workflowType": "tabulate",
+    "preferredDomains": ["research", "compliance", "analysis"]
+  },
+  {
+    "id": "nda-quick-review",
+    "name": "NDA Quick Review",
+    "description": "Fast counsel-style review of a non-disclosure agreement against a standard protective checklist.",
+    "promptTemplate": "Review the following non-disclosure agreement and advise.\n\nDeal context: {{description}}\n\nNDA document: {{document}}\n\nAddress: mutual vs one-way scope, definition of Confidential Information, permitted use and disclosees, term and survival, return/destruction, carve-outs, injunctive relief, governing law and jurisdiction, and any GDPR/personal-data handling. Conclude with a SIGN / SIGN-WITH-CHANGES / DO-NOT-SIGN recommendation and the specific changes required.",
+    "workflowType": "counsel",
+    "preferredDomains": ["review", "drafting"]
+  }
+]

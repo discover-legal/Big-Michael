@@ -1,31 +1,31 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2026 Discover Legal
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, version 3.
-// See <https://www.gnu.org/licenses/gpl-3.0.html>
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//     http://www.apache.org/licenses/LICENSE-2.0
 
 /**
- * Laverne adapter — imports agents from github.com/AnttiHero/laverne.
+ * Lavern adapter — imports agents from github.com/AnttiHero/lavern.
  *
- * Laverne defines 67 agents across 9 workflow types. Each agent has:
+ * Lavern defines 67 agents across 9 workflow types. Each agent has:
  *   - A natural-language role description
  *   - A system prompt (the "agent directive")
  *   - A list of MCP tool permissions
  *   - Optional: jurisdiction, specialty, workflow affiliation
  *
- * This adapter converts Laverne's format to our AgentDefinition and maps:
- *   - Laverne orchestrators → T1 Domain Managers
- *   - Laverne specialist agents → T2 Specialists
- *   - Laverne tool-only agents → T3 Tool Agents
+ * This adapter converts Lavern's format to our AgentDefinition and maps:
+ *   - Lavern orchestrators → T1 Domain Managers
+ *   - Lavern specialist agents → T2 Specialists
+ *   - Lavern tool-only agents → T3 Tool Agents
  *
  * Usage:
- *   const adapter = new LaverneAdapter();
- *   const agents = await adapter.load('/path/to/laverne/agents');
- *   // or from the Laverne config object directly:
- *   const agents = adapter.fromConfigs(laverneAgentConfigs);
+ *   const adapter = new LavernAdapter();
+ *   const agents = await adapter.load('/path/to/lavern/agents');
+ *   // or from the Lavern config object directly:
+ *   const agents = adapter.fromConfigs(lavernAgentConfigs);
  *
- * The imported agents are tagged with source='laverne' in metadata so
+ * The imported agents are tagged with source='lavern' in metadata so
  * they can be filtered or weighted differently in DyTopo rounds.
  */
 
@@ -34,17 +34,17 @@ import { join, extname } from "path";
 import type { AgentDefinition, AgentTier, AgentDomain } from "../types.js";
 import type { AgentHarness } from "./index.js";
 
-// ─── Laverne's native format (from their TypeScript source) ───────────────────
+// ─── Lavern's native format (from their TypeScript source) ───────────────────
 
-export interface LaverneAgentConfig {
+export interface LavernAgentConfig {
   id?: string;
   name: string;
   role: string;
   specialty?: string;
   systemPrompt: string;
-  /** MCP tool names Laverne permits this agent to call */
+  /** MCP tool names Lavern permits this agent to call */
   mcpTools: string[];
-  /** Laverne workflow affiliation */
+  /** Lavern workflow affiliation */
   workflow?: string;
   jurisdiction?: string;
   tier?: "orchestrator" | "specialist" | "reviewer" | "tool";
@@ -52,17 +52,17 @@ export interface LaverneAgentConfig {
 
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
-export class LaverneAdapter implements AgentHarness {
-  readonly name = "laverne";
+export class LavernAdapter implements AgentHarness {
+  readonly name = "lavern";
   readonly version = "0.15.0";
 
   /**
-   * Load Laverne agents from a directory of JSON/TS export files.
-   * Each file should export a LaverneAgentConfig or array of configs.
+   * Load Lavern agents from a directory of JSON/TS export files.
+   * Each file should export a LavernAgentConfig or array of configs.
    */
   async load(sourcePath: string): Promise<AgentDefinition[]> {
     const entries = await readdir(sourcePath);
-    const configs: LaverneAgentConfig[] = [];
+    const configs: LavernAgentConfig[] = [];
 
     for (const entry of entries) {
       if (extname(entry) !== ".json") continue;
@@ -79,20 +79,20 @@ export class LaverneAdapter implements AgentHarness {
   }
 
   /**
-   * Convert an array of Laverne agent configs directly (no file I/O).
-   * Use this when you have Laverne's configs in memory.
+   * Convert an array of Lavern agent configs directly (no file I/O).
+   * Use this when you have Lavern's configs in memory.
    */
-  fromConfigs(configs: LaverneAgentConfig[]): AgentDefinition[] {
+  fromConfigs(configs: LavernAgentConfig[]): AgentDefinition[] {
     return configs.map((c) => this.convert(c));
   }
 
-  private convert(c: LaverneAgentConfig): AgentDefinition {
+  private convert(c: LavernAgentConfig): AgentDefinition {
     const tier = this.inferTier(c);
     const domain = this.inferDomain(c);
 
     return {
-      id: c.id ?? `laverne:${slugify(c.name)}`,
-      name: `[Laverne] ${c.name}`,
+      id: c.id ?? `lavern:${slugify(c.name)}`,
+      name: `[Lavern] ${c.name}`,
       tier,
       type: tier === 0 ? "root" : tier === 1 ? "manager" : tier === 3 ? "tool" : "specialist",
       domain,
@@ -101,15 +101,15 @@ export class LaverneAdapter implements AgentHarness {
       allowedTools: this.mapTools(c.mcpTools),
       skills: extractSkills(c),
       metadata: {
-        source: "laverne",
-        laverneTier: c.tier,
-        laverneWorkflow: c.workflow,
+        source: "lavern",
+        lavernTier: c.tier,
+        lavernWorkflow: c.workflow,
         jurisdiction: c.jurisdiction,
       },
     };
   }
 
-  private inferTier(c: LaverneAgentConfig): AgentTier {
+  private inferTier(c: LavernAgentConfig): AgentTier {
     if (c.tier === "orchestrator") return 1;
     if (c.tier === "tool") return 3;
     if (c.tier === "reviewer") return 2;
@@ -120,7 +120,7 @@ export class LaverneAdapter implements AgentHarness {
     return 2;
   }
 
-  private inferDomain(c: LaverneAgentConfig): AgentDomain {
+  private inferDomain(c: LavernAgentConfig): AgentDomain {
     const text = `${c.role} ${c.specialty ?? ""} ${c.workflow ?? ""}`.toLowerCase();
     if (/research|investigat|find|search/i.test(text)) return "research";
     if (/draft|writ|memo|brief|plead/i.test(text)) return "drafting";
@@ -132,8 +132,8 @@ export class LaverneAdapter implements AgentHarness {
   }
 
   /**
-   * Map Laverne MCP tool names to our internal tool identifiers.
-   * Laverne uses 21 MCP tools; we map to our equivalents or keep the name.
+   * Map Lavern MCP tool names to our internal tool identifiers.
+   * Lavern uses 21 MCP tools; we map to our equivalents or keep the name.
    */
   private mapTools(mcpTools: string[]): string[] {
     const toolMap: Record<string, string> = {
@@ -189,7 +189,7 @@ export interface TaskTemplate {
   taskDescriptionTemplate: string;
   workflowType: import("../types.js").WorkflowType;
   preferredDomains?: import("../types.js").AgentDomain[];
-  source: "mikeoss" | "laverne" | "custom";
+  source: "mikeoss" | "lavern" | "custom";
   metadata?: Record<string, unknown>;
 }
 
@@ -261,7 +261,7 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function extractSkills(c: LaverneAgentConfig): string[] {
+function extractSkills(c: LavernAgentConfig): string[] {
   const skills: string[] = [];
   if (c.specialty) skills.push(slugify(c.specialty));
   if (c.jurisdiction) skills.push(`jurisdiction:${c.jurisdiction}`);
