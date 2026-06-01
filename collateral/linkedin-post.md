@@ -2,11 +2,11 @@
 
 ## Post (primary)
 
-I built **Big Michael**, and it slightly broke my brain.
+I built **Big Michael** on the shoulders of two giants — **Mike** (legal document tooling) and **Lavern** (a roster of legal agents).
 
-Most "legal AI" is one model, one prompt, fingers crossed. Big Michael is a **bench**: 118 specialist agents that self-organize each round, argue with each other, and have to cite their sources and survive an adversarial verification pass before anything reaches a human. Jurisdiction-neutral. Local or cloud. Open source.
+It's a *bench*, not a chatbot: 118 specialist agents that self-organize each round, argue with each other, and must cite their sources and survive an adversarial verification pass before anything reaches a human. Jurisdiction-neutral. Local or cloud. Open source.
 
-🌉 By now you're thinking: *"118 AIs arguing case law — and an AI built it? I've got a bridge to sell you."* Fair. Except it literally *is* a bridge — Big Michael bridges separate legal AI systems (Mike's document tools, Lavern's agents, your own) into one bench that debates and verifies as a whole. Real, open source, walk across it yourself. No sale, no toll.
+🌉 The old line is *"I've got a bridge to sell you."* Mine's the opposite: **I have a bridge to give you — and it stands upon the shoulders of giants.** Big Michael bridges separate legal AI systems (Mike, Lavern, your own) into one bench that debates and verifies as a whole. Free, open source, yours to cross.
 
 (And yes: **Claude** built most of it with me. An AI building a multi-agent AI that argues with itself about the law. Turtles all the way down. 🐢)
 
@@ -18,9 +18,9 @@ Screenshots from a live matter 👇 What would a 100-agent bench do to *your* ha
 
 ## Post (ultra-short)
 
-I built a legal AI that's a *bench*, not a chatbot: 118 agents that argue, cite, and verify each other before anything reaches a human.
+Built on the shoulders of giants — **Mike** and **Lavern** — **Big Michael** is a legal AI that's a *bench*, not a chatbot: 118 agents that argue, cite, and verify each other before anything reaches a human.
 
-"An AI legal tool built by an AI? I've got a bridge to sell you." Except it *is* a bridge — it unifies separate legal AI systems (Mike, Lavern, your own) into one. Open source. Walk across it yourself. 🌉
+Not a bridge to *sell* you — one to *give* you. It unifies separate legal AI systems into one. Open source, yours to cross. 🌉
 
 #LegalAI #MultiAgent #OpenSource
 
