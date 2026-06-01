@@ -134,11 +134,15 @@ export class Orchestrator {
     description: string;
     workflowType: WorkflowType;
     documentIds?: string[];
+    clientNumber?: string;
+    matterNumber?: string;
   }): Promise<Task> {
     const phases = PHASE_SEQUENCES[params.workflowType];
     const task: Task = {
       id: uuidv4(),
       description: params.description,
+      clientNumber: params.clientNumber?.trim() || undefined,
+      matterNumber: params.matterNumber?.trim() || undefined,
       documentIds: params.documentIds ?? [],
       workflowType: params.workflowType,
       status: "pending",
@@ -185,11 +189,12 @@ export class Orchestrator {
     templateId: string,
     substitutions: Record<string, string> = {},
     documentIds?: string[],
+    refs?: { clientNumber?: string; matterNumber?: string },
   ): Promise<Task> {
     const template = this.templates.get(templateId);
     if (!template) throw new Error(`Template not found: ${templateId}`);
     const { description, workflowType } = instantiateTemplate(template, substitutions);
-    return this.submitTask({ description, workflowType, documentIds });
+    return this.submitTask({ description, workflowType, documentIds, ...refs });
   }
 
   /**

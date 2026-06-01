@@ -48,6 +48,8 @@ const TOOLS = [
           items: { type: "string" },
           description: "IDs of documents already ingested into the knowledge store",
         },
+        clientNumber: { type: "string", description: "Optional law-firm client number" },
+        matterNumber: { type: "string", description: "Optional law-firm matter number" },
       },
       required: ["description", "workflowType"],
     },
@@ -227,10 +229,27 @@ export async function startMcpServer(orchestrator: Orchestrator): Promise<void> 
 // ─── REST API (Fastify) ───────────────────────────────────────────────────────
 
 export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
-  const app = Fastify({ logger: false });
+  // bodyLimit bounds request bodies (document ingestion can be large but must
+  // not be unbounded). x-powered-by/server header is off by default in Fastify.
+  const app = Fastify({ logger: false, bodyLimit: 25 * 1024 * 1024 });
+
+  // Optional shared-secret auth. When API_KEY is set, every request except the
+  // health check must present it as `x-api-key`. This is defence-in-depth for
+  // anyone who runs the API off loopback; on 127.0.0.1 it can be left unset.
+  if (Config.api.apiKey) {
+    app.addHook("onRequest", async (req, reply) => {
+      if (req.url === "/health") return;
+      if (req.headers["x-api-key"] !== Config.api.apiKey) {
+        return reply.code(401).send({ error: "Unauthorized" });
+      }
+    });
+  }
 
   app.post("/tasks", async (req, reply) => {
-    const body = req.body as { description: string; workflowType: WorkflowType; documentIds?: string[] };
+    const body = req.body as {
+      description: string; workflowType: WorkflowType; documentIds?: string[];
+      clientNumber?: string; matterNumber?: string;
+    };
     const task = await orchestrator.submitTask(body);
     return reply.status(201).send(task);
   });
@@ -347,8 +366,12 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   app.get("/templates", async () => orchestrator.listTemplates());
 
   app.post("/tasks/from-template", async (req, reply) => {
-    const body = req.body as { templateId: string; substitutions?: Record<string, string>; documentIds?: string[] };
-    const task = await orchestrator.submitFromTemplate(body.templateId, body.substitutions, body.documentIds);
+    const body = req.body as {
+      templateId: string; substitutions?: Record<string, string>; documentIds?: string[];
+      clientNumber?: string; matterNumber?: string;
+    };
+    const task = await orchestrator.submitFromTemplate(body.templateId, body.substitutions, body.documentIds,
+      { clientNumber: body.clientNumber, matterNumber: body.matterNumber });
     return reply.status(201).send(task);
   });
 
@@ -404,8 +427,8 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     return reply;
   });
 
-  await app.listen({ port: Config.api.port, host: "0.0.0.0" });
-  logger.info("REST API started", { port: Config.api.port });
+  await app.listen({ port: Config.api.port, host: Config.api.host });
+  logger.info("REST API started", { port: Config.api.port, host: Config.api.host, auth: Config.api.apiKey ? "x-api-key" : "none" });
 }
 
 // ─── Tool handler ─────────────────────────────────────────────────────────────
@@ -421,6 +444,8 @@ async function handleTool(
         description: args.description as string,
         workflowType: args.workflowType as WorkflowType,
         documentIds: args.documentIds as string[] | undefined,
+        clientNumber: args.clientNumber as string | undefined,
+        matterNumber: args.matterNumber as string | undefined,
       });
 
     case "get_task": {

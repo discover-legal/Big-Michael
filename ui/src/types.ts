@@ -90,6 +90,8 @@ export interface RoundState {
 export interface Task {
   id: string;
   description: string;
+  clientNumber?: string;
+  matterNumber?: string;
   documentIds: string[];
   workflowType: WorkflowType;
   status: TaskStatus;

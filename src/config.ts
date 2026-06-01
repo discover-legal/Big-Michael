@@ -47,6 +47,13 @@ export const Config = {
 
   api: {
     port: parseInt(optional("API_PORT", "3101")),
+    // Bind to loopback by default — the REST API has no auth of its own and can
+    // submit tasks, ingest/read documents, and trigger paid LLM calls. Set
+    // API_HOST=0.0.0.0 only behind a trusted proxy or with API_KEY set.
+    host: optional("API_HOST", "127.0.0.1"),
+    // Optional shared secret. If set, every request (except /health) must send
+    // it as the `x-api-key` header. Empty = no auth (safe only on loopback).
+    apiKey: optional("API_KEY", ""),
   },
 
   // Per-agent agentic loop — how many tool_use iterations an agent may run
@@ -94,6 +101,12 @@ export const Config = {
   pdf: {
     pythonBin: optional("PDF_PYTHON_BIN", "python3"),
     outputDir: optional("PDF_OUTPUT_DIR", "./output/documents"),
+    // Directories the PDF tools are allowed to READ from. Prevents an agent
+    // (e.g. via prompt injection) from reading arbitrary files like .env or
+    // system files through a tool `path`. Comma-separated; empty = sensible
+    // defaults (cwd + OS temp + output dir), resolved in tools/pdf.ts.
+    allowedDirs: optional("PDF_ALLOWED_DIRS", "")
+      .split(",").map((d) => d.trim()).filter(Boolean),
   },
 
   persistence: {

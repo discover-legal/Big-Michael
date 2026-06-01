@@ -21,10 +21,10 @@ export const api = {
   listTemplates: () => fetch("/templates").then(json<Template[]>),
   listAgents: () => fetch("/agents").then(json<AgentSummary[]>),
 
-  submitTask: (body: { description: string; workflowType: WorkflowType; documentIds?: string[] }) =>
+  submitTask: (body: { description: string; workflowType: WorkflowType; documentIds?: string[]; clientNumber?: string; matterNumber?: string }) =>
     fetch("/tasks", POST(body)).then(json<Task>),
 
-  fromTemplate: (body: { templateId: string; substitutions?: Record<string, string>; documentIds?: string[] }) =>
+  fromTemplate: (body: { templateId: string; substitutions?: Record<string, string>; documentIds?: string[]; clientNumber?: string; matterNumber?: string }) =>
     fetch("/tasks/from-template", POST(body)).then(json<Task>),
 
   approveGate: (taskId: string, gateId: string, note?: string) =>

@@ -115,6 +115,7 @@ export default function App() {
               </div>
               <div className="task-card-meta">
                 <WorkflowPill workflow={t.workflowType} />
+                {t.matterNumber && <span className="card-matter">· {t.matterNumber}</span>}
                 <span>· {timeAgo(t.updatedAt)}</span>
                 {t.pendingGates?.some((g) => g.status === "pending") && <span style={{ color: "var(--amber)" }}>· ⚖ review</span>}
               </div>

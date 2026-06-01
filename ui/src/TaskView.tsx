@@ -179,6 +179,13 @@ export function TaskView({ task, agentNames, onChange, notify }: {
         <div className="eyebrow">
           <WorkflowPill workflow={task.workflowType} />
           <StatusPill status={task.status} />
+          {(task.matterNumber || task.clientNumber) && (
+            <span className="pill matter-ref" title="Client / matter reference">
+              {task.clientNumber && <>CLIENT {task.clientNumber}</>}
+              {task.clientNumber && task.matterNumber && " · "}
+              {task.matterNumber && <>MATTER {task.matterNumber}</>}
+            </span>
+          )}
           {pendingGates > 0 && <span className="pill amber">⚖ {pendingGates} awaiting review</span>}
           {task.error && <span className="pill red">{task.error}</span>}
         </div>

@@ -220,6 +220,10 @@ export type TaskStatus =
 export interface Task {
   id: string;
   description: string;
+  /** Law-firm client number (the client this matter belongs to). Optional. */
+  clientNumber?: string;
+  /** Law-firm matter number (the file/matter reference). Optional. */
+  matterNumber?: string;
   /** Document IDs ingested into the knowledge store for this task */
   documentIds: string[];
   workflowType: WorkflowType;

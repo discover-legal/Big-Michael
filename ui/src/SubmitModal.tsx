@@ -9,6 +9,8 @@ export function SubmitModal({ onClose, onCreated, notify }: {
   notify: (msg: string) => void;
 }) {
   const [description, setDescription] = useState("");
+  const [clientNumber, setClientNumber] = useState("");
+  const [matterNumber, setMatterNumber] = useState("");
   const [workflow, setWorkflow] = useState<WorkflowType>("full_bench");
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templateId, setTemplateId] = useState("");
@@ -32,10 +34,11 @@ export function SubmitModal({ onClose, onCreated, notify }: {
   async function submit() {
     setBusy(true);
     const documentIds = [...selectedDocs];
+    const refs = { clientNumber: clientNumber.trim() || undefined, matterNumber: matterNumber.trim() || undefined };
     try {
       const task = templateId
-        ? await api.fromTemplate({ templateId, documentIds })
-        : await api.submitTask({ description, workflowType: workflow, documentIds });
+        ? await api.fromTemplate({ templateId, documentIds, ...refs })
+        : await api.submitTask({ description, workflowType: workflow, documentIds, ...refs });
       notify("Task submitted — agents convening");
       onCreated(task);
     } catch (e) {
@@ -57,6 +60,17 @@ export function SubmitModal({ onClose, onCreated, notify }: {
         </div>
 
         <div className="modal-body">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div className="field">
+              <label>Client number</label>
+              <input value={clientNumber} onChange={(e) => setClientNumber(e.target.value)} placeholder="e.g. 10482" />
+            </div>
+            <div className="field">
+              <label>Matter number</label>
+              <input value={matterNumber} onChange={(e) => setMatterNumber(e.target.value)} placeholder="e.g. 10482-014" />
+            </div>
+          </div>
+
           <div className="field">
             <label>The matter</label>
             <textarea

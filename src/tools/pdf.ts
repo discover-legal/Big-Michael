@@ -16,13 +16,41 @@
  */
 
 import { spawn } from "child_process";
-import { join, dirname } from "path";
+import { join, dirname, resolve, basename, sep } from "path";
 import { fileURLToPath } from "url";
+import { tmpdir } from "os";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
 import type { ToolImpl } from "./index.js";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "../../scripts/pdf_tools.py");
+
+// ─── Path safety ──────────────────────────────────────────────────────────────
+// The read tools accept a caller-supplied file path. Without a guard, an agent
+// induced via prompt injection could read arbitrary files (.env, key material,
+// system files) and surface their contents in findings. Restrict reads to an
+// allow-list of base directories.
+const ALLOWED_READ_ROOTS = (
+  Config.pdf.allowedDirs.length
+    ? Config.pdf.allowedDirs
+    : [process.cwd(), tmpdir(), Config.pdf.outputDir]
+).map((d) => resolve(d));
+
+function assertSafeReadPath(p: unknown): string {
+  if (typeof p !== "string" || !p.trim()) {
+    throw new Error("A file path is required.");
+  }
+  const abs = resolve(p);
+  const ok = ALLOWED_READ_ROOTS.some((root) => abs === root || abs.startsWith(root + sep));
+  if (!ok) {
+    logger.warn("Blocked PDF tool read outside allowed roots", { requested: p });
+    throw new Error(
+      `Refusing to read '${p}': path is outside the allowed directories ` +
+      `(${ALLOWED_READ_ROOTS.join(", ")}). Set PDF_ALLOWED_DIRS to widen.`,
+    );
+  }
+  return abs;
+}
 
 // ─── Shared python runner ─────────────────────────────────────────────────────
 
@@ -82,7 +110,7 @@ export const pdfExtractTextTool: ToolImpl = {
   },
   async execute(input, _ctx) {
     return runPython("extract_text", {
-      path: input.path,
+      path: assertSafeReadPath(input.path),
       pages: input.pages,
     });
   },
@@ -119,7 +147,7 @@ export const pdfExtractTablesTool: ToolImpl = {
   },
   async execute(input, _ctx) {
     return runPython("extract_tables", {
-      path: input.path,
+      path: assertSafeReadPath(input.path),
       pages: input.pages ?? "all",
       flavor: input.flavor ?? "lattice",
     });
@@ -162,7 +190,9 @@ export const pdfGenerateTool: ToolImpl = {
   async execute(input, _ctx) {
     return runPython("generate", {
       title: input.title,
-      filename: input.filename,
+      // Sanitise to a bare filename so the output can't escape output_dir via
+      // path separators or traversal sequences in a caller-supplied name.
+      filename: basename(String(input.filename)),
       content: input.content,
       output_dir: Config.pdf.outputDir,
       author: input.author,
@@ -208,7 +238,7 @@ export const pdfOcrTool: ToolImpl = {
   },
   async execute(input, _ctx) {
     return runPython("ocr", {
-      path: input.path,
+      path: assertSafeReadPath(input.path),
       lang: input.lang ?? "eng",
       pages: input.pages,
       dpi: input.dpi ?? 300,

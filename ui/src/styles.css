@@ -489,6 +489,13 @@ body::after {
 .rnd-finding-body { color: var(--text-dim); font-size: 13.5px; line-height: 1.55; margin-bottom: 8px; }
 .pill.sm { font-size: 9.5px; padding: 1px 6px; }
 
+/* Client / matter reference (law-firm numbering) */
+.pill.matter-ref {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em;
+  color: var(--text-dim); background: var(--bg-2); border: 1px solid var(--border-2);
+}
+.card-matter { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+
 /* ─── Data grid (findings + tabulate) ────────────────────────────────── */
 
 .grid-toolbar {
