@@ -4,7 +4,7 @@
 
 ### Legal Intelligence Bench
 
-**A multi-agent legal AI orchestrator that convenes a bench of 47 specialist agents, has them debate and verify every finding, and returns cited, signature-ready work product.**
+**A multi-agent legal AI orchestrator that convenes a bench of 100+ specialist agents — jurisdiction-neutral by design — has them debate and verify every finding, and returns cited, signature-ready work product.**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-2563eb.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](tsconfig.json)
@@ -28,32 +28,57 @@ itself and checks its own citations first.
 
 ---
 
+## The console
+
+A real matter, mid-flight — the bench self-organising, then the cited result.
+
+| Round-by-round communication graph | Cited, verified synthesis |
+|---|---|
+| ![Rounds](collateral/screenshots/03-rounds.png) | ![Synthesis](collateral/screenshots/04-synthesis.png) |
+
+| Live admin · DyTopo depth, modes, DocuSeal | Convene a matter — client/matter numbering |
+|---|---|
+| ![Admin](collateral/screenshots/06-admin.png) | ![Submit](collateral/screenshots/02-submit.png) |
+
+> Screenshots are captured from the running web console against a live matter
+> (client `10482` · matter `10482-014`). The interface, DyTopo communication graph,
+> human gates, and per-round agent routing are exactly as the system produced them.
+
+---
+
 ## Why it's different
 
 | Most legal AI | Big Michael |
 |---|---|
-| One model, one pass | 47 agents across 4 tiers, multiple DyTopo rounds |
-| "Trust me" answers | Every finding survives **debate (Opus)** + **10× verification (Haiku)** before output |
+| One model, one pass | 100+ agents across 4 tiers, multiple DyTopo rounds |
+| "Trust me" answers | Every finding survives **adversarial debate** + **verification passes** before output |
 | Hallucinated cites | **CitationGate** rejects any claim whose source isn't in the registry |
+| Locked to one jurisdiction | **Jurisdiction-neutral** native bench — applies the governing law each matter specifies |
 | Black box | Append-only **audit log** + live **SSE** of every round, message, and gate |
 | Text in, text out | Cited briefs, **.docx** with tracked changes, e-signed via DocuSeal |
-| Cloud-only | 3-tier cloud routing **or** fully local (LM Studio / Ollama / vLLM) |
+| Cloud-only | 3-tier cloud routing **or** fully local (Ollama / LM Studio / vLLM) |
+| One-size config | **Admin panel** — lawyer/non-lawyer mode, DyTopo depth, verification & DocuSeal, applied live |
 
 ---
 
 ## Architecture
 
 ```
-T0  Root Orchestrator (1)            Opus — issues RoundGoals each phase
+T0  Root Orchestrator (1)            issues RoundGoals each phase
      │
 T1  Domain Managers (4)              research · analysis · drafting · review
      │   ↓ DyTopo: Need/Offer cosine-match → directed communication graph
-T2  Epistemic agents (18)            reason within a specific EU-law framework
-T2  Conceptual agents (8)            own a single legal concept (dominance, SIEC…)
+T2  Epistemic agents (18)            reason within a practice area, in any jurisdiction
+                                     (contract · corporate · M&A · privacy · antitrust ·
+                                      employment · IP · tax · litigation · sanctions · ESG…)
+T2  Conceptual agents (8)            own a cross-system legal concept (materiality,
+                                     liability, enforceability, causation, good faith…)
 T2  Writing agents (13)              produce a specific document type
      │   ↓ tool_use agentic loop
-T3  Tool agents (7)                  web search · retrieval · extraction · translation
+T3  Tool agents (6)                  web search · retrieval · extraction · translation
                                      · citation check · e-signature
+
+50 jurisdiction-neutral native agents — plus an imported Lavern roster (118 in all).
 ```
 
 **Each DyTopo round:**
@@ -131,8 +156,9 @@ the full toolset (`submit_task`, `get_task`, `approve_gate`, `submit_from_templa
 `ingest_document`, `search_knowledge`, `get_audit`, …):
 
 ```
-Use big-michael to research whether our planned acquisition of Acme GmbH triggers a
-mandatory notification under EU Merger Regulation 139/2004. Run a full_bench workflow.
+Use big-michael to review this SaaS master services agreement under New York law —
+flag the uncapped indemnity and unlimited-liability exposure, and recommend fallback
+positions for the customer. Run a roundtable workflow.
 ```
 
 Claude Code submits the task, polls progress, approves any human gates, and surfaces the
@@ -177,7 +203,7 @@ See [`CLAUDE.md`](CLAUDE.md) for the full architecture guide, agent roster, and 
 |---|---|
 | `src/orchestrator.ts` | Task lifecycle, phase sequencing, synthesis |
 | `src/dytopo/engine.ts` | Need/Offer matching, comm graph, round execution |
-| `src/agents/` | 47 agent definitions + the agentic-loop base class |
+| `src/agents/` | 50 jurisdiction-neutral agent definitions + the agentic-loop base class |
 | `src/protocols/` | CitationGate · DebateProtocol · VerificationPipeline |
 | `src/tools/` | Tool registry — PDF, DocuSeal, docx, tabular, document, tracked-changes |
 | `src/routing/model.ts` | Haiku / Sonnet / Opus / Ollama / local routing |
