@@ -89,6 +89,24 @@ export interface RoundState {
 
 export type LawyerRole = "lawyer" | "partner";
 
+export const PRACTICE_AREAS = [
+  "Corporate & M&A",
+  "Competition & Antitrust",
+  "Employment & Labour",
+  "Intellectual Property",
+  "Real Estate",
+  "Banking & Finance",
+  "Litigation & Dispute Resolution",
+  "Tax",
+  "Regulatory & Compliance",
+  "Data Privacy & Cybersecurity",
+  "Immigration",
+  "Insolvency & Restructuring",
+  "Capital Markets",
+  "Insurance",
+  "Environmental & Climate",
+] as const;
+
 export interface LawyerProfile {
   id: string;
   name: string;
@@ -96,6 +114,47 @@ export interface LawyerProfile {
   role: LawyerRole;
   title?: string;
   color?: string;
+  practiceAreas?: string[];
+  bio?: string;
+}
+
+export interface ClientMatter {
+  matterNumber: string;
+  description: string;
+  practiceArea?: string;
+  openedAt: string;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  clientNumber: string;
+  matters: ClientMatter[];
+  adversaries: string[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConflictCheckResult {
+  hasConflict: boolean;
+  conflictingClientId?: string;
+  conflictingClientName?: string;
+  matchedAdversary?: string;
+}
+
+export interface SuggestedLawyer {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface IngestResult {
+  id: string;
+  title?: string;
+  practiceArea?: string | null;
+  detectedClient?: { clientNumber: string; clientName: string } | null;
+  suggestedLawyers: SuggestedLawyer[];
 }
 
 export interface Me {
@@ -156,6 +215,8 @@ export interface DocumentRef {
   source?: string;
   jurisdiction?: string;
   documentType?: string;
+  practiceArea?: string;
+  detectedClientNumber?: string;
   ingestedAt?: string;
 }
 

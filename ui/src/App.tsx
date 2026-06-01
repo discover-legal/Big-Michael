@@ -8,6 +8,7 @@ import { SubmitModal } from "./SubmitModal";
 import { Library } from "./Library";
 import { AuditRail } from "./AuditRail";
 import { AdminPanel } from "./AdminPanel";
+import { ClientsPanel } from "./ClientsPanel";
 import { Login } from "./Login";
 
 export default function App() {
@@ -22,7 +23,9 @@ export default function App() {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [clientsOpen, setClientsOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [clientFilter, setClientFilter] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
 
@@ -109,17 +112,24 @@ export default function App() {
         <div className="rail-actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button className="btn primary full" onClick={() => setSubmitOpen(true)}>＋ New matter</button>
           <button className="btn full ghost" onClick={() => setLibraryOpen(true)}>⊕ Library · ingest &amp; search</button>
+          {isPartner && <button className="btn full ghost" onClick={() => setClientsOpen(true)}>⚖ Clients &amp; matters</button>}
           <button className="btn full ghost" onClick={() => setAdminOpen(true)}>⚙ Admin · settings</button>
         </div>
 
         <div className="rail-scroll">
-          <div className="rail-label">Matters · {tasks.length}</div>
-          {tasks.length === 0 && (
-            <div style={{ padding: "10px 8px", color: "var(--text-faint)", fontSize: 13 }}>
-              No matters yet. Convene the bench to begin.
+          {clientFilter && (
+            <div style={{ padding: "6px 8px", display: "flex", alignItems: "center", gap: 6 }}>
+              <span className="pill sm gold">{clientFilter}</span>
+              <button className="btn ghost sm" style={{ padding: "2px 6px" }} onClick={() => setClientFilter(null)}>✕</button>
             </div>
           )}
-          {tasks.map((t, i) => (
+          <div className="rail-label">Matters · {tasks.filter((t) => !clientFilter || t.clientNumber === clientFilter).length}</div>
+          {tasks.filter((t) => !clientFilter || t.clientNumber === clientFilter).length === 0 && (
+            <div style={{ padding: "10px 8px", color: "var(--text-faint)", fontSize: 13 }}>
+              {clientFilter ? "No matters for this client." : "No matters yet. Convene the bench to begin."}
+            </div>
+          )}
+          {tasks.filter((t) => !clientFilter || t.clientNumber === clientFilter).map((t, i) => (
             <motion.button
               key={t.id}
               className={`task-card ${t.id === selectedId ? "active" : ""}`}
@@ -134,6 +144,12 @@ export default function App() {
               </div>
               <div className="task-card-meta">
                 <WorkflowPill workflow={t.workflowType} />
+                {t.clientNumber && (
+                  <span className="card-matter" style={{ cursor: "pointer", color: "var(--gold-soft)" }}
+                    onClick={(e) => { e.stopPropagation(); setClientFilter(t.clientNumber!); }}>
+                    · {t.clientNumber}
+                  </span>
+                )}
                 {t.matterNumber && <span className="card-matter">· {t.matterNumber}</span>}
                 <span>· {timeAgo(t.updatedAt)}</span>
                 {t.pendingGates?.some((g) => g.status === "pending") && <span style={{ color: "var(--amber)" }}>· ⚖ review</span>}
@@ -177,7 +193,8 @@ export default function App() {
       <AnimatePresence>
         {submitOpen && <SubmitModal onClose={() => setSubmitOpen(false)} onCreated={onCreated} notify={notify} />}
         {libraryOpen && <Library onClose={() => setLibraryOpen(false)} notify={notify} />}
-        {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} notify={notify} isPartner={isPartner} profiles={profiles} onProfilesChange={loadProfiles} />}
+        {clientsOpen && <ClientsPanel onClose={() => setClientsOpen(false)} notify={notify} />}
+        {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} notify={notify} isPartner={isPartner} profiles={profiles} onProfilesChange={loadProfiles} me={me?.user} />}
       </AnimatePresence>
 
       <AnimatePresence>

@@ -268,6 +268,26 @@ export interface TaskTable {
 /** partner = admin (sees all matters, controls assignment); lawyer = sees own matters. */
 export type LawyerRole = "lawyer" | "partner";
 
+export const PRACTICE_AREAS = [
+  "Corporate & M&A",
+  "Competition & Antitrust",
+  "Employment & Labour",
+  "Intellectual Property",
+  "Real Estate",
+  "Banking & Finance",
+  "Litigation & Dispute Resolution",
+  "Tax",
+  "Regulatory & Compliance",
+  "Data Privacy & Cybersecurity",
+  "Immigration",
+  "Insolvency & Restructuring",
+  "Capital Markets",
+  "Insurance",
+  "Environmental & Climate",
+] as const;
+
+export type PracticeArea = typeof PRACTICE_AREAS[number];
+
 export interface LawyerProfile {
   id: string;
   name: string;
@@ -278,7 +298,42 @@ export interface LawyerProfile {
   color?: string;
   /** OAuth subject this profile is linked to, once auth is live. */
   oauthSubject?: string;
+  /** Practice areas this lawyer specialises in. */
+  practiceAreas?: string[];
+  /** Short bio / description. */
+  bio?: string;
   createdAt: Date;
+}
+
+// ─── Clients ─────────────────────────────────────────────────────────────────
+
+export interface ClientMatter {
+  matterNumber: string;
+  description: string;
+  practiceArea?: string;
+  openedAt: Date;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  /** Unique firm-assigned client reference number. */
+  clientNumber: string;
+  matters: ClientMatter[];
+  /** Names of opposing/adverse parties — used for conflict-of-interest checks. */
+  adversaries: string[];
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Result of a conflict-of-interest check. */
+export interface ConflictCheckResult {
+  hasConflict: boolean;
+  /** Which existing client's adversary list triggered the conflict. */
+  conflictingClientId?: string;
+  conflictingClientName?: string;
+  matchedAdversary?: string;
 }
 
 /** The authenticated principal for a request (or the local-dev partner when auth is off). */
@@ -300,6 +355,10 @@ export interface Document {
   documentType?: string;
   /** Lawyer profile id that uploaded/ingested this doc (for access scoping). */
   ownerId?: string;
+  /** Auto-detected or manually set practice area. */
+  practiceArea?: string;
+  /** Auto-detected client number. */
+  detectedClientNumber?: string;
   metadata?: Record<string, unknown>;
   ingestedAt: Date;
 }

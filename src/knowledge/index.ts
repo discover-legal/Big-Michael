@@ -63,6 +63,8 @@ export class KnowledgeStore {
             jurisdiction: doc.jurisdiction ?? null,
             documentType: doc.documentType ?? null,
             ownerId: doc.ownerId ?? null,
+            practiceArea: doc.practiceArea ?? null,
+            detectedClientNumber: doc.detectedClientNumber ?? null,
             chunkIndex: i,
             totalChunks: chunks.length,
             content: chunk,
@@ -109,6 +111,8 @@ export class KnowledgeStore {
           source: p.source as string | undefined,
           jurisdiction: p.jurisdiction as string | undefined,
           documentType: p.documentType as string | undefined,
+          practiceArea: p.practiceArea as string | undefined,
+          detectedClientNumber: p.detectedClientNumber as string | undefined,
           ingestedAt: new Date(p.ingestedAt as string),
         },
         score: r.score,
@@ -145,9 +149,15 @@ export class KnowledgeStore {
     title: string;
     jurisdiction?: string;
     documentType?: string;
+    practiceArea?: string;
+    detectedClientNumber?: string;
+    ingestedAt?: string;
   }>> {
     this.assertReady();
-    const seen = new Map<string, { id: string; title: string; jurisdiction?: string; documentType?: string }>();
+    const seen = new Map<string, {
+      id: string; title: string; jurisdiction?: string; documentType?: string;
+      practiceArea?: string; detectedClientNumber?: string; ingestedAt?: string;
+    }>();
     let offset: string | number | undefined | null = undefined;
     do {
       const res = await this.qdrant.scroll(COLLECTION, {
@@ -165,6 +175,9 @@ export class KnowledgeStore {
             title: (p.title as string) ?? "Untitled",
             jurisdiction: (p.jurisdiction as string) ?? undefined,
             documentType: (p.documentType as string) ?? undefined,
+            practiceArea: (p.practiceArea as string) ?? undefined,
+            detectedClientNumber: (p.detectedClientNumber as string) ?? undefined,
+            ingestedAt: (p.ingestedAt as string) ?? undefined,
           });
         }
       }

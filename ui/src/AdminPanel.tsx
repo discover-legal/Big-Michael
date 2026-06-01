@@ -2,27 +2,20 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { api } from "./api";
 import type { AppSettings, LawyerProfile } from "./types";
+import { PRACTICE_AREAS } from "./types";
 
-export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesChange }: {
+export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesChange, me }: {
   onClose: () => void; notify: (m: string) => void;
   isPartner: boolean; profiles: LawyerProfile[]; onProfilesChange: () => void;
+  me?: { profileId: string } | null;
 }) {
   const [s, setS] = useState<AppSettings | null>(null);
-  const [apiKey, setApiKey] = useState("");           // only sent if the user types a new one
+  const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
-  const [np, setNp] = useState({ name: "", email: "", role: "lawyer" });
-
-  async function addLawyer() {
-    if (!np.name.trim() || !np.email.trim()) { notify("Name and email required"); return; }
-    setBusy(true);
-    try { await api.createProfile(np); setNp({ name: "", email: "", role: "lawyer" }); onProfilesChange(); notify("Lawyer added"); }
-    catch (e) { notify((e as Error).message); } finally { setBusy(false); }
-  }
-  async function removeLawyer(id: string) {
-    if (!window.confirm("Remove this lawyer?")) return;
-    try { await api.deleteProfile(id); onProfilesChange(); notify("Lawyer removed"); }
-    catch (e) { notify((e as Error).message); }
-  }
+  const [tab, setTab] = useState<"users" | "settings">(isPartner ? "users" : "settings");
+  const [np, setNp] = useState({ name: "", email: "", role: "lawyer", title: "", practiceAreas: [] as string[], bio: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editPatch, setEditPatch] = useState<Partial<LawyerProfile>>({});
 
   useEffect(() => { api.getSettings().then(setS).catch((e) => notify((e as Error).message)); }, [notify]);
 
@@ -45,46 +38,198 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
     } catch (e) { notify((e as Error).message); } finally { setBusy(false); }
   }
 
+  async function addLawyer() {
+    if (!np.name.trim() || !np.email.trim()) { notify("Name and email required"); return; }
+    setBusy(true);
+    try {
+      await api.createProfile({ name: np.name, email: np.email, role: np.role, title: np.title || undefined, practiceAreas: np.practiceAreas, bio: np.bio || undefined });
+      setNp({ name: "", email: "", role: "lawyer", title: "", practiceAreas: [], bio: "" });
+      onProfilesChange();
+      notify("User added");
+    } catch (e) { notify((e as Error).message); } finally { setBusy(false); }
+  }
+
+  async function removeLawyer(id: string) {
+    if (!window.confirm("Remove this user?")) return;
+    try { await api.deleteProfile(id); onProfilesChange(); notify("User removed"); }
+    catch (e) { notify((e as Error).message); }
+  }
+
+  function startEdit(p: LawyerProfile) {
+    setEditingId(p.id);
+    setEditPatch({ name: p.name, title: p.title ?? "", role: p.role, practiceAreas: [...(p.practiceAreas ?? [])], bio: p.bio ?? "" });
+  }
+
+  async function saveEdit(id: string) {
+    setBusy(true);
+    try {
+      await api.updateProfile(id, editPatch);
+      setEditingId(null);
+      onProfilesChange();
+      notify("Profile updated");
+    } catch (e) { notify((e as Error).message); } finally { setBusy(false); }
+  }
+
+  function togglePA(pa: string, current: string[] | undefined, setter: (v: string[]) => void) {
+    const list = current ?? [];
+    setter(list.includes(pa) ? list.filter((x) => x !== pa) : [...list, pa]);
+  }
+
+  const canEditProfile = (p: LawyerProfile) => isPartner || me?.profileId === p.id;
+
   return (
     <div className="modal-scrim" onClick={onClose}>
       <motion.div className="modal admin" onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: "spring", stiffness: 320, damping: 28 }}>
         <div className="modal-head">
-          <h3>Admin · settings</h3>
-          <p>Changes apply live across the bench. No restart needed.</p>
+          <h3>Admin</h3>
+          <p>Manage users, practice areas, and system settings.</p>
         </div>
 
-        {!s ? <div className="modal-body"><div className="placeholder">Loading settings…</div></div> : (
-          <div className="modal-body">
-            {/* ── Lawyers (partner only) ──────────────────────────────────── */}
-            {isPartner && (
-              <div className="admin-section">
-                <div className="admin-section-title">Lawyers &amp; roles</div>
-                <div className="lawyer-list">
-                  {profiles.map((p) => (
-                    <div key={p.id} className="lawyer-row">
-                      <span className="avatar sm" style={{ background: p.color ?? "var(--gold-soft)" }}>
-                        {p.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
-                      </span>
-                      <span className="lawyer-name">{p.name}<span className="lawyer-email">{p.email}</span></span>
-                      <span className={`pill sm ${p.role === "partner" ? "gold" : ""}`}>{p.role}</span>
-                      <button className="btn reject sm" onClick={() => removeLawyer(p.id)} title="Remove">✕</button>
-                    </div>
-                  ))}
-                </div>
-                <div className="lawyer-add">
-                  <input placeholder="Full name" value={np.name} onChange={(e) => setNp({ ...np, name: e.target.value })} />
-                  <input placeholder="email@firm.com" value={np.email} onChange={(e) => setNp({ ...np, email: e.target.value })} />
-                  <select value={np.role} onChange={(e) => setNp({ ...np, role: e.target.value })}>
-                    <option value="lawyer">Lawyer</option>
-                    <option value="partner">Partner</option>
-                  </select>
-                  <button className="btn primary sm" disabled={busy} onClick={addLawyer}>＋ Add</button>
-                </div>
-              </div>
-            )}
+        <div className="tabs" style={{ margin: "0 26px" }}>
+          <button className={`tab ${tab === "users" ? "active" : ""}`} onClick={() => setTab("users")}>
+            Users {tab === "users" && <motion.span layoutId="adm-ul" className="tab-underline" />}
+          </button>
+          <button className={`tab ${tab === "settings" ? "active" : ""}`} onClick={() => setTab("settings")}>
+            Settings {tab === "settings" && <motion.span layoutId="adm-ul" className="tab-underline" />}
+          </button>
+        </div>
 
+        {tab === "users" && (
+          <div className="modal-body">
+            <div className="admin-section">
+              <div className="admin-section-title">Users &amp; roles</div>
+              <div className="lawyer-list">
+                {profiles.map((p) => (
+                  <div key={p.id}>
+                    {editingId === p.id ? (
+                      <div style={{ background: "var(--surface-2)", borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                          <div className="field" style={{ margin: 0 }}>
+                            <label>Name</label>
+                            <input value={editPatch.name ?? ""} onChange={(e) => setEditPatch({ ...editPatch, name: e.target.value })} />
+                          </div>
+                          <div className="field" style={{ margin: 0 }}>
+                            <label>Title</label>
+                            <input value={editPatch.title ?? ""} onChange={(e) => setEditPatch({ ...editPatch, title: e.target.value })} />
+                          </div>
+                        </div>
+                        {isPartner && (
+                          <div className="field" style={{ margin: "0 0 10px" }}>
+                            <label>Role</label>
+                            <select value={editPatch.role ?? "lawyer"} onChange={(e) => setEditPatch({ ...editPatch, role: e.target.value as "lawyer" | "partner" })}>
+                              <option value="lawyer">Lawyer</option>
+                              <option value="partner">Partner</option>
+                            </select>
+                          </div>
+                        )}
+                        <div className="field" style={{ margin: "0 0 10px" }}>
+                          <label>Bio</label>
+                          <textarea style={{ minHeight: 56 }} value={editPatch.bio ?? ""} onChange={(e) => setEditPatch({ ...editPatch, bio: e.target.value })} placeholder="Short bio…" />
+                        </div>
+                        <div className="field" style={{ margin: "0 0 10px" }}>
+                          <label>Practice areas</label>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                            {PRACTICE_AREAS.map((pa) => {
+                              const active = editPatch.practiceAreas?.includes(pa);
+                              return (
+                                <button key={pa} type="button"
+                                  className={`pill sm ${active ? "blue" : ""}`}
+                                  style={{ cursor: "pointer", opacity: active ? 1 : 0.55 }}
+                                  onClick={() => togglePA(pa, editPatch.practiceAreas, (v) => setEditPatch({ ...editPatch, practiceAreas: v }))}>
+                                  {pa}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button className="btn primary sm" disabled={busy} onClick={() => saveEdit(p.id)}>Save</button>
+                          <button className="btn ghost sm" onClick={() => setEditingId(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="lawyer-row">
+                        <span className="avatar sm" style={{ background: p.color ?? "var(--gold-soft)" }}>
+                          {p.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span className="lawyer-name">{p.name}</span>
+                            <span className={`pill sm ${p.role === "partner" ? "gold" : ""}`}>{p.role}</span>
+                          </div>
+                          <div className="lawyer-email">{p.email}{p.title && ` · ${p.title}`}</div>
+                          {p.practiceAreas && p.practiceAreas.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                              {p.practiceAreas.map((pa) => <span key={pa} className="pill sm blue">{pa}</span>)}
+                            </div>
+                          )}
+                        </div>
+                        {canEditProfile(p) && (
+                          <button className="btn ghost sm" onClick={() => startEdit(p)}>Edit</button>
+                        )}
+                        {isPartner && (
+                          <button className="btn reject sm" onClick={() => removeLawyer(p.id)} title="Remove">✕</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {isPartner && (
+                <div style={{ marginTop: 16 }}>
+                  <div className="admin-section-title" style={{ marginBottom: 10 }}>Add user</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label>Full name</label>
+                      <input placeholder="Jane Smith" value={np.name} onChange={(e) => setNp({ ...np, name: e.target.value })} />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label>Email</label>
+                      <input placeholder="jane@firm.com" value={np.email} onChange={(e) => setNp({ ...np, email: e.target.value })} />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label>Title</label>
+                      <input placeholder="Senior Associate" value={np.title} onChange={(e) => setNp({ ...np, title: e.target.value })} />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label>Role</label>
+                      <select value={np.role} onChange={(e) => setNp({ ...np, role: e.target.value })}>
+                        <option value="lawyer">Lawyer</option>
+                        <option value="partner">Partner</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="field" style={{ marginBottom: 10 }}>
+                    <label>Practice areas</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                      {PRACTICE_AREAS.map((pa) => {
+                        const active = np.practiceAreas.includes(pa);
+                        return (
+                          <button key={pa} type="button"
+                            className={`pill sm ${active ? "blue" : ""}`}
+                            style={{ cursor: "pointer", opacity: active ? 1 : 0.55 }}
+                            onClick={() => togglePA(pa, np.practiceAreas, (v) => setNp({ ...np, practiceAreas: v }))}>
+                            {pa}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <button className="btn primary sm" disabled={busy} onClick={addLawyer}>＋ Add user</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab === "settings" && !s && (
+          <div className="modal-body"><div className="placeholder">Loading settings…</div></div>
+        )}
+        {tab === "settings" && s && (
+          <div className="modal-body">
             {/* ── Practice mode ───────────────────────────────────────────── */}
             <div className="admin-section">
               <div className="admin-section-title">Presentation</div>
@@ -147,7 +292,9 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
 
         <div className="modal-foot">
           <button className="btn ghost" onClick={onClose}>Close</button>
-          <button className="btn primary" disabled={busy || !s} onClick={save}>{busy ? "Saving…" : "Save settings"}</button>
+          {tab === "settings" && (
+            <button className="btn primary" disabled={busy || !s} onClick={save}>{busy ? "Saving…" : "Save settings"}</button>
+          )}
         </div>
       </motion.div>
     </div>

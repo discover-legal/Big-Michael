@@ -137,6 +137,7 @@ export const Config = {
     tasksFile: optional("TASKS_FILE", ".tasks.json"),
     settingsFile: optional("SETTINGS_FILE", ".settings.json"),
     profilesFile: optional("PROFILES_FILE", ".profiles.json"),
+    clientsFile: optional("CLIENTS_FILE", ".clients.json"),
   },
 
   logging: {

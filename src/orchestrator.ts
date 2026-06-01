@@ -31,6 +31,7 @@ import { Agent } from "./agents/base.js";
 import { ROOT_ORCHESTRATOR, ALL_AGENT_DEFINITIONS } from "./agents/definitions.js";
 import { SettingsStore } from "./settings/index.js";
 import { ProfileStore } from "./auth/index.js";
+import { ClientStore } from "./clients/index.js";
 import { DyTopoEngine } from "./dytopo/engine.js";
 import { InterRoundMemoryStore } from "./memory/index.js";
 import { KnowledgeStore } from "./knowledge/index.js";
@@ -83,6 +84,7 @@ export class Orchestrator {
   readonly templates: TemplateStore;
   readonly settings: SettingsStore;
   readonly profiles: ProfileStore;
+  readonly clients: ClientStore;
 
   private readonly tasks: Map<string, Task> = new Map();
   private readonly gateEmitter = new EventEmitter();
@@ -97,12 +99,14 @@ export class Orchestrator {
     this.templates = new TemplateStore();
     this.settings = new SettingsStore();
     this.profiles = new ProfileStore();
+    this.clients = new ClientStore();
   }
 
   async init(): Promise<void> {
     // Load persisted admin settings first so they apply before any task runs.
     await this.settings.init();
     await this.profiles.init();
+    await this.clients.init();
     await Promise.all([
       this.registry.init(),
       this.memory.init(),

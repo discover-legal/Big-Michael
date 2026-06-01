@@ -1,4 +1,4 @@
-import type { Task, Template, Health, WorkflowType, SearchResult, AuditEntry, DocumentRef, AgentSummary, AppSettings, LawyerProfile, Me } from "./types";
+import type { Task, Template, Health, WorkflowType, SearchResult, AuditEntry, DocumentRef, AgentSummary, AppSettings, LawyerProfile, Me, Client, ClientMatter, ConflictCheckResult, IngestResult } from "./types";
 
 type SettingsPatch = {
   presentation?: Partial<AppSettings["presentation"]>;
@@ -47,10 +47,27 @@ export const api = {
   authProviders: () => fetch("/auth/providers").then(json<{ google: boolean; microsoft: boolean; linkedin: boolean }>),
   logout: () => fetch("/auth/logout", { method: "POST" }).then((r) => json<{ ok: true }>(r)),
   listProfiles: () => fetch("/profiles").then(json<LawyerProfile[]>),
-  createProfile: (body: { name: string; email: string; role?: string; title?: string }) =>
+  getProfile: (id: string) => fetch(`/profiles/${id}`).then(json<LawyerProfile>),
+  createProfile: (body: { name: string; email: string; role?: string; title?: string; practiceAreas?: string[]; bio?: string }) =>
     fetch("/profiles", POST(body)).then(json<LawyerProfile>),
+  updateProfile: (id: string, patch: Partial<Pick<LawyerProfile, "name" | "title" | "color" | "role" | "practiceAreas" | "bio">>) =>
+    fetch(`/profiles/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(json<LawyerProfile>),
   deleteProfile: (id: string) =>
     fetch(`/profiles/${id}`, { method: "DELETE" }).then((r) => json<{ ok: true }>(r)),
+
+  listClients: () => fetch("/clients").then(json<Client[]>),
+  createClient: (body: { name: string; clientNumber: string; adversaries?: string[]; notes?: string }) =>
+    fetch("/clients", POST(body)).then(json<Client & { conflict: ConflictCheckResult }>),
+  updateClient: (id: string, patch: Partial<Pick<Client, "name" | "adversaries" | "notes">>) =>
+    fetch(`/clients/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(json<Client>),
+  deleteClient: (id: string) =>
+    fetch(`/clients/${id}`, { method: "DELETE" }).then((r) => json<{ ok: true }>(r)),
+  addMatter: (clientId: string, body: { matterNumber: string; description: string; practiceArea?: string }) =>
+    fetch(`/clients/${clientId}/matters`, POST(body)).then(json<ClientMatter>),
+  removeMatter: (clientId: string, matterNumber: string) =>
+    fetch(`/clients/${clientId}/matters/${encodeURIComponent(matterNumber)}`, { method: "DELETE" }).then((r) => json<{ ok: true }>(r)),
+  checkConflict: (name: string) =>
+    fetch("/clients/check-conflict", POST({ name })).then(json<ConflictCheckResult>),
 
   approveGate: (taskId: string, gateId: string, note?: string) =>
     fetch(`/tasks/${taskId}/gates/${gateId}/approve`, POST({ note })).then((r) => json<{ ok: true }>(r)),
@@ -62,13 +79,13 @@ export const api = {
 
   listDocuments: () => fetch("/documents").then(json<DocumentRef[]>),
 
-  ingestDocument: (body: { title: string; content: string; source?: string; jurisdiction?: string; documentType?: string }) =>
-    fetch("/documents", POST(body)).then(json<{ id: string }>),
+  ingestDocument: (body: { title: string; content: string; source?: string; jurisdiction?: string; documentType?: string; practiceArea?: string }) =>
+    fetch("/documents", POST(body)).then(json<IngestResult>),
 
   uploadDocument: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
-    return fetch("/documents/upload", { method: "POST", body: fd }).then(json<{ id: string; title: string }>);
+    return fetch("/documents/upload", { method: "POST", body: fd }).then(json<IngestResult>);
   },
 
   searchDocuments: (query: string) =>

@@ -37,6 +37,7 @@ import { Orchestrator } from "../orchestrator.js";
 import type { WorkflowType, SessionUser } from "../types.js";
 import { LOCAL_PARTNER, filterVisible, canViewTask, isPartner } from "../auth/index.js";
 import { registerAuthRoutes, readSessionCookie } from "../auth/oauth.js";
+import { detectPracticeArea, detectClient } from "../services/classifier.js";
 
 // ─── Tool schemas ─────────────────────────────────────────────────────────────
 
@@ -365,9 +366,27 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   });
 
   app.post("/documents", async (req, reply) => {
-    const body = req.body as { title: string; content: string; source?: string; jurisdiction?: string; documentType?: string };
-    const docId = await orchestrator.knowledge.ingest({ ...body, ownerId: getUser(req)?.profileId });
-    return reply.status(201).send({ id: docId });
+    const body = req.body as { title: string; content: string; source?: string; jurisdiction?: string; documentType?: string; practiceArea?: string };
+    const clients = orchestrator.clients.list();
+    const [practiceArea, detectedClient] = await Promise.all([
+      body.practiceArea ? Promise.resolve(body.practiceArea) : detectPracticeArea(body.title, body.content),
+      detectClient(body.title, body.content, clients),
+    ]);
+    const docId = await orchestrator.knowledge.ingest({
+      ...body,
+      practiceArea: practiceArea ?? undefined,
+      detectedClientNumber: detectedClient?.clientNumber,
+      ownerId: getUser(req)?.profileId,
+    });
+    const suggestedLawyers = practiceArea
+      ? orchestrator.profiles.list().filter((p) => p.practiceAreas?.includes(practiceArea))
+      : [];
+    return reply.status(201).send({
+      id: docId,
+      practiceArea,
+      detectedClient,
+      suggestedLawyers: suggestedLawyers.map((p) => ({ id: p.id, name: p.name, email: p.email })),
+    });
   });
 
   // Upload an actual file (PDF or text), extract its text, and ingest it.
@@ -400,8 +419,24 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     }
 
     const title = basename(filename, ext);
-    const id = await orchestrator.knowledge.ingest({ title, content, documentType: ext.replace(".", "") || undefined, source: "upload", ownerId: getUser(req)?.profileId });
-    return reply.status(201).send({ id, title });
+    const clients = orchestrator.clients.list();
+    const [practiceArea, detectedClient] = await Promise.all([
+      detectPracticeArea(title, content),
+      detectClient(title, content, clients),
+    ]);
+    const id = await orchestrator.knowledge.ingest({
+      title, content, documentType: ext.replace(".", "") || undefined, source: "upload",
+      ownerId: getUser(req)?.profileId,
+      practiceArea: practiceArea ?? undefined,
+      detectedClientNumber: detectedClient?.clientNumber,
+    });
+    const suggestedLawyers = practiceArea
+      ? orchestrator.profiles.list().filter((p) => p.practiceAreas?.includes(practiceArea))
+      : [];
+    return reply.status(201).send({
+      id, title, practiceArea, detectedClient,
+      suggestedLawyers: suggestedLawyers.map((p) => ({ id: p.id, name: p.name, email: p.email })),
+    });
   });
 
   // A lawyer sees only documents they uploaded; partners see the whole library.
@@ -475,20 +510,39 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
 
   app.get("/profiles", async () => orchestrator.profiles.list());
 
+  app.get("/profiles/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const profile = orchestrator.profiles.get(id);
+    if (!profile) return reply.status(404).send({ error: "Profile not found" });
+    return profile;
+  });
+
   app.post("/profiles", async (req, reply) => {
     if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
     try {
-      return reply.status(201).send(await orchestrator.profiles.create(req.body as { name: string; email: string; role?: string; title?: string; color?: string }));
+      return reply.status(201).send(await orchestrator.profiles.create(req.body as {
+        name: string; email: string; role?: string; title?: string; color?: string;
+        practiceAreas?: string[]; bio?: string;
+      }));
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
     }
   });
 
+  // Partners can update any profile; lawyers can only update their own (but not change role).
   app.patch("/profiles/:id", async (req, reply) => {
-    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const user = getUser(req);
     const { id } = req.params as { id: string };
+    const patch = req.body as Record<string, unknown>;
+    if (!isPartner(user) && user?.profileId !== id) {
+      return reply.status(403).send({ error: "You can only edit your own profile" });
+    }
+    // Non-partners cannot change role.
+    if (!isPartner(user) && patch.role) {
+      return reply.status(403).send({ error: "Partner role required to change role" });
+    }
     try {
-      return await orchestrator.profiles.update(id, req.body as Record<string, string>);
+      return await orchestrator.profiles.update(id, patch as Record<string, never>);
     } catch (err) {
       return reply.status(404).send({ error: (err as Error).message });
     }
@@ -503,6 +557,74 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
     }
+  });
+
+  // ── Clients ─────────────────────────────────────────────────────────────────
+  app.get("/clients", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    return orchestrator.clients.list();
+  });
+
+  app.post("/clients", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    try {
+      const body = req.body as { name: string; clientNumber: string; adversaries?: string[]; notes?: string };
+      const conflict = orchestrator.clients.checkConflict(body.name);
+      const client = await orchestrator.clients.create(body);
+      return reply.status(201).send({ ...client, conflict });
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.patch("/clients/:id", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    try {
+      return await orchestrator.clients.update(id, req.body as Record<string, never>);
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
+  app.delete("/clients/:id", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    try {
+      const ok = await orchestrator.clients.remove(id);
+      return ok ? reply.status(200).send({ ok: true }) : reply.status(404).send({ error: "Client not found" });
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/clients/:id/matters", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    try {
+      const body = req.body as { matterNumber: string; description: string; practiceArea?: string };
+      const matter = await orchestrator.clients.addMatter(id, body);
+      return reply.status(201).send(matter);
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.delete("/clients/:id/matters/:matterNumber", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id, matterNumber } = req.params as { id: string; matterNumber: string };
+    try {
+      const ok = await orchestrator.clients.removeMatter(id, matterNumber);
+      return ok ? reply.status(200).send({ ok: true }) : reply.status(404).send({ error: "Matter not found" });
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/clients/check-conflict", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { name } = req.body as { name: string };
+    return orchestrator.clients.checkConflict(name);
   });
 
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
