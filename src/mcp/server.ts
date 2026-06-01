@@ -431,10 +431,15 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   });
 
   // T17: SSE streaming endpoint
+  const MAX_SSE_LISTENERS_PER_TASK = 50;
   app.get("/tasks/:id/stream", async (req, reply) => {
     const { id } = req.params as { id: string };
     const task = orchestrator.getTask(id);
     if (!task || !canViewTask(getUser(req), task)) return reply.status(404).send({ error: "Task not found" });
+
+    if (orchestrator.progressEmitter.listenerCount(`task:${id}`) >= MAX_SSE_LISTENERS_PER_TASK) {
+      return reply.status(429).send({ error: "Too many concurrent streams for this task" });
+    }
 
     reply.raw.setHeader("Content-Type", "text/event-stream");
     reply.raw.setHeader("Cache-Control", "no-cache");

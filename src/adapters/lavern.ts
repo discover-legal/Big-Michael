@@ -217,9 +217,24 @@ export function instantiateTemplate(
 ): { description: string; workflowType: import("../types.js").WorkflowType } {
   let description = template.taskDescriptionTemplate;
   for (const [key, value] of Object.entries(substitutions)) {
-    description = description.replaceAll(`{{${key}}}`, value);
+    // Neutralise FINDING markers so an attacker cannot inject fake findings
+    // into agent prompts by crafting a substitution value.
+    description = description.replaceAll(`{{${key}}}`, sanitizePromptContent(value));
   }
   return { description, workflowType: template.workflowType };
+}
+
+/**
+ * Strip structural markers from user-supplied strings before they are
+ * interpolated into agent prompts.  The agent output parser splits on
+ * "FINDING:" / "END_FINDING" — injecting those keywords would let a
+ * crafted task description or memory entry manufacture fake findings.
+ */
+export function sanitizePromptContent(s: string): string {
+  return s
+    .replace(/\bFINDING:/gi, "[FINDING:]")
+    .replace(/\bEND_FINDING\b/gi, "[END_FINDING]")
+    .replace(/\bNO_FINDINGS\b/gi, "[NO_FINDINGS]");
 }
 
 // ─── Generic external agent format ───────────────────────────────────────────

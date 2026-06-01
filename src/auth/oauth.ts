@@ -35,6 +35,11 @@ import type { SessionUser } from "../types.js";
 const SESSION_COOKIE = "bm_session";
 const STATE_COOKIE = "bm_oauth_state";
 
+// In-process revocation set keyed on per-session token IDs (jti).
+// Populated on logout; cleared on process restart (acceptable for the
+// 12-hour session lifetime — restarting the server is a natural fence).
+const REVOKED_JTIS = new Set<string>();
+
 type ProviderKey = "google" | "microsoft" | "linkedin";
 
 interface ProviderSpec {
@@ -79,13 +84,24 @@ const cookieOpts = (maxAgeSec: number) => ({
   secure: Config.auth.baseUrl.startsWith("https"), path: "/", maxAge: maxAgeSec,
 });
 
-/** Read the signed session cookie → SessionUser, or null. */
+interface SessionCookiePayload extends SessionUser {
+  /** Per-session token ID — used for revocation on logout. */
+  jti: string;
+}
+
+/** Read the signed session cookie → SessionUser, or null if missing/invalid/revoked. */
 export function readSessionCookie(req: FastifyRequest): SessionUser | null {
   const raw = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE];
   if (!raw) return null;
   const unsigned = (req as unknown as { unsignCookie: (v: string) => { valid: boolean; value: string | null } }).unsignCookie(raw);
   if (!unsigned.valid || !unsigned.value) return null;
-  try { return JSON.parse(unsigned.value) as SessionUser; } catch { return null; }
+  try {
+    const payload = JSON.parse(unsigned.value) as SessionCookiePayload;
+    if (payload.jti && REVOKED_JTIS.has(payload.jti)) return null;
+    // Return only the public SessionUser fields (strip jti from the caller view).
+    const { jti: _, ...user } = payload;
+    return user as SessionUser;
+  } catch { return null; }
 }
 
 export function registerAuthRoutes(app: FastifyInstance, orchestrator: Orchestrator): void {
@@ -151,8 +167,11 @@ export function registerAuthRoutes(app: FastifyInstance, orchestrator: Orchestra
         profile = await orchestrator.profiles.create({ name: identity.name, email: identity.email, role });
       }
 
-      const user: SessionUser = { profileId: profile.id, name: profile.name, email: profile.email, role: profile.role };
-      reply.setCookie(SESSION_COOKIE, JSON.stringify(user), cookieOpts(60 * 60 * 12));
+      const payload: SessionCookiePayload = {
+        profileId: profile.id, name: profile.name, email: profile.email,
+        role: profile.role, jti: randomUUID(),
+      };
+      reply.setCookie(SESSION_COOKIE, JSON.stringify(payload), cookieOpts(60 * 60 * 12));
       logger.info("OAuth login", { provider, email: identity.email, role: profile.role });
       return reply.redirect(Config.auth.uiUrl);
     } catch (err) {
@@ -161,7 +180,18 @@ export function registerAuthRoutes(app: FastifyInstance, orchestrator: Orchestra
     }
   });
 
-  app.post("/auth/logout", async (_req, reply) => {
+  app.post("/auth/logout", async (req, reply) => {
+    // Revoke the specific session token so replayed cookies are rejected.
+    const raw = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE];
+    if (raw) {
+      const unsigned = (req as unknown as { unsignCookie: (v: string) => { valid: boolean; value: string | null } }).unsignCookie(raw);
+      if (unsigned.valid && unsigned.value) {
+        try {
+          const payload = JSON.parse(unsigned.value) as Partial<SessionCookiePayload>;
+          if (payload.jti) REVOKED_JTIS.add(payload.jti);
+        } catch { /* malformed cookie — clearing is sufficient */ }
+      }
+    }
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
     return { ok: true };
   });

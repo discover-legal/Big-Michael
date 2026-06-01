@@ -13,6 +13,7 @@ import { getProvider, resolveModelId } from "../providers/index.js";
 import type { ProviderMessage, ProviderToolResultBlock } from "../providers/index.js";
 import type { ToolRegistry, ToolContext } from "../tools/index.js";
 import type { KnowledgeStore } from "../knowledge/index.js";
+import { sanitizePromptContent } from "../adapters/lavern.js";
 import type { InterRoundMemoryStore } from "../memory/index.js";
 import type {
   AgentDefinition,
@@ -236,7 +237,14 @@ function inferTaskType(def: AgentDefinition): import("../routing/model.js").Task
 // ─── Prompt builders ──────────────────────────────────────────────────────────
 
 function buildNeedOfferPrompt(def: AgentDefinition, ctx: AgentContext): string {
-  return `TASK: ${ctx.taskDescription}
+  // sanitizePromptContent prevents user-supplied strings from injecting
+  // structural FINDING / END_FINDING markers into the prompt.
+  const taskDesc = sanitizePromptContent(ctx.taskDescription);
+  const memoryLines = ctx.memoryEntries.length
+    ? ctx.memoryEntries.map((e) => `[Round ${e.round}] ${sanitizePromptContent(e.content)}`).join("\n")
+    : "None yet.";
+
+  return `TASK: ${taskDesc}
 
 CURRENT ROUND GOAL (Round ${ctx.roundGoal.round}, Phase: ${ctx.roundGoal.phase}):
 ${ctx.roundGoal.description}
@@ -244,7 +252,7 @@ ${ctx.roundGoal.description}
 YOUR ROLE: ${def.name} — ${def.description}
 
 RELEVANT MEMORY FROM PRIOR ROUNDS:
-${ctx.memoryEntries.length ? ctx.memoryEntries.map((e) => `[Round ${e.round}] ${e.content}`).join("\n") : "None yet."}
+${memoryLines}
 
 Output exactly:
 NEED: <one sentence — what information or expertise you currently need from other agents>
@@ -252,17 +260,22 @@ OFFER: <one sentence — what you can contribute this round given your role>`;
 }
 
 function buildProcessingPrompt(def: AgentDefinition, ctx: AgentContext): string {
+  const taskDesc = sanitizePromptContent(ctx.taskDescription);
+
   const incoming = ctx.incomingMessages.length
     ? ctx.incomingMessages
-        .map((m) => `[FROM: ${m.from}]\n${m.content}`)
+        .map((m) => `[FROM: ${m.from}]\n${sanitizePromptContent(m.content)}`)
         .join("\n\n---\n\n")
     : "No messages routed to you this round.";
 
+  // Memory content originates from prior agent outputs stored in Qdrant.
+  // An attacker who can influence task content could craft memory entries
+  // containing fake FINDING markers. Sanitise before interpolation.
   const memory = ctx.memoryEntries.length
-    ? ctx.memoryEntries.map((e) => `[Round ${e.round} — ${e.phase}] ${e.content}`).join("\n")
+    ? ctx.memoryEntries.map((e) => `[Round ${e.round} — ${e.phase}] ${sanitizePromptContent(e.content)}`).join("\n")
     : "No prior memory.";
 
-  return `TASK: ${ctx.taskDescription}
+  return `TASK: ${taskDesc}
 
 ROUND GOAL (Round ${ctx.roundGoal.round} — Phase: ${ctx.roundGoal.phase}):
 ${ctx.roundGoal.description}

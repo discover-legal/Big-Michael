@@ -22,7 +22,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile, rename } from "fs/promises";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
 import type { LawyerProfile, SessionUser, Task } from "../types.js";
@@ -121,7 +121,11 @@ export class ProfileStore {
   }
 
   private async persist(): Promise<void> {
-    await writeFile(this.path, JSON.stringify(this.profiles, null, 2), "utf8");
+    // Write to a temp file then rename so a crash mid-write never leaves a
+    // partially-written profiles file (rename is atomic on POSIX filesystems).
+    const tmp = `${this.path}.tmp`;
+    await writeFile(tmp, JSON.stringify(this.profiles, null, 2), "utf8");
+    await rename(tmp, this.path);
   }
 }
 
