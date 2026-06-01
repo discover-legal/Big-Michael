@@ -29,6 +29,7 @@ import { auditLogger } from "./audit/index.js";
 import { AgentRegistry } from "./agents/registry.js";
 import { Agent } from "./agents/base.js";
 import { ROOT_ORCHESTRATOR, ALL_AGENT_DEFINITIONS } from "./agents/definitions.js";
+import { SettingsStore } from "./settings/index.js";
 import { DyTopoEngine } from "./dytopo/engine.js";
 import { InterRoundMemoryStore } from "./memory/index.js";
 import { KnowledgeStore } from "./knowledge/index.js";
@@ -79,6 +80,7 @@ export class Orchestrator {
   readonly memory: InterRoundMemoryStore;
   readonly knowledge: KnowledgeStore;
   readonly templates: TemplateStore;
+  readonly settings: SettingsStore;
 
   private readonly tasks: Map<string, Task> = new Map();
   private readonly gateEmitter = new EventEmitter();
@@ -91,9 +93,12 @@ export class Orchestrator {
     this.memory = new InterRoundMemoryStore();
     this.knowledge = new KnowledgeStore();
     this.templates = new TemplateStore();
+    this.settings = new SettingsStore();
   }
 
   async init(): Promise<void> {
+    // Load persisted admin settings first so they apply before any task runs.
+    await this.settings.init();
     await Promise.all([
       this.registry.init(),
       this.memory.init(),

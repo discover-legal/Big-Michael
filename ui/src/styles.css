@@ -496,6 +496,25 @@ body::after {
 }
 .card-matter { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
 
+/* ─── Admin panel ────────────────────────────────────────────────────── */
+.modal.admin { max-width: 620px; }
+.modal.admin .modal-body { max-height: 62vh; overflow-y: auto; }
+.admin-section { padding: 16px 0; border-top: 1px solid var(--border); }
+.admin-section:first-child { border-top: none; padding-top: 4px; }
+.admin-section-title {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--gold); margin-bottom: 12px;
+}
+.admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.wf-grid.two { grid-template-columns: 1fr 1fr; }
+.check {
+  display: flex; align-items: center; gap: 9px; cursor: pointer;
+  font-size: 13px; color: var(--text-dim); margin: 8px 0; font-family: var(--font-sans);
+}
+.check input { width: 15px; height: 15px; accent-color: var(--gold); cursor: pointer; }
+.key-set { font-family: var(--font-mono); font-size: 9.5px; color: var(--green); margin-left: 6px; }
+.modal.admin input[type="number"] { font-family: var(--font-mono); }
+
 /* ─── Data grid (findings + tabulate) ────────────────────────────────── */
 
 .grid-toolbar {

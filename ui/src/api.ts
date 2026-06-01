@@ -1,4 +1,11 @@
-import type { Task, Template, Health, WorkflowType, SearchResult, AuditEntry, DocumentRef, AgentSummary } from "./types";
+import type { Task, Template, Health, WorkflowType, SearchResult, AuditEntry, DocumentRef, AgentSummary, AppSettings } from "./types";
+
+type SettingsPatch = {
+  presentation?: Partial<AppSettings["presentation"]>;
+  dytopo?: Partial<AppSettings["dytopo"]>;
+  debate?: Partial<AppSettings["debate"]>;
+  docuseal?: Partial<{ enabled: boolean; url: string; apiKey: string }>;
+};
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -20,6 +27,9 @@ export const api = {
   health: () => fetch("/health").then(json<Health>),
   listTemplates: () => fetch("/templates").then(json<Template[]>),
   listAgents: () => fetch("/agents").then(json<AgentSummary[]>),
+  getSettings: () => fetch("/settings").then(json<AppSettings>),
+  updateSettings: (patch: SettingsPatch) =>
+    fetch("/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(json<AppSettings>),
 
   submitTask: (body: { description: string; workflowType: WorkflowType; documentIds?: string[]; clientNumber?: string; matterNumber?: string }) =>
     fetch("/tasks", POST(body)).then(json<Task>),

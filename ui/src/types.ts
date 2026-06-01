@@ -116,6 +116,13 @@ export interface Template {
   description: string;
 }
 
+export interface AppSettings {
+  presentation: { mode: "lawyer" | "plain"; firmName: string };
+  dytopo: { maxRounds: number; maxAgentsPerRound: number; similarityThreshold: number };
+  debate: { verificationPasses: number; gateConfidenceThreshold: number; adversarialEnabled: boolean; citationRequired: boolean };
+  docuseal: { enabled: boolean; url: string; apiKeySet: boolean };
+}
+
 export interface AgentSummary {
   id: string;
   name: string;

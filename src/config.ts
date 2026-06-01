@@ -111,6 +111,7 @@ export const Config = {
 
   persistence: {
     tasksFile: optional("TASKS_FILE", ".tasks.json"),
+    settingsFile: optional("SETTINGS_FILE", ".settings.json"),
   },
 
   logging: {
@@ -129,6 +130,16 @@ export const Config = {
   docuseal: {
     apiKey: process.env.DOCUSEAL_API_KEY ?? "",
     url: optional("DOCUSEAL_URL", "http://localhost:3000"),
+    // Whether e-signature is offered. Defaults to on when an API key is present;
+    // the admin panel can toggle it and set url/key at runtime.
+    enabled: optional("DOCUSEAL_ENABLED", (process.env.DOCUSEAL_API_KEY ? "true" : "false")) === "true",
+  },
+
+  // UI/presentation preferences, tunable from the admin panel (persisted).
+  presentation: {
+    // "lawyer" = full legal terminology + citations; "plain" = plain-language framing for non-lawyers.
+    mode: optional("UI_MODE", "lawyer") as "lawyer" | "plain",
+    firmName: optional("FIRM_NAME", ""),
   },
 
   // Infisical — open-source secrets manager (https://infisical.com)

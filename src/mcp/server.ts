@@ -365,6 +365,17 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   // T18: Template REST routes
   app.get("/templates", async () => orchestrator.listTemplates());
 
+  // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
+  app.get("/settings", async () => orchestrator.settings.get());
+  app.put("/settings", async (req, reply) => {
+    try {
+      const updated = await orchestrator.settings.update(req.body as Record<string, unknown>);
+      return updated;
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
   app.post("/tasks/from-template", async (req, reply) => {
     const body = req.body as {
       templateId: string; substitutions?: Record<string, string>; documentIds?: string[];

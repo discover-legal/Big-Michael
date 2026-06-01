@@ -7,6 +7,7 @@ import { TaskView } from "./TaskView";
 import { SubmitModal } from "./SubmitModal";
 import { Library } from "./Library";
 import { AuditRail } from "./AuditRail";
+import { AdminPanel } from "./AdminPanel";
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -16,6 +17,7 @@ export default function App() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
@@ -91,6 +93,7 @@ export default function App() {
         <div className="rail-actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button className="btn primary full" onClick={() => setSubmitOpen(true)}>＋ New matter</button>
           <button className="btn full ghost" onClick={() => setLibraryOpen(true)}>⊕ Library · ingest &amp; search</button>
+          <button className="btn full ghost" onClick={() => setAdminOpen(true)}>⚙ Admin · settings</button>
         </div>
 
         <div className="rail-scroll">
@@ -151,6 +154,7 @@ export default function App() {
       <AnimatePresence>
         {submitOpen && <SubmitModal onClose={() => setSubmitOpen(false)} onCreated={onCreated} notify={notify} />}
         {libraryOpen && <Library onClose={() => setLibraryOpen(false)} notify={notify} />}
+        {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} notify={notify} />}
       </AnimatePresence>
 
       <AnimatePresence>
