@@ -239,6 +239,8 @@ LINKEDIN_CLIENT_ID=…     LINKEDIN_CLIENT_SECRET=…
 Profiles are auto-provisioned on first login (partner if the email is in
 `ADMIN_EMAILS`, otherwise lawyer).
 
+📖 Full step-by-step provider registration: [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md).
+
 ---
 
 ## Project layout
