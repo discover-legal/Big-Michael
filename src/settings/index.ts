@@ -105,9 +105,27 @@ function applyToConfig(s: DeepPartial<AppSettings>): void {
       try {
         const u = new URL(trimmed);
         if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("protocol");
+        // Block loopback, link-local, and RFC-1918 ranges to prevent SSRF.
+        const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+        if (
+          h === "localhost" ||
+          h === "::1" ||
+          /^127\./.test(h) ||
+          /^169\.254\./.test(h) ||
+          /^10\./.test(h) ||
+          /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
+          /^192\.168\./.test(h) ||
+          /^fc00:/i.test(h) ||
+          /^fe80:/i.test(h)
+        ) {
+          throw new Error("private");
+        }
         Config.docuseal.url = trimmed;
-      } catch {
-        throw new Error(`Invalid DocuSeal URL '${trimmed}': must be an http or https URL`);
+      } catch (e) {
+        const msg = e instanceof Error && e.message === "private"
+          ? `DocuSeal URL '${trimmed}' resolves to a private or loopback address`
+          : `Invalid DocuSeal URL '${trimmed}': must be a public http or https URL`;
+        throw new Error(msg);
       }
     }
     if (typeof s.docuseal.apiKey === "string") Config.docuseal.apiKey = s.docuseal.apiKey.trim();
