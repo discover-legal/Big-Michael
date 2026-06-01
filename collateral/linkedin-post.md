@@ -2,29 +2,31 @@
 
 ## Post (primary)
 
-We've been building something we call **Big Michael**, and it changes how we think about legal AI.
+I built something I call **Big Michael**, and it slightly broke my brain.
 
-Most "legal AI" today is one model answering one prompt. Big Michael is a **bench** — 118 specialist agents that research, debate, cite, and verify every finding before anything reaches a human.
+Most "legal AI" today is one model, one prompt, fingers crossed. Big Michael is a whole **bench** — 118 specialist agents that argue with each other, cite their sources, and try to prove each other wrong *before* a single word reaches a human.
 
-Here's what happens when you brief it on a matter 👇
+Here's what happens when you hand it a matter 👇
 
-🔹 **It convenes a team.** A root orchestrator plans the phases and issues goals; domain managers (research, analysis, drafting, review) break the work down.
+🔹 **It convenes a team.** A root orchestrator plans the phases; domain managers — research, analysis, drafting, review — carve up the work.
 
-🔹 **The agents self-organize.** Each round, every agent declares what it *needs* and what it can *offer*. The engine cosine-matches needs to offers and builds a live communication graph, so the right specialists actually talk to each other. We call it DyTopo.
+🔹 **The agents self-organize.** Every round, each agent posts what it *needs* and what it can *offer*, and the engine cosine-matches them into a live communication graph so the right specialists actually talk to each other. It's called DyTopo (it sounds fancier than my Tuesday).
 
-🔹 **Nothing is taken on faith.** Every finding passes a CitationGate (quotes checked against source), an adversarial Debate (a challenger tries to break it), and a Verification pass — and low-confidence or contested findings go to a human for sign-off before synthesis.
+🔹 **Nothing gets a free pass.** Every finding runs a gauntlet: a CitationGate (prove the quote exists), an adversarial challenger (try to break it), and a verification pass. Anything shaky or contested stops at a **human gate** before it makes the final cut.
 
-🔹 **It's jurisdiction-neutral.** The native bench reasons across contract, corporate, M&A, data privacy, antitrust, employment, IP, tax, litigation, sanctions and ESG — applying whatever governing law the matter specifies. Not locked to one legal system.
+🔹 **It's jurisdiction-neutral.** Contract, corporate, M&A, data privacy, antitrust, employment, IP, tax, litigation, sanctions, ESG — it applies whatever governing law the matter names. Not bolted to one legal system.
 
-🔹 **It subsumes other systems.** Transactional document tools and legal-service-design agent rosters plug straight in as adapters and run on the same orchestration engine — one bench, many sources.
+🔹 **It plays well with others.** Transactional document tools and legal-service-design agent rosters plug straight in as adapters and run on the same engine. One bench, many sources.
 
-🔹 **It's built for how firms actually work.** Client/matter numbering on every matter, and a live admin panel to tune the bench — audience mode (lawyer vs non-lawyer), review depth, verification, e-signature — without a restart.
+🔹 **It's built for how firms actually work.** Client/matter numbers on everything, and a live admin panel to tune the bench — lawyer vs non-lawyer mode, review depth, verification, e-signature — no restart, no redeploy.
 
-🔹 **It runs on your terms.** Local models (Ollama / LM Studio / vLLM) when privacy matters, or tiered cloud routing for cost-vs-quality. Open source.
+🔹 **It runs on your terms.** Local models when privacy matters, or tiered cloud routing for quality. Open source.
 
-The screenshots show a real matter: the bench deliberating, the round-by-round communication graph, the human gates, and the cited synthesis at the end.
+🌉 **And the bridge, because someone has to say it:** I did not hand-write a bench of 118 legal agents on my own. I built most of Big Michael *with* Claude — Anthropic's coding agent — pair-programming for hours. So yes: an AI helped me build a multi-agent AI that runs a little courtroom of smaller AIs that argue about the law. It's turtles all the way down, and honestly, the turtles are good.
 
-Curious what a 100-agent bench does to your hardest legal questions. More soon.
+The screenshots are from a real matter — the bench deliberating, the round-by-round communication graph, the human gates, and the cited synthesis at the end.
+
+Curious what a 100-agent bench does to *your* hardest legal question. More soon. 👀
 
 #LegalTech #LegalAI #MultiAgent #AI #LegalInnovation #Lawtech #OpenSource
 
@@ -32,11 +34,13 @@ Curious what a 100-agent bench does to your hardest legal questions. More soon.
 
 ## Post (short alternate)
 
-Most legal AI is one model, one prompt.
+Most legal AI is one model, one prompt, fingers crossed.
 
-We built **Big Michael** to be a *bench* instead — 118 specialist agents that self-organize each round (declaring what they need and what they can offer), debate and cite every finding, and run an adversarial verification pass before anything reaches a human.
+So I built **Big Michael** to be a *bench* instead — 118 specialist agents that self-organize each round (posting what they need and what they can offer), argue and cite every finding, and survive an adversarial verification pass before anything reaches a human.
 
 Jurisdiction-neutral. Runs on local or cloud models. Open source.
+
+Plot twist: I built most of it *with* Claude — so an AI helped me build a multi-agent AI that argues about the law with itself. 🐢🐢🐢
 
 Screenshots from a live matter below 👇
 
