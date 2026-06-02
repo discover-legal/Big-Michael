@@ -50,7 +50,7 @@ export const api = {
   getProfile: (id: string) => fetch(`/profiles/${id}`).then(json<LawyerProfile>),
   createProfile: (body: { name: string; email: string; role?: string; title?: string; practiceAreas?: string[]; bio?: string }) =>
     fetch("/profiles", POST(body)).then(json<LawyerProfile>),
-  updateProfile: (id: string, patch: Partial<Pick<LawyerProfile, "name" | "title" | "color" | "role" | "practiceAreas" | "bio">>) =>
+  updateProfile: (id: string, patch: Partial<Pick<LawyerProfile, "name" | "title" | "color" | "role" | "practiceAreas" | "bio" | "mode">>) =>
     fetch(`/profiles/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(json<LawyerProfile>),
   deleteProfile: (id: string) =>
     fetch(`/profiles/${id}`, { method: "DELETE" }).then((r) => json<{ ok: true }>(r)),

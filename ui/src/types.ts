@@ -116,6 +116,7 @@ export interface LawyerProfile {
   color?: string;
   practiceAreas?: string[];
   bio?: string;
+  mode?: UserMode;
 }
 
 export interface ClientMatter {
@@ -157,9 +158,38 @@ export interface IngestResult {
   suggestedLawyers: SuggestedLawyer[];
 }
 
+export type UserMode = "admin" | "full_flavour" | "lite";
+
+export interface ModeCapabilities {
+  manageUsers: boolean;
+  seeAllMatters: boolean;
+  assignMatters: boolean;
+  clientRoster: boolean;
+  timeTracking: boolean;
+  matterAnalytics: boolean;
+  fullConnectors: boolean;
+  adminSettings: boolean;
+}
+
+/** Accent hex per mode — admin keeps gold rather than near-black for readability. */
+export const MODE_ACCENT: Record<UserMode, string> = {
+  admin:        "#E6B450",   // gold — full parchment-and-gold experience
+  full_flavour: "#C8102E",   // scarlet
+  lite:         "#C4940F",   // amber-gold
+};
+
+export const MODE_LABEL: Record<UserMode, string> = {
+  admin:        "Admin",
+  full_flavour: "Full Flavour",
+  lite:         "Lite",
+};
+
 export interface Me {
   user: { profileId: string; name: string; email: string; role: LawyerRole } | null;
   authEnabled: boolean;
+  mode?: UserMode;
+  modeColor?: string;
+  capabilities?: ModeCapabilities;
 }
 
 export interface Task {

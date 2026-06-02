@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { api } from "./api";
-import type { AppSettings, LawyerProfile } from "./types";
-import { PRACTICE_AREAS } from "./types";
+import type { AppSettings, LawyerProfile, UserMode } from "./types";
+import { PRACTICE_AREAS, MODE_LABEL } from "./types";
 
 export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesChange, me }: {
   onClose: () => void; notify: (m: string) => void;
@@ -57,7 +57,7 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
 
   function startEdit(p: LawyerProfile) {
     setEditingId(p.id);
-    setEditPatch({ name: p.name, title: p.title ?? "", role: p.role, practiceAreas: [...(p.practiceAreas ?? [])], bio: p.bio ?? "" });
+    setEditPatch({ name: p.name, title: p.title ?? "", role: p.role, practiceAreas: [...(p.practiceAreas ?? [])], bio: p.bio ?? "", mode: p.mode });
   }
 
   async function saveEdit(id: string) {
@@ -116,12 +116,21 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
                           </div>
                         </div>
                         {isPartner && (
-                          <div className="field" style={{ margin: "0 0 10px" }}>
-                            <label>Role</label>
-                            <select value={editPatch.role ?? "lawyer"} onChange={(e) => setEditPatch({ ...editPatch, role: e.target.value as "lawyer" | "partner" })}>
-                              <option value="lawyer">Lawyer</option>
-                              <option value="partner">Partner</option>
-                            </select>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                            <div className="field" style={{ margin: 0 }}>
+                              <label>Role</label>
+                              <select value={editPatch.role ?? "lawyer"} onChange={(e) => setEditPatch({ ...editPatch, role: e.target.value as "lawyer" | "partner" })}>
+                                <option value="lawyer">Lawyer</option>
+                                <option value="partner">Partner</option>
+                              </select>
+                            </div>
+                            <div className="field" style={{ margin: 0 }}>
+                              <label>UX mode</label>
+                              <select value={editPatch.mode ?? "full_flavour"} onChange={(e) => setEditPatch({ ...editPatch, mode: e.target.value as UserMode })}>
+                                <option value="full_flavour">{MODE_LABEL.full_flavour}</option>
+                                <option value="lite">{MODE_LABEL.lite}</option>
+                              </select>
+                            </div>
                           </div>
                         )}
                         <div className="field" style={{ margin: "0 0 10px" }}>
@@ -158,6 +167,9 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             <span className="lawyer-name">{p.name}</span>
                             <span className={`pill sm ${p.role === "partner" ? "gold" : ""}`}>{p.role}</span>
+                            {p.mode && (
+                              <span className="mode-chip" data-mode={p.mode}>{MODE_LABEL[p.mode]}</span>
+                            )}
                           </div>
                           <div className="lawyer-email">{p.email}{p.title && ` · ${p.title}`}</div>
                           {p.practiceAreas && p.practiceAreas.length > 0 && (

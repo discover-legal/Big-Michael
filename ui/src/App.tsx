@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api, streamTask } from "./api";
 import type { Task, Health, AgentSummary, LawyerProfile, Me } from "./types";
+import { MODE_ACCENT, MODE_LABEL } from "./types";
 import { StatusDot, WorkflowPill, timeAgo } from "./primitives";
 import { TaskView } from "./TaskView";
 import { SubmitModal } from "./SubmitModal";
@@ -61,6 +62,17 @@ export default function App() {
 
   const isPartner = me?.user?.role === "partner";
 
+  // Inject --accent CSS vars whenever the user's mode changes.
+  useEffect(() => {
+    const root = document.documentElement.style;
+    const mode = me?.mode ?? "admin";
+    const hex = MODE_ACCENT[mode];
+    root.setProperty("--accent", hex);
+    root.setProperty("--accent-bright", mode === "admin" ? "#F3CB73" : hex);
+    root.setProperty("--accent-soft", `color-mix(in srgb, ${hex} 13%, transparent)`);
+    root.setProperty("--accent-border", `color-mix(in srgb, ${hex} 38%, transparent)`);
+  }, [me?.mode]);
+
   const onDeleted = useCallback((id: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
     setSelectedId((cur) => (cur === id ? null : cur));
@@ -112,8 +124,8 @@ export default function App() {
         <div className="rail-actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button className="btn primary full" onClick={() => setSubmitOpen(true)}>＋ New matter</button>
           <button className="btn full ghost" onClick={() => setLibraryOpen(true)}>⊕ Library · ingest &amp; search</button>
-          {isPartner && <button className="btn full ghost" onClick={() => setClientsOpen(true)}>⚖ Clients &amp; matters</button>}
-          <button className="btn full ghost" onClick={() => setAdminOpen(true)}>⚙ Admin · settings</button>
+          {(me?.capabilities?.clientRoster !== false) && isPartner && <button className="btn full ghost" onClick={() => setClientsOpen(true)}>⚖ Clients &amp; matters</button>}
+          {(me?.capabilities?.adminSettings !== false) && <button className="btn full ghost" onClick={() => setAdminOpen(true)}>⚙ Admin · settings</button>}
         </div>
 
         <div className="rail-scroll">
@@ -173,7 +185,9 @@ export default function App() {
             </>}
             {me?.user && (
               <span className="whoami" title={`${me.user.email} · ${me.user.role}`}>
-                {me.user.name}{me.user.role === "partner" && <span className="pill sm gold">partner</span>}
+                {me.user.name}
+                {me.user.role === "partner" && <span className="pill sm gold">partner</span>}
+                {me.mode && <span className="mode-chip" data-mode={me.mode}>{MODE_LABEL[me.mode]}</span>}
                 {me.authEnabled && <button className="logout" onClick={() => api.logout().then(() => location.reload())}>sign out</button>}
               </span>
             )}
