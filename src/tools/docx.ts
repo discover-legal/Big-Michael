@@ -20,7 +20,7 @@ import {
   Table, TableRow, TableCell, WidthType, PageOrientation, AlignmentType,
 } from "docx";
 import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { join, resolve, sep } from "path";
 import { Config } from "../config.js";
 import type { ToolImpl } from "./index.js";
 
@@ -102,9 +102,17 @@ export const docxGenerateTool: ToolImpl = {
     const title = String(input.title ?? "Legal Document");
     const landscape = input.landscape === true;
     const sections = (input.sections as DocxSection[] | undefined) ?? [];
-    const outputDir = (input.output_dir as string | undefined) ?? Config.pdf.outputDir;
+    // Always write into the configured output directory — ignore any caller-supplied
+    // output_dir to prevent path-traversal to arbitrary filesystem locations.
+    const outputRoot = resolve(Config.pdf.outputDir);
     const slug = (String(input.filename ?? title)).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
     const filename = slug.endsWith(".docx") ? slug : `${slug || "document"}.docx`;
+    const outputDir = outputRoot;
+    // Belt-and-suspenders: verify the resolved output path stays within outputRoot.
+    const outputPath = join(outputDir, filename);
+    if (!resolve(outputPath).startsWith(outputRoot + sep) && resolve(outputPath) !== outputRoot) {
+      throw new Error("Resolved output path escapes the configured output directory");
+    }
 
     const children: (Paragraph | Table)[] = [
       new Paragraph({ heading: HeadingLevel.TITLE, spacing: { after: 240 }, children: [new TextRun({ text: title, font: FONT, bold: true, size: 32 })] }),
@@ -132,7 +140,6 @@ export const docxGenerateTool: ToolImpl = {
 
     const buf = await Packer.toBuffer(doc);
     await mkdir(outputDir, { recursive: true });
-    const outputPath = join(outputDir, filename);
     await writeFile(outputPath, buf);
 
     return { outputPath, filename, sectionCount: sections.length, landscape, fileSizeBytes: buf.length };

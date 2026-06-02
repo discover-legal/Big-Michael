@@ -15,7 +15,7 @@
  * without a restart. Env vars remain the defaults; the file overrides them.
  */
 
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile, rename } from "fs/promises";
 import { Config as ConfigConst } from "../config.js";
 import { logger } from "../logger.js";
 
@@ -73,6 +73,40 @@ const clampFloat = (v: unknown, lo: number, hi: number, dflt: number): number =>
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
 };
 
+/**
+ * Validate that `raw` is a public http/https URL (no SSRF via private/loopback addresses).
+ * Returns the trimmed URL on success; throws a descriptive Error on failure.
+ * Exported for unit-testing.
+ */
+export function assertPublicHttpUrl(raw: string, label: string): string {
+  const trimmed = raw.trim();
+  let u: URL;
+  try {
+    u = new URL(trimmed);
+  } catch {
+    throw new Error(`Invalid ${label} '${trimmed}': must be a public http or https URL`);
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new Error(`Invalid ${label} '${trimmed}': must be a public http or https URL`);
+  }
+  // Strip IPv6 brackets for hostname matching.
+  const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const isPrivate =
+    h === "localhost" ||
+    h === "::1" ||
+    /^127\./.test(h) ||          // 127.0.0.0/8  loopback
+    /^169\.254\./.test(h) ||     // 169.254.0.0/16  link-local
+    /^10\./.test(h) ||           // 10.0.0.0/8  RFC-1918
+    /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||  // 172.16-31.x  RFC-1918
+    /^192\.168\./.test(h) ||     // 192.168.0.0/16  RFC-1918
+    /^fc00:/i.test(h) ||         // fc00::/7  IPv6 ULA
+    /^fe80:/i.test(h);           // fe80::/10  IPv6 link-local
+  if (isPrivate) {
+    throw new Error(`${label} '${trimmed}' resolves to a private or loopback address`);
+  }
+  return trimmed;
+}
+
 /** Apply a (partial) settings object onto the live Config, with validation. */
 function applyToConfig(s: DeepPartial<AppSettings>): void {
   // Config is declared `as const` (compile-time readonly); at runtime it is a
@@ -101,14 +135,7 @@ function applyToConfig(s: DeepPartial<AppSettings>): void {
   if (s.docuseal) {
     if (typeof s.docuseal.enabled === "boolean") Config.docuseal.enabled = s.docuseal.enabled;
     if (typeof s.docuseal.url === "string") {
-      const trimmed = s.docuseal.url.trim();
-      try {
-        const u = new URL(trimmed);
-        if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("protocol");
-        Config.docuseal.url = trimmed;
-      } catch {
-        throw new Error(`Invalid DocuSeal URL '${trimmed}': must be an http or https URL`);
-      }
+      Config.docuseal.url = assertPublicHttpUrl(s.docuseal.url, "DocuSeal URL");
     }
     if (typeof s.docuseal.apiKey === "string") Config.docuseal.apiKey = s.docuseal.apiKey.trim();
   }
@@ -138,7 +165,11 @@ export class SettingsStore {
   /** Apply a patch onto Config and persist the full settings to disk. */
   async update(patch: DeepPartial<AppSettings>): Promise<ReturnType<SettingsStore["get"]>> {
     applyToConfig(patch);
-    await writeFile(this.path, JSON.stringify(currentSettings(), null, 2), "utf8");
+    // Atomic write: write to .tmp then rename so a mid-write crash doesn't
+    // leave a partial JSON file that breaks init() on the next startup.
+    const tmp = `${this.path}.tmp`;
+    await writeFile(tmp, JSON.stringify(currentSettings(), null, 2), "utf8");
+    await rename(tmp, this.path);
     logger.info("Settings updated", { path: this.path });
     return this.get();
   }

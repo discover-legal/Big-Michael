@@ -38,6 +38,8 @@ const STATE_COOKIE = "bm_oauth_state";
 // In-process revocation set keyed on per-session token IDs (jti).
 // Populated on logout; cleared on process restart (acceptable for the
 // 12-hour session lifetime — restarting the server is a natural fence).
+// Capped at 100k entries with FIFO eviction to prevent unbounded growth.
+const MAX_REVOKED_JTIS = 100_000;
 const REVOKED_JTIS = new Set<string>();
 
 type ProviderKey = "google" | "microsoft" | "linkedin";
@@ -188,7 +190,13 @@ export function registerAuthRoutes(app: FastifyInstance, orchestrator: Orchestra
       if (unsigned.valid && unsigned.value) {
         try {
           const payload = JSON.parse(unsigned.value) as Partial<SessionCookiePayload>;
-          if (payload.jti) REVOKED_JTIS.add(payload.jti);
+          if (payload.jti) {
+            if (REVOKED_JTIS.size >= MAX_REVOKED_JTIS) {
+              // Evict the oldest entry to keep memory bounded.
+              REVOKED_JTIS.delete(REVOKED_JTIS.values().next().value as string);
+            }
+            REVOKED_JTIS.add(payload.jti);
+          }
         } catch { /* malformed cookie — clearing is sufficient */ }
       }
     }

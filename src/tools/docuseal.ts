@@ -26,10 +26,11 @@
  */
 
 import { readFile } from "fs/promises";
-import { basename } from "path";
+import { basename, resolve, sep } from "path";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
 import type { ToolImpl } from "./index.js";
+import { assertSafeReadPath } from "./pdf.js";
 
 // ─── Shared HTTP helper ───────────────────────────────────────────────────────
 
@@ -157,15 +158,16 @@ export const docusealSendForSigningTool: ToolImpl = {
         throw new Error("Either pdfPath or templateId must be provided");
       }
 
-      logger.debug("Uploading PDF to DocuSeal", { pdfPath });
+      const safePath = assertSafeReadPath(pdfPath);
+      logger.debug("Uploading PDF to DocuSeal", { pdfPath: safePath });
 
-      const bytes = await readFile(pdfPath);
+      const bytes = await readFile(safePath);
       const form = new FormData();
       form.append("name", documentName);
       form.append(
         "file",
         new Blob([bytes], { type: "application/pdf" }),
-        basename(pdfPath),
+        basename(safePath),
       );
 
       const tmpl = await docusealFetch("POST", "/api/templates", form) as { id: number };
