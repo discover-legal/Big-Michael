@@ -4,9 +4,10 @@ Multi-agent legal AI orchestration platform. Runs DyTopo rounds of granular
 epistemic/conceptual/writing agents over a RuVector native HNSW registry, with a
 debate + verification protocol on every finding before final synthesis.
 
-**Version 0.2.0** — full big-tent integration: Claude for Legal features, 8 legal
-data connectors, generic plugin adapter, Lavern + MikeOSS workflow support, and
-jurisdiction-aware agent routing.
+**Version 0.3.0** — full RuVector migration: native in-process HNSW for all vector
+stores (no Qdrant), Q-learning agent recruitment, two-wave DyTopo processing with
+intra-round whiteboard + inter-round memory rollup, billable time tracking, and
+NOSLEGAL v4 taxonomy.
 
 ## Quick start
 
