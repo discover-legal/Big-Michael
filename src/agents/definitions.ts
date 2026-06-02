@@ -1897,6 +1897,7 @@ Framework:
 Output: RISK LEVEL (LOW / MEDIUM / HIGH), top risk factors, and recommended mitigations.`,
     allowedTools: REGULATORY_OPS_TOOLS,
     skills: ["termination-risk", "wrongful-dismissal", "discrimination"],
+    jurisdictions: ["US"],
   },
   {
     id: "hire-reviewer",
@@ -1921,6 +1922,7 @@ Framework:
 Output: GO (proceed), PROCEED WITH CAUTION (specific mitigations needed), or HOLD (material unresolved issue).`,
     allowedTools: REGULATORY_OPS_TOOLS,
     skills: ["restrictive-covenants", "hiring-compliance", "trade-secrets"],
+    jurisdictions: ["US"],
   },
   {
     id: "worker-classification-analyst",
@@ -1944,6 +1946,7 @@ Framework:
 State the specific test applied and which factors drive the conclusion.`,
     allowedTools: REGULATORY_OPS_TOOLS,
     skills: ["worker-classification", "independent-contractor", "flsa-exemptions"],
+    jurisdictions: ["US"],
   },
   {
     id: "workplace-investigation-lead",
@@ -2045,6 +2048,7 @@ Framework:
 Quantify exposure per employee per week and flag the aggregate risk if the issue is systemic.`,
     allowedTools: REGULATORY_OPS_TOOLS,
     skills: ["wage-and-hour", "flsa", "overtime", "class-action-risk"],
+    jurisdictions: ["US"],
   },
 ];
 
@@ -2384,6 +2388,7 @@ Framework:
 Output: COMMENT RECOMMENDED / MONITOR ONLY / NO ACTION, with supporting analysis.`,
     allowedTools: REGULATORY_OPS_TOOLS,
     skills: ["nprm", "regulatory-comment", "administrative-law"],
+    jurisdictions: ["US"],
   },
 ];
 
@@ -2580,6 +2585,7 @@ COUNTER-NOTICE:
 Flag if the content appears to be fair use or if there are fair use defences to consider before filing.`,
     allowedTools: IP_OPS_TOOLS,
     skills: ["dmca", "copyright-takedown", "safe-harbour"],
+    jurisdictions: ["US"],
   },
   {
     id: "oss-compliance-analyst",
@@ -2700,6 +2706,7 @@ Framework:
 Use solve_intelligence_search_patents for prior art and solve_intelligence_draft_claims for claim drafting assistance.`,
     allowedTools: IP_OPS_TOOLS,
     skills: ["patent-prosecution", "claim-drafting", "office-action-response", "prior-art"],
+    jurisdictions: ["US"],
   },
 ];
 
@@ -2733,6 +2740,7 @@ INVALIDITY CHART:
 Output a structured table for each chart, suitable for use in a claim chart exhibit.`,
     allowedTools: LITIGATION_OPS_TOOLS,
     skills: ["claim-charts", "patent-infringement", "invalidity-analysis"],
+    jurisdictions: ["US"],
   },
   {
     id: "demand-received-triager",
@@ -2783,6 +2791,7 @@ Framework:
 Output: validity assessment, recommended objections, response timeline, and immediate action list.`,
     allowedTools: LITIGATION_OPS_TOOLS,
     skills: ["subpoenas", "legal-process", "ediscovery", "privilege-review"],
+    jurisdictions: ["US"],
   },
   {
     id: "chronology-builder",
@@ -2998,6 +3007,7 @@ Approach:
 Provide rule statements that are precise enough to use in an exam answer, not textbook-length explanations.`,
     allowedTools: CLINIC_TOOLS,
     skills: ["bar-prep", "rule-statements", "irac", "essay-grading"],
+    jurisdictions: ["US"],
   },
   {
     id: "irac-grader",
@@ -3025,6 +3035,7 @@ Feedback format:
 - SCORE: /100 with breakdown by IRAC component`,
     allowedTools: CLINIC_TOOLS,
     skills: ["essay-grading", "irac", "law-school-exams", "bar-prep"],
+    jurisdictions: ["US"],
   },
   {
     id: "case-briefer",
@@ -3098,6 +3109,7 @@ Approach:
 Output a ranked study priority list with time allocation recommendations and a brief on each high-priority topic.`,
     allowedTools: CLINIC_TOOLS,
     skills: ["exam-prep", "study-strategy", "topic-forecasting"],
+    jurisdictions: ["US"],
   },
 ];
 
