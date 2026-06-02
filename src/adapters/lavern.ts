@@ -163,6 +163,107 @@ export class LavernAdapter implements AgentHarness {
   }
 }
 
+// ─── Lavern workflow adapter ──────────────────────────────────────────────────
+
+/**
+ * Lavern defines 9 workflow types as step pipelines with gates and evaluators.
+ * We convert them to TaskTemplates so they appear in the template picker and
+ * can be submitted via /tasks/from-template.
+ *
+ * Drop Lavern workflow JSON files in workflows/laverne/ — each file may contain
+ * a single LavernWorkflowConfig or an array.
+ */
+export interface LavernWorkflowConfig {
+  id: string;
+  name: string;
+  description: string;
+  /** Lavern's own type name — mapped to our WorkflowType */
+  type:
+    | "adversarial"
+    | "counsel"
+    | "full-bench"
+    | "legal-design"
+    | "pre-engagement"
+    | "review"
+    | "roundtable"
+    | "tabulate"
+    | "verification";
+  /** Optional: prompt template with {{document}} / {{description}} placeholders */
+  promptTemplate?: string;
+  /** Which domains the workflow engages */
+  preferredDomains?: import("../types.js").AgentDomain[];
+  jurisdiction?: string;
+  specialty?: string;
+}
+
+const LAVERN_WORKFLOW_TYPE_MAP: Record<string, import("../types.js").WorkflowType> = {
+  "adversarial":   "adversarial",
+  "counsel":       "counsel",
+  "full-bench":    "full_bench",
+  "legal-design":  "legal_design",
+  "pre-engagement":"pre_engagement",
+  "review":        "review",
+  "roundtable":    "roundtable",
+  "tabulate":      "tabulate",
+  "verification":  "adversarial",  // closest: adversarial includes verification phases
+};
+
+export class LavernWorkflowAdapter {
+  /**
+   * Load Lavern workflow configs from a directory of JSON files.
+   * sourcePath must be within the project working directory.
+   */
+  async load(sourcePath: string): Promise<TaskTemplate[]> {
+    const cwd = process.cwd();
+    const resolved = resolve(sourcePath);
+    if (!resolved.startsWith(cwd + sep) && resolved !== cwd) {
+      throw new Error(`Workflow source path '${sourcePath}' must be within the project root`);
+    }
+    let entries: string[];
+    try {
+      entries = await readdir(resolved);
+    } catch {
+      return [];  // directory absent — not an error
+    }
+
+    const configs: LavernWorkflowConfig[] = [];
+    for (const entry of entries) {
+      if (extname(entry) !== ".json") continue;
+      const raw = await readFile(join(resolved, entry), "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) configs.push(...parsed);
+      else configs.push(parsed);
+    }
+
+    return this.fromConfigs(configs);
+  }
+
+  fromConfigs(configs: LavernWorkflowConfig[]): TaskTemplate[] {
+    return configs.map((c) => this.convert(c));
+  }
+
+  private convert(c: LavernWorkflowConfig): TaskTemplate {
+    const workflowType = LAVERN_WORKFLOW_TYPE_MAP[c.type] ?? "roundtable";
+    const basePrompt = c.promptTemplate ??
+      `Complete the following legal task using the ${c.name} workflow.\n\nMatter: {{description}}\n\nDocuments provided: {{document}}`;
+
+    return {
+      id: `lavern:${c.id}`,
+      name: `[Lavern] ${c.name}`,
+      description: [c.description, c.specialty, c.jurisdiction].filter(Boolean).join(" — "),
+      taskDescriptionTemplate: basePrompt,
+      workflowType,
+      preferredDomains: c.preferredDomains,
+      source: "lavern",
+      metadata: {
+        lavernType: c.type,
+        jurisdiction: c.jurisdiction,
+        specialty: c.specialty,
+      },
+    };
+  }
+}
+
 // ─── Mike OSS workflow adapter ────────────────────────────────────────────────
 
 /**

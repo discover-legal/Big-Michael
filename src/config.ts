@@ -184,6 +184,33 @@ export const Config = {
     firmName: optional("FIRM_NAME", ""),
   },
 
+  // ─── Legal data connectors ─────────────────────────────────────────────────
+  // Each connector is enabled when its API key is set; endpoint defaults to the
+  // public vendor MCP URL. The connector tools return a "not configured" error
+  // when the key is absent, so they are always safe to register.
+  connectors: {
+    courtListener: {
+      // Public REST API — works without a key (key unlocks higher rate limits).
+      apiKey: process.env.COURT_LISTENER_API_KEY ?? "",
+      endpoint: optional("COURT_LISTENER_API_URL", "https://www.courtlistener.com/api/rest/v4"),
+    },
+    ironclad: {
+      apiKey: process.env.IRONCLAD_API_KEY ?? "",
+      endpoint: optional("IRONCLAD_MCP_URL", "https://mcp.na1.ironcladapp.com/mcp"),
+      enabled: Boolean(process.env.IRONCLAD_API_KEY),
+    },
+    imanage: {
+      apiKey: process.env.IMANAGE_API_KEY ?? "",
+      endpoint: optional("IMANAGE_MCP_URL", "https://cloudimanage.com/mcp/work"),
+      enabled: Boolean(process.env.IMANAGE_API_KEY),
+    },
+    definely: {
+      apiKey: process.env.DEFINELY_API_KEY ?? "",
+      endpoint: optional("DEFINELY_MCP_URL", "https://mcp.uk.definely.com/api/proxy/core-mcp"),
+      enabled: Boolean(process.env.DEFINELY_API_KEY),
+    },
+  },
+
   // Infisical — open-source secrets manager (https://infisical.com)
   // Self-host: docker compose up (see https://infisical.com/docs/self-hosting)
   // These values are bootstrap-only; all other secrets are fetched from Infisical at startup.

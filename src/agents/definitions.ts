@@ -163,9 +163,26 @@ Every compliance gap you flag must cite: instrument + provision + the specific o
 // Their output: structured legal analysis with cited authority.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Connector tool names — added to agent allowedTools where relevant.
+// CourtListener is always available (public API); others require API keys but are safe to list.
+const COURT_TOOLS = [
+  "court_listener_search", "court_listener_opinion", "court_listener_docket",
+];
+const DMS_TOOLS = [
+  "imanage_search", "imanage_get_document",
+];
+const CONTRACT_MGMT_TOOLS = [
+  "ironclad_search_contracts", "ironclad_get_contract",
+];
+const CONTRACT_ANALYSIS_TOOLS = [
+  "definely_analyze_structure", "definely_resolve_definition",
+];
+
 const EPISTEMIC_TOOLS = [
   "web_search", "search_knowledge", "query_memory", "pdf_ocr", "read_document",
   "fetch_documents", "find_in_document", "list_documents", "tabular_review", "read_table_cells",
+  // All epistemic agents may search court records, the DMS, and the contract register
+  ...COURT_TOOLS, ...DMS_TOOLS, ...CONTRACT_MGMT_TOOLS,
 ];
 
 const TIER2_EPISTEMIC: AgentDefinition[] = [
@@ -964,6 +981,9 @@ const WRITING_TOOLS = [
   "search_knowledge", "query_memory", "pdf_generate", "pdf_extract_text", "pdf_ocr",
   "docuseal_send_for_signing", "docx_generate", "edit_document", "replicate_document",
   "read_document", "find_in_document", "list_documents",
+  // Contract drafters can analyse clause structure and resolve definitions via Definely,
+  // and pull executed contracts from the register via Ironclad / iManage
+  ...CONTRACT_ANALYSIS_TOOLS, ...CONTRACT_MGMT_TOOLS, ...DMS_TOOLS,
 ];
 
 const TIER2_WRITING: AgentDefinition[] = [

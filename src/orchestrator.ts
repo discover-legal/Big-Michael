@@ -36,7 +36,7 @@ import { DyTopoEngine } from "./dytopo/engine.js";
 import { InterRoundMemoryStore } from "./memory/index.js";
 import { KnowledgeStore } from "./knowledge/index.js";
 import { TemplateStore } from "./templates/store.js";
-import { LavernAdapter, instantiateTemplate, fromExternalConfig, fromMikeOSSWorkflow } from "./adapters/lavern.js";
+import { LavernAdapter, LavernWorkflowAdapter, instantiateTemplate, fromExternalConfig, fromMikeOSSWorkflow } from "./adapters/lavern.js";
 import type { TaskTemplate, ExternalAgentConfig, MikeOSSWorkflow } from "./adapters/lavern.js";
 import {
   applyCitationGate,
@@ -53,12 +53,15 @@ import type {
 } from "./types.js";
 
 const PHASE_SEQUENCES: Record<WorkflowType, TaskPhase[]> = {
-  counsel:     ["intake", "research", "drafting", "delivery"],
-  roundtable:  ["intake", "research", "analysis", "drafting", "review", "delivery"],
-  adversarial: ["intake", "research", "analysis", "review", "verification", "delivery"],
-  review:      ["intake", "analysis", "review", "verification", "delivery"],
-  tabulate:    ["intake", "analysis", "delivery"],
-  full_bench:  ["intake", "research", "analysis", "drafting", "review", "verification", "delivery"],
+  counsel:        ["intake", "research", "drafting", "delivery"],
+  roundtable:     ["intake", "research", "analysis", "drafting", "review", "delivery"],
+  adversarial:    ["intake", "research", "analysis", "review", "verification", "delivery"],
+  review:         ["intake", "analysis", "review", "verification", "delivery"],
+  tabulate:       ["intake", "analysis", "delivery"],
+  full_bench:     ["intake", "research", "analysis", "drafting", "review", "verification", "delivery"],
+  // Lavern workflow types
+  legal_design:   ["intake", "research", "analysis", "drafting", "review", "delivery"],
+  pre_engagement: ["intake", "research", "analysis", "delivery"],
 };
 
 /**
@@ -124,8 +127,9 @@ export class Orchestrator {
     // Load external and Lavern agents from filesystem
     await this.loadExternalAgents();
 
-    // Load MikeOSS workflow presets (native format) and register as templates
+    // Load workflow presets — MikeOSS (native format) and Lavern (9 workflow types)
     await this.loadMikeOSSWorkflows();
+    await this.loadLavernWorkflows();
 
     // Restore persisted tasks
     await this.restoreTasks();
@@ -365,6 +369,19 @@ export class Orchestrator {
     }
 
     if (loaded) logger.info("MikeOSS workflows registered as templates", { count: loaded });
+  }
+
+  /**
+   * Load Lavern workflow definitions from workflows/laverne/ and register each
+   * as a TaskTemplate. Lavern workflows specify step pipelines and gate conditions;
+   * we map them to our WorkflowType phase sequences.
+   */
+  private async loadLavernWorkflows(): Promise<void> {
+    const dir = join(process.cwd(), "workflows", "laverne");
+    const adapter = new LavernWorkflowAdapter();
+    const templates = await adapter.load(dir);
+    for (const t of templates) this.templates.add(t);
+    if (templates.length) logger.info("Lavern workflows registered as templates", { count: templates.length });
   }
 
   // ─── Internal task runner ─────────────────────────────────────────────────

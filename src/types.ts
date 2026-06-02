@@ -203,12 +203,14 @@ export interface GateRequest {
 // ─── Task management ─────────────────────────────────────────────────────────
 
 export type WorkflowType =
-  | "counsel"      // single specialist, quick turnaround
-  | "roundtable"   // multi-agent open discussion
-  | "adversarial"  // red-team vs blue-team
-  | "review"       // document review and annotation
-  | "tabulate"     // bulk extraction → spreadsheet
-  | "full_bench";  // comprehensive all-tier review
+  | "counsel"        // single specialist, quick turnaround
+  | "roundtable"     // multi-agent open discussion
+  | "adversarial"    // red-team vs blue-team
+  | "review"         // document review and annotation
+  | "tabulate"       // bulk extraction → spreadsheet
+  | "full_bench"     // comprehensive all-tier review
+  | "legal_design"   // structured legal task pipeline (Lavern)
+  | "pre_engagement";// scoping, conflicts, initial assessment (Lavern)
 
 export type TaskStatus =
   | "pending"
