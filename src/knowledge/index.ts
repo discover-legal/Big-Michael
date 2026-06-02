@@ -105,7 +105,7 @@ export class KnowledgeStore {
 
     const results = await this.qdrant.search(COLLECTION, {
       vector: embedding,
-      limit: opts.topK ?? 8,
+      limit: Math.min(opts.topK ?? 8, 50),
       filter: must.length ? { must } : undefined,
       with_payload: true,
     });

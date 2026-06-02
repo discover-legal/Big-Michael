@@ -102,10 +102,13 @@ export async function runDebate(finding: Finding, challengerAgentId: string): Pr
   const debateModel = selectModel({ taskType: "debate" });
   auditLogger.write({ event: "debate.start", data: { findingId: finding.id, model: debateModel } });
 
+  // Cap finding content before LLM insertion to prevent oversized findings from
+  // consuming entire context windows or being used as prompt injection payloads.
+  const findingSnippet = finding.content.slice(0, 20_000);
   // Generate challenge — Opus (debate routing)
   const challengeText = await callModel(
     CHALLENGER_SYSTEM,
-    `FINDING:\n${finding.content}\n\nCITATIONS:\n${finding.citations.map((c) => `SOURCE=${c.source} | QUOTE=${c.quote}`).join("\n")}`,
+    `FINDING:\n${findingSnippet}\n\nCITATIONS:\n${finding.citations.map((c) => `SOURCE=${c.source} | QUOTE=${c.quote}`).join("\n")}`,
     600,
     debateModel,
   );
@@ -123,7 +126,7 @@ export async function runDebate(finding: Finding, challengerAgentId: string): Pr
   // Resolve debate — Opus
   const resolutionText = await callModel(
     RESOLVER_SYSTEM,
-    `FINDING:\n${finding.content}\n\nCHALLENGE:\n${challenge.content}\nChallenge citations: ${challenge.citations.map((c) => c.quote).join("; ")}`,
+    `FINDING:\n${findingSnippet}\n\nCHALLENGE:\n${challenge.content.slice(0, 10_000)}\nChallenge citations: ${challenge.citations.map((c) => c.quote).join("; ")}`,
     800,
     debateModel,
   );

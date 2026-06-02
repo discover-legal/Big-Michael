@@ -298,6 +298,10 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       description: string; workflowType: WorkflowType; documentIds?: string[];
       clientNumber?: string; matterNumber?: string;
     };
+    // Cap documentIds to 100 entries to prevent memory exhaustion from massive arrays.
+    if (Array.isArray(body.documentIds) && body.documentIds.length > 100) {
+      return reply.status(400).send({ error: "documentIds exceeds the limit of 100 entries" });
+    }
     const user = getUser(req);
     // Partners see all documents; lawyers are scoped to their own documents in agent tools.
     const createdByProfileId = isPartner(user) ? undefined : user?.profileId;
@@ -309,7 +313,8 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   });
 
   // Only matters the principal may see (partner → all; lawyer → assigned only).
-  app.get("/tasks", async (req) => filterVisible(getUser(req), orchestrator.listTasks()));
+  // Capped at 500 to prevent a single response from dumping the full task list.
+  app.get("/tasks", async (req) => filterVisible(getUser(req), orchestrator.listTasks()).slice(0, 500));
 
   app.get("/tasks/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -465,7 +470,7 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     const { query, topK, jurisdiction, documentType } = req.query as Record<string, string>;
     const topKNum = topK ? parseInt(topK, 10) : undefined;
     return orchestrator.knowledge.search(query, {
-      topK: topKNum && Number.isInteger(topKNum) && topKNum > 0 ? topKNum : undefined,
+      topK: topKNum && Number.isInteger(topKNum) && topKNum > 0 ? Math.min(topKNum, 50) : undefined,
       jurisdiction,
       documentType,
       ownerId: docOwnerScope(req),
