@@ -165,6 +165,9 @@ export class Orchestrator {
       throw new Error(`Server at capacity: ${running} tasks already running. Please wait for one to complete.`);
     }
     const phases = PHASE_SEQUENCES[params.workflowType];
+    if (!phases) {
+      throw new Error(`Unknown workflowType '${params.workflowType}'. Valid values: ${Object.keys(PHASE_SEQUENCES).join(", ")}`);
+    }
     const task: Task = {
       id: uuidv4(),
       description: params.description,
@@ -508,10 +511,13 @@ EXPECTED_OUTPUT_3: <third expected output>`;
   }
 
   private async synthesise(task: Task): Promise<string> {
+    // Cap each finding and the total to prevent synthesis prompts from exceeding
+    // practical context-window limits when many rounds produce large findings.
     const findingsSummary = task.findings
       .filter((f) => !task.pendingGates.some((g) => g.findingId === f.id && g.status === "rejected"))
-      .map((f, i) => `[${i + 1}] (${f.agentName}, Round ${f.round}) ${f.content}`)
-      .join("\n\n");
+      .map((f, i) => `[${i + 1}] (${f.agentName}, Round ${f.round}) ${f.content.slice(0, 5_000)}`)
+      .join("\n\n")
+      .slice(0, 200_000);
 
     const prompt = `TASK: ${task.description}
 

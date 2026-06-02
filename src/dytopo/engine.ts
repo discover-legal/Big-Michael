@@ -258,7 +258,7 @@ export class DyTopoEngine {
       id: uuidv4(),
       from: edge.from,
       to: edge.to,
-      content: `[Offer from ${edge.from}] ${offerMap.get(edge.from) ?? ""}`,
+      content: `[Offer from ${edge.from}] ${(offerMap.get(edge.from) ?? "").slice(0, 500)}`,
       round,
       timestamp: new Date(),
     }));

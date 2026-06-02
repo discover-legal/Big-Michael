@@ -170,11 +170,14 @@ export async function runVerificationPipeline(finding: Finding): Promise<Verific
   const verifyModel = selectModel({ taskType: "extraction" }); // Haiku — fast, many parallel calls
   auditLogger.write({ event: "verification.start", data: { findingId: finding.id, checks: checksToRun.length, model: verifyModel } });
 
+  // Same 20k cap as the debate path — prevents each of the N parallel
+  // verification calls from receiving an unbounded finding payload.
+  const verifySnippet = finding.content.slice(0, 20_000);
   const checks: VerificationCheck[] = await Promise.all(
     checksToRun.map(async (checkDesc) => {
       const response = await callModel(
         `You are a legal verification specialist. Assess the following finding against this criterion: ${checkDesc}\nRespond with: PASS or FAIL followed by a one-line note.`,
-        `FINDING:\n${finding.content}\n\nCITATIONS:\n${finding.citations.map((c) => `${c.source}: "${c.quote}"`).join("\n")}`,
+        `FINDING:\n${verifySnippet}\n\nCITATIONS:\n${finding.citations.map((c) => `${c.source}: "${c.quote}"`).join("\n")}`,
         150,
         verifyModel,
       );
