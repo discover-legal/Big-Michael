@@ -30,7 +30,7 @@
  */
 
 import { readdir, readFile } from "fs/promises";
-import { join, extname } from "path";
+import { join, extname, resolve, sep } from "path";
 import type { AgentDefinition, AgentTier, AgentDomain } from "../types.js";
 import type { AgentHarness } from "./index.js";
 
@@ -59,14 +59,20 @@ export class LavernAdapter implements AgentHarness {
   /**
    * Load Lavern agents from a directory of JSON/TS export files.
    * Each file should export a LavernAgentConfig or array of configs.
+   * sourcePath must be within the project working directory.
    */
   async load(sourcePath: string): Promise<AgentDefinition[]> {
-    const entries = await readdir(sourcePath);
+    const cwd = process.cwd();
+    const resolved = resolve(sourcePath);
+    if (!resolved.startsWith(cwd + sep) && resolved !== cwd) {
+      throw new Error(`Agent source path '${sourcePath}' must be within the project root`);
+    }
+    const entries = await readdir(resolved);
     const configs: LavernAgentConfig[] = [];
 
     for (const entry of entries) {
       if (extname(entry) !== ".json") continue;
-      const raw = await readFile(join(sourcePath, entry), "utf8");
+      const raw = await readFile(join(resolved, entry), "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         configs.push(...parsed);
