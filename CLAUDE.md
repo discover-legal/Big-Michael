@@ -48,6 +48,7 @@ list_tasks           — list all tasks
 approve_gate / reject_gate  — human review of flagged findings
 submit_from_template — run a pre-built workflow (eu-competition-brief etc.)
 list_templates       — see available workflow templates
+list_plugins         — list loaded external plugins and their contributed tools/agents
 get_round            — inspect a specific DyTopo round
 ingest_document      — add a document to the knowledge store
 search_knowledge     — semantic search across documents
@@ -346,6 +347,7 @@ POST   /documents/upload            upload a PDF / text file → extract + inges
 GET    /documents/search            semantic search (owner-scoped)
 GET    /agents                      list agents
 GET    /templates                   list templates
+GET    /plugins                     list loaded external plugins [partner only]
 GET    /settings                    read admin settings
 PUT    /settings                    update admin settings (live)
 GET    /me                          current principal + authEnabled

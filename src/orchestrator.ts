@@ -38,6 +38,7 @@ import { KnowledgeStore } from "./knowledge/index.js";
 import { TemplateStore } from "./templates/store.js";
 import { LavernAdapter, LavernWorkflowAdapter, instantiateTemplate, fromExternalConfig, fromMikeOSSWorkflow } from "./adapters/lavern.js";
 import type { TaskTemplate, ExternalAgentConfig, MikeOSSWorkflow } from "./adapters/lavern.js";
+import { pluginRegistry } from "./adapters/plugin.js";
 import {
   applyCitationGate,
   runDebate,
@@ -130,6 +131,10 @@ export class Orchestrator {
     // Load workflow presets — MikeOSS (native format) and Lavern (9 workflow types)
     await this.loadMikeOSSWorkflows();
     await this.loadLavernWorkflows();
+
+    // Load generic JSON plugins from adapters/external/ and register their
+    // agents, templates, and tools into the live stores.
+    await this.loadPlugins();
 
     // Restore persisted tasks
     await this.restoreTasks();
@@ -384,6 +389,35 @@ export class Orchestrator {
     const templates = await adapter.load(dir);
     for (const t of templates) this.templates.add(t);
     if (templates.length) logger.info("Lavern workflows registered as templates", { count: templates.length });
+  }
+
+  // ─── Generic plugin loader ────────────────────────────────────────────────
+
+  /**
+   * Load JSON plugin packages from adapters/external/ via the PluginRegistry.
+   * Each package may contribute tools (registered into globalToolRegistry),
+   * agent definitions (registered into the AgentRegistry), and workflow
+   * templates (added to the TemplateStore).
+   */
+  private async loadPlugins(): Promise<void> {
+    const dir = join(process.cwd(), "adapters", "external");
+    await pluginRegistry.loadDirectory(dir);
+    if (!pluginRegistry.size) return;
+
+    const { globalToolRegistry } = await import("./tools/index.js");
+
+    const tools = pluginRegistry.allTools();
+    for (const tool of tools) globalToolRegistry.register(tool as Parameters<typeof globalToolRegistry.register>[0]);
+
+    const agents = pluginRegistry.allAgents();
+    if (agents.length) {
+      await this.registry.registerAll(agents);
+      logger.info("Plugin agents registered", { count: agents.length });
+    }
+
+    const workflows = pluginRegistry.allWorkflows();
+    for (const wf of workflows) this.templates.add(wf);
+    if (workflows.length) logger.info("Plugin templates registered", { count: workflows.length });
   }
 
   // ─── Internal task runner ─────────────────────────────────────────────────

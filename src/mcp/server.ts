@@ -39,6 +39,7 @@ import { MODE_COLORS, MODE_CAPABILITIES } from "../types.js";
 import { LOCAL_PARTNER, filterVisible, canViewTask, isPartner, resolveMode } from "../auth/index.js";
 import { registerAuthRoutes, readSessionCookie } from "../auth/oauth.js";
 import { detectPracticeArea, detectClient } from "../services/classifier.js";
+import { pluginRegistry } from "../adapters/plugin.js";
 
 // ─── Tool schemas ─────────────────────────────────────────────────────────────
 
@@ -167,6 +168,11 @@ const TOOLS = [
   {
     name: "list_templates",
     description: "List available TaskTemplates (pre-built workflow presets).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_plugins",
+    description: "List all loaded external plugins (JSON drop-ins and TypeScript adapters), including their contributed tools, agents, and workflow templates.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -538,6 +544,12 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   // T18: Template REST routes
   app.get("/templates", async () => orchestrator.listTemplates());
 
+  // Plugin registry — lists all loaded JSON/adapter plugins (partners only)
+  app.get("/plugins", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.code(403).send({ error: "forbidden" });
+    return pluginRegistry.list();
+  });
+
   // ── Identity + lawyer profiles ──────────────────────────────────────────────
   app.get("/me", async (req) => {
     const user = getUser(req);
@@ -849,6 +861,9 @@ async function handleTool(
 
     case "list_templates":
       return orch.listTemplates();
+
+    case "list_plugins":
+      return pluginRegistry.list();
 
     case "submit_from_template":
       return orch.submitFromTemplate(
