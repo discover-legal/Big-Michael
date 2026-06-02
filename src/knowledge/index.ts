@@ -33,6 +33,9 @@ export class KnowledgeStore {
     if (!collections.some((c) => c.name === COLLECTION)) {
       await this.qdrant.createCollection(COLLECTION, {
         vectors: { size: DIMS, distance: "Cosine" },
+        quantization_config: {
+          scalar: { type: "int8", quantile: 0.99, always_ram: true },
+        },
       });
       logger.info("Knowledge store collection created", { collection: COLLECTION });
     }

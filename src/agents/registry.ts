@@ -39,6 +39,11 @@ export class AgentRegistry {
     if (!exists) {
       await this.qdrant.createCollection(COLLECTION, {
         vectors: { size: DIMS, distance: "Cosine" },
+        // Scalar quantization: compress float32 → int8 (4× memory reduction,
+        // negligible recall loss). Works transparently with RuVector and Qdrant.
+        quantization_config: {
+          scalar: { type: "int8", quantile: 0.99, always_ram: true },
+        },
       });
       logger.info("Agent registry collection created", { collection: COLLECTION });
     }
@@ -149,6 +154,11 @@ export class AgentRegistry {
       systemPrompt: payload.systemPrompt as string,
       skills: JSON.parse((payload.skillsJson as string) ?? "[]"),
       allowedTools: JSON.parse((payload.allowedToolsJson as string) ?? "[]"),
+      // jurisdictions must be restored so the DyTopo jurisdiction filter fires
+      // correctly for agents retrieved via semantic search (not just in-memory).
+      jurisdictions: Array.isArray(payload.jurisdictions)
+        ? (payload.jurisdictions as string[])
+        : undefined,
       metadata: (payload.metadata as Record<string, unknown>) ?? undefined,
     };
   }
