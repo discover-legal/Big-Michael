@@ -288,6 +288,10 @@ export const Config = {
     region: (process.env.CLIO_REGION ?? "us") as "us" | "eu" | "ca" | "au",
     redirectUri: optional("CLIO_REDIRECT_URI", "http://localhost:3101/auth/clio/callback"),
     tokensFile: optional("CLIO_TOKENS_FILE", "./data/clio-auth.json"),
+    // Space-separated OAuth scopes sent in the authorization URL.
+    // Clio v4 defaults to the app's configured permissions when omitted;
+    // set explicitly if your Clio developer app requires declared scopes.
+    scopes: optional("CLIO_SCOPES", ""),
     enabled: Boolean(process.env.CLIO_CLIENT_ID),
   },
 

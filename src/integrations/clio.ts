@@ -65,6 +65,10 @@ export class ClioClient {
       redirect_uri: Config.clio.redirectUri,
       state,
     });
+    // Include scopes if configured. Clio v4 falls back to the app's portal-level
+    // permissions when scope is omitted, so this is optional but recommended for
+    // apps that declare explicit scopes in the developer portal.
+    if (Config.clio.scopes) p.set("scope", Config.clio.scopes);
     return `${this.base}/oauth/authorize?${p}`;
   }
 

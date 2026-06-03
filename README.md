@@ -229,7 +229,110 @@ Clio uses OAuth 2.0 rather than a static API key. After setting credentials, a p
 attached documents into the knowledge base, and submits a Big Michael task in one call.
 
 **Time sync:** `POST /time-entries/sync-to-clio` pushes Big Michael billable time entries back to a
-Clio matter as activity records, preserving 6-minute billing unit rounding.
+Clio matter as activity records, preserving 6-minute billing unit rounding. Idempotent — entries
+are stamped with `clioSyncedAt` on success and skipped on subsequent calls.
+
+---
+
+## Clio — getting started
+
+Clio uses OAuth 2.0 rather than a static API key. Setup takes about five minutes.
+
+### 1. Register an OAuth app in Clio
+
+1. Log in to Clio as a firm admin.
+2. Go to **Settings → Developer Applications → New Application**.
+3. Fill in a name (e.g. "Big Michael") and set the **Redirect URI** to:
+   ```
+   http://localhost:3101/auth/clio/callback
+   ```
+   For production, replace with your actual `PUBLIC_BASE_URL`, e.g.:
+   ```
+   https://bigmichael.yourfirm.com/auth/clio/callback
+   ```
+   Clio performs an exact-string match — the URI must be identical to `CLIO_REDIRECT_URI` in your `.env`.
+
+4. In the app's **API Access** panel, enable permissions for each resource Big Michael uses:
+
+   | Resource | Why |
+   |---|---|
+   | **Matters** | `clio_list_matters`, `clio_get_matter`, matter import |
+   | **Contacts** | `clio_list_contacts` |
+   | **Documents** | `clio_list_documents`, `clio_download_document` |
+   | **Activities** | `clio_create_activity`, time-entry sync |
+   | **Notes** | `clio_create_note` |
+   | **Users** | `who_am_i` call to fetch firm name on connect |
+
+5. Save. Copy the **Client ID** and **Client Secret**.
+
+### 2. Configure your `.env`
+
+```bash
+CLIO_CLIENT_ID=your-client-id
+CLIO_CLIENT_SECRET=your-client-secret
+
+# Must match where the firm's data is hosted — wrong region = 401 on every call
+# us (default) | eu | ca | au
+CLIO_REGION=us
+
+# Only needed if your app deployment URL differs from the default
+# CLIO_REDIRECT_URI=https://bigmichael.yourfirm.com/auth/clio/callback
+```
+
+### 3. Connect
+
+Start the server (`npm start` or `npm run dev`), then have a **partner** visit:
+
+```
+GET http://localhost:3101/auth/clio/connect
+```
+
+This redirects to Clio's OAuth consent screen. After the firm admin approves, Clio redirects back
+and tokens are stored to `./data/clio-auth.json`. They auto-refresh; you won't need to reconnect
+unless the refresh token is revoked.
+
+Check the connection status at any time:
+
+```bash
+curl http://localhost:3101/auth/clio/status
+# → { "connected": true, "firmName": "Smith & Jones LLP", "connectedAt": "2026-06-03T..." }
+```
+
+### 4. Use it
+
+**Import a matter:**
+```bash
+curl -X POST http://localhost:3101/tasks/from-clio-matter \
+  -H "Content-Type: application/json" \
+  -d '{ "matterId": 12345, "workflowType": "roundtable" }'
+```
+This fetches the matter, ingests attached documents into the knowledge base, and kicks off a full
+bench run. Returns `{ task, documentsIngested }`.
+
+**Sync billable time to Clio:**
+```bash
+curl -X POST http://localhost:3101/time-entries/sync-to-clio \
+  -H "Content-Type: application/json" \
+  -d '{ "clioMatterId": 12345, "matterNumber": "001-2024" }'
+```
+Returns `{ synced, skipped, errors }`. Already-synced entries are skipped automatically.
+
+**Disconnect:**
+```bash
+curl -X DELETE http://localhost:3101/auth/clio/disconnect
+```
+
+### Notes
+
+- **Private app, no marketplace review needed.** This is a firm-internal OAuth app — Clio's
+  marketplace approval process only applies to apps distributed to multiple firms.
+- **Redirect URI is case-sensitive and must be an exact match.** If you get a redirect_uri
+  mismatch error during OAuth, compare the value in your Clio app settings with `CLIO_REDIRECT_URI`.
+- **Region mismatch** (e.g. `CLIO_REGION=us` for a firm on EU data) causes 401 errors on every
+  API call. Check the region in Clio under **Settings → Billing → Data Region**.
+- **`CLIO_SCOPES`** is optional. Clio v4 defaults to the app's portal-configured permissions when
+  the scope parameter is absent. Set it if your app requires explicit scope declaration in the
+  authorization URL.
 
 ---
 
