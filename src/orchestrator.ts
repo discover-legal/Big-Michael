@@ -48,6 +48,8 @@ import {
   identifyGateRequests,
 } from "./protocols/index.js";
 import { detectNosLegal } from "./services/classifier.js";
+import { costStore, calcCostUsd, calcWattHours } from "./cost/index.js";
+import { isOllamaModel, isLocalModel } from "./providers/index.js";
 import type {
   Task,
   WorkflowType,
@@ -72,6 +74,28 @@ const PHASE_SEQUENCES: Record<WorkflowType, TaskPhase[]> = {
  * Best-effort extraction of a single JSON object from an LLM response.
  * Strips markdown fences and isolates the outermost {...} before parsing.
  */
+function recordOrchestratorCost(
+  response: import("./providers/index.js").ChatResponse,
+  modelId: string,
+  context: import("./cost/index.js").CostContext,
+  taskId?: string,
+): void {
+  const isLocal = isOllamaModel(modelId) || isLocalModel(modelId);
+  const bare = resolveModelId(modelId);
+  costStore.record({
+    model: bare,
+    provider: isLocal ? (isOllamaModel(modelId) ? "ollama" : "local") : "anthropic",
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
+    costUsd: isLocal ? null : calcCostUsd(bare, response.usage.inputTokens, response.usage.outputTokens),
+    estimatedWh: isLocal ? calcWattHours(Config.local.inferenceWatts, response.durationMs) : null,
+    estimatedWatts: isLocal ? Config.local.inferenceWatts : null,
+    durationMs: response.durationMs,
+    context,
+    taskId,
+  });
+}
+
 function parseJsonObject(text: string): unknown | undefined {
   const stripped = text.replace(/```(?:json)?/gi, "").trim();
   const start = stripped.indexOf("{");
@@ -637,13 +661,13 @@ export class Orchestrator {
 
     // Debate each passing finding
     const debated = await Promise.all(
-      passed.map((f) => runDebate(f, "adversarial-challenger")),
+      passed.map((f) => runDebate(f, "adversarial-challenger", task.id)),
     );
 
     // Verification pipeline — mutates each finding in place, attaching its
     // verificationResult (read downstream by identifyGateRequests).
     await Promise.all(
-      debated.map((f) => runVerificationPipeline(f)),
+      debated.map((f) => runVerificationPipeline(f, task.id)),
     );
 
     // Add findings to task
@@ -695,6 +719,7 @@ EXPECTED_OUTPUT_3: <third expected output>`;
       cacheSystem: true,
     });
 
+    recordOrchestratorCost(response, model, "round_goal", task.id);
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock?.type === "text" ? textBlock.text : "";
     const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=EXPECTED_OUTPUT|$)/i);
@@ -749,6 +774,7 @@ Every claim must trace to a specific finding number from the list above.`;
       ...(useThinking && { thinking: { budgetTokens: Config.anthropic.thinkingBudgetTokens } }),
     });
 
+    recordOrchestratorCost(response, model, "synthesis", task.id);
     const textBlock = response.content.find((b) => b.type === "text");
     return textBlock?.type === "text" ? textBlock.text : "";
   }
@@ -804,6 +830,7 @@ Rules:
       cacheSystem: true,
     });
 
+    recordOrchestratorCost(response, model, "tabulate", task.id);
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock?.type === "text" ? textBlock.text : "";
 

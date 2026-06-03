@@ -42,6 +42,7 @@ import { detectPracticeArea, detectClient } from "../services/classifier.js";
 import { analyzeTone } from "../services/toneAnalyzer.js";
 import { parseLinkedInExport } from "../linkedin/parser.js";
 import { pluginRegistry } from "../adapters/plugin.js";
+import { costStore } from "../cost/index.js";
 
 // ─── Tool schemas ─────────────────────────────────────────────────────────────
 
@@ -704,7 +705,7 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     }
 
     try {
-      const tone = await analyzeTone(posts, profile.name, "linkedin_export");
+      const tone = await analyzeTone(posts, profile.name, "linkedin_export", id);
       const updated = await orchestrator.profiles.updateTone(id, tone);
       logger.info("Tone profile generated from LinkedIn export", { profileId: id, sampleCount: posts.length });
       auditLogger.write({ event: "profile.tone.imported", data: { profileId: id, sampleCount: posts.length, importedBy: user?.profileId } });
@@ -968,6 +969,36 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       if (assetType) byAssetType[assetType] = (byAssetType[assetType] ?? 0) + 1;
     }
     return { total: tasks.length, byAreaOfLaw, byWorkType, bySector, byAssetType };
+  });
+
+  // ── Cost analytics ────────────────────────────────────────────────────────
+  // Aggregate cost summary across all recorded calls — partner only.
+  app.get("/cost/summary", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    return costStore.summarise();
+  });
+
+  // Per-task cost breakdown. Access-controlled like the task itself.
+  app.get("/tasks/:id/cost", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const task = orchestrator.getTask(id);
+    if (!task || !canViewTask(getUser(req), task)) return reply.status(404).send({ error: "Task not found" });
+    const entries = costStore.forTask(id);
+    return { taskId: id, summary: costStore.summarise(entries), entries };
+  });
+
+  // Per-profile cost (tone analysis + any tasks created by this profile).
+  // Partners see any profile; lawyers see only their own.
+  app.get("/profiles/:id/cost", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const user = getUser(req);
+    if (!isPartner(user) && user?.profileId !== id) {
+      return reply.status(403).send({ error: "You can only view your own cost data" });
+    }
+    const profile = orchestrator.profiles.get(id);
+    if (!profile) return reply.status(404).send({ error: "Profile not found" });
+    const entries = costStore.forProfile(id);
+    return { profileId: id, summary: costStore.summarise(entries), entries };
   });
 
   await app.listen({ port: Config.api.port, host: Config.api.host });

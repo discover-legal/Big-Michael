@@ -79,6 +79,10 @@ export interface ProviderThinkingBlock {
 export interface ChatResponse {
   stopReason: "end_turn" | "tool_use" | "max_tokens";
   content: ProviderContentBlock[];
+  /** Token counts reported by the provider. */
+  usage: { inputTokens: number; outputTokens: number };
+  /** Wall-clock time for the API call in ms — used for local power estimates. */
+  durationMs: number;
 }
 
 // ─── Provider interface ───────────────────────────────────────────────────────

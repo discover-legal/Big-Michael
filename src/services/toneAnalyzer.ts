@@ -4,6 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
+import { costStore, calcCostUsd } from "../cost/index.js";
 import type { ToneProfile } from "../types.js";
 
 const client = new Anthropic({ apiKey: Config.anthropic.apiKey });
@@ -43,15 +44,31 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-function haiku(content: string, maxTokens: number): Promise<string> {
-  return client.messages
-    .create({ model: "claude-haiku-4-5-20251001", max_tokens: maxTokens, messages: [{ role: "user", content }] })
-    .then((r) => ((r.content[0] as { type: string; text: string }).text ?? "").trim());
+async function haiku(content: string, maxTokens: number, profileId?: string): Promise<string> {
+  const t0 = Date.now();
+  const r = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content }],
+  });
+  costStore.record({
+    model: "claude-haiku-4-5-20251001",
+    provider: "anthropic",
+    inputTokens: r.usage.input_tokens,
+    outputTokens: r.usage.output_tokens,
+    costUsd: calcCostUsd("claude-haiku-4-5-20251001", r.usage.input_tokens, r.usage.output_tokens),
+    estimatedWh: null,
+    estimatedWatts: null,
+    durationMs: Date.now() - t0,
+    context: "tone_analysis",
+    profileId,
+  });
+  return ((r.content[0] as { type: string; text: string }).text ?? "").trim();
 }
 
 // ─── Leaf: analyse a single chunk of raw posts ────────────────────────────────
 
-async function analyzeChunk(posts: string[], safeName: string): Promise<string> {
+async function analyzeChunk(posts: string[], safeName: string, profileId?: string): Promise<string> {
   const body = posts.map((p, i) => `---POST ${i + 1}---\n${p}`).join("\n\n");
   return haiku(
     `Analyse the writing style of ${safeName} from these ${posts.length} posts. ` +
@@ -59,18 +76,20 @@ async function analyzeChunk(posts: string[], safeName: string): Promise<string> 
     `Be specific — quote actual words or phrases observed. ` +
     `Plain prose only. No JSON, no headers, no bullet points.\n\n${body}`,
     300,
+    profileId,
   );
 }
 
 // ─── Internal node: merge a batch of style notes ─────────────────────────────
 
-async function rollupNotes(notes: string[], safeName: string): Promise<string> {
+async function rollupNotes(notes: string[], safeName: string, profileId?: string): Promise<string> {
   const body = notes.map((n, i) => `[Observation ${i + 1}]\n${n}`).join("\n\n");
   return haiku(
     `Synthesise these ${notes.length} writing style observations for ${safeName} into one coherent paragraph. ` +
     `Preserve specific phrases and concrete patterns. Where observations conflict, note the variation briefly. ` +
     `Plain prose only. No JSON, no headers, no bullet points.\n\n${body}`,
     300,
+    profileId,
   );
 }
 
@@ -79,7 +98,7 @@ async function rollupNotes(notes: string[], safeName: string): Promise<string> {
 async function buildProfile(
   finalNote: string,
   safeName: string,
-  meta: { sampleCount: number; sourceType: ToneProfile["sourceType"] },
+  meta: { sampleCount: number; sourceType: ToneProfile["sourceType"]; profileId?: string },
 ): Promise<ToneProfile> {
   const raw = await haiku(
     `Convert this writing style description for ${safeName} into structured JSON. ` +
@@ -97,6 +116,7 @@ async function buildProfile(
     `injectionSnippet: must read as a direct instruction, e.g. "${safeName} writes with directness and economy..."\n\n` +
     `Style description:\n${finalNote}`,
     800,
+    meta.profileId,
   );
 
   const stripped = raw.replace(/```(?:json)?/gi, "").trim();
@@ -133,6 +153,7 @@ async function recursiveRollup(
   safeName: string,
   level: number,
   isRaw: boolean,
+  profileId?: string,
 ): Promise<string> {
   const chunkSize = isRaw ? POST_CHUNK_SIZE : NOTE_CHUNK_SIZE;
   const chunks = chunkArray(items, chunkSize);
@@ -141,14 +162,14 @@ async function recursiveRollup(
 
   // Process all chunks at this level in parallel
   const notes = await Promise.all(
-    chunks.map((c) => (isRaw ? analyzeChunk(c, safeName) : rollupNotes(c, safeName))),
+    chunks.map((c) => (isRaw ? analyzeChunk(c, safeName, profileId) : rollupNotes(c, safeName, profileId))),
   );
 
   // Single note — recursion is complete
   if (notes.length === 1) return notes[0];
 
   // Multiple notes — recurse (notes are never raw)
-  return recursiveRollup(notes, safeName, level + 1, false);
+  return recursiveRollup(notes, safeName, level + 1, false, profileId);
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -163,11 +184,15 @@ async function recursiveRollup(
  *
  * Handles any number of posts up to MAX_POSTS with O(log n) depth and
  * full parallelism at every level — no context-window overflow, no truncation.
+ *
+ * profileId is optional — when provided, every Haiku call is attributed to that
+ * profile in the cost log.
  */
 export async function analyzeTone(
   samples: string[],
   lawyerName: string,
   sourceType: ToneProfile["sourceType"],
+  profileId?: string,
 ): Promise<ToneProfile> {
   const safeName = sanitizeForHaiku(lawyerName.trim().slice(0, 200));
 
@@ -180,8 +205,8 @@ export async function analyzeTone(
 
   logger.info("Tone analysis starting", { lawyer: safeName, posts: posts.length, sourceType });
 
-  const finalNote = await recursiveRollup(posts, safeName, 0, true);
-  const profile = await buildProfile(finalNote, safeName, { sampleCount: posts.length, sourceType });
+  const finalNote = await recursiveRollup(posts, safeName, 0, true, profileId);
+  const profile = await buildProfile(finalNote, safeName, { sampleCount: posts.length, sourceType, profileId });
 
   logger.info("Tone analysis complete", { lawyer: safeName, formality: profile.formality, rhetoric: profile.rhetoricalStyle });
 

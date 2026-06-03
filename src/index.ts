@@ -45,9 +45,11 @@ await loadSecrets();
 const { logger }                    = await import("./logger.js");
 const { Orchestrator }              = await import("./orchestrator.js");
 const { startMcpServer, startRestApi } = await import("./mcp/server.js");
+const { costStore }                 = await import("./cost/index.js");
 
 logger.info("Big Michael starting…");
 
+await costStore.init();
 const orchestrator = new Orchestrator();
 await orchestrator.init();
 

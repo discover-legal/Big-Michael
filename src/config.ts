@@ -131,6 +131,12 @@ export const Config = {
     localInferenceModel: optional("LOCAL_INFERENCE_MODEL", "local-model"),
     // "all" routes every tier locally; "1,2,3" routes only those tiers; "" = disabled
     localInferenceTiers: optional("LOCAL_INFERENCE_TIERS", ""),
+    // Estimated power draw for local inference in watts. Used to calculate
+    // watt-hour cost entries for Ollama / LM Studio / local models.
+    // 250 W = typical discrete GPU (RTX 3070–4090 range under inference load).
+    // 30 W  = Apple Silicon M-series (M2 Pro / M3 Max under LLM load).
+    // 65 W  = CPU-only inference (modern desktop).
+    inferenceWatts: parseInt(process.env.LOCAL_INFERENCE_WATTS ?? "250", 10),
   },
 
   // PDF tools — PyMuPDF (generation + extraction) + Camelot (table extraction)
