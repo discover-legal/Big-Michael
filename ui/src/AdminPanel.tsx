@@ -4,6 +4,7 @@ import { api } from "./api";
 import type { AppSettings, LawyerProfile, UserMode } from "./types";
 import { PRACTICE_AREAS, MODE_LABEL } from "./types";
 import { CostDashboard } from "./CostDashboard";
+import { ToneImportModal } from "./ToneImportModal";
 
 export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesChange, me }: {
   onClose: () => void; notify: (m: string) => void;
@@ -17,6 +18,7 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
   const [np, setNp] = useState({ name: "", email: "", role: "lawyer", title: "", practiceAreas: [] as string[], bio: "" });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPatch, setEditPatch] = useState<Partial<LawyerProfile>>({});
+  const [toneModalProfile, setToneModalProfile] = useState<LawyerProfile | null>(null);
 
   useEffect(() => { api.getSettings().then(setS).catch((e) => notify((e as Error).message)); }, [notify]);
 
@@ -79,6 +81,7 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
   const canEditProfile = (p: LawyerProfile) => isPartner || me?.profileId === p.id;
 
   return (
+    <>
     <div className="modal-scrim" onClick={onClose}>
       <motion.div className="modal admin" onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -184,6 +187,20 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
                             </div>
                           )}
                         </div>
+                        {canEditProfile(p) && (
+                          <button
+                            className={`voice-btn${p.toneProfile ? " active" : ""}`}
+                            onClick={() => setToneModalProfile(p)}
+                            title={p.toneProfile ? "Voice fingerprint active — click to manage" : "Add voice fingerprint"}
+                          >
+                            <svg width="13" height="10" viewBox="0 0 13 10" fill="none">
+                              {[3, 6, 9, 5, 10, 5, 9, 6, 3].map((h, i) => (
+                                <rect key={i} x={i * 1.4} y={(10 - h) / 2} width={1} height={h} rx={0.5} fill="currentColor" />
+                              ))}
+                            </svg>
+                            {p.toneProfile ? "Voice ●" : "Voice"}
+                          </button>
+                        )}
                         {canEditProfile(p) && (
                           <button className="btn ghost sm" onClick={() => startEdit(p)}>Edit</button>
                         )}
@@ -322,6 +339,18 @@ export function AdminPanel({ onClose, notify, isPartner, profiles, onProfilesCha
         </div>
       </motion.div>
     </div>
+    {toneModalProfile && (
+      <ToneImportModal
+        profile={toneModalProfile}
+        onClose={() => setToneModalProfile(null)}
+        onUpdated={(updated) => {
+          setToneModalProfile(updated);
+          onProfilesChange();
+        }}
+        notify={notify}
+      />
+    )}
+    </>
   );
 }
 
