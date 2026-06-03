@@ -38,7 +38,7 @@ import { DyTopoEngine } from "./dytopo/engine.js";
 import { InterRoundMemoryStore } from "./memory/index.js";
 import { KnowledgeStore } from "./knowledge/index.js";
 import { TemplateStore } from "./templates/store.js";
-import { LavernAdapter, LavernWorkflowAdapter, instantiateTemplate, fromExternalConfig, fromMikeOSSWorkflow } from "./adapters/lavern.js";
+import { LavernAdapter, LavernWorkflowAdapter, instantiateTemplate, fromExternalConfig, fromMikeOSSWorkflow, sanitizePromptContent } from "./adapters/lavern.js";
 import type { TaskTemplate, ExternalAgentConfig, MikeOSSWorkflow } from "./adapters/lavern.js";
 import { pluginRegistry } from "./adapters/plugin.js";
 import {
@@ -725,7 +725,7 @@ EXPECTED_OUTPUT_3: <third expected output>`;
     })();
 
     const toneBlock = lawyerTone
-      ? `\nLAWYER TONE PROFILE — write the final output in this voice:\n${lawyerTone.injectionSnippet}\n`
+      ? `\nLAWYER TONE PROFILE — write the final output in this voice:\n${sanitizePromptContent(lawyerTone.injectionSnippet)}\n`
       : "";
 
     const prompt = `TASK: ${task.description}

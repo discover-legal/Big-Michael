@@ -297,7 +297,7 @@ function buildProcessingPrompt(def: AgentDefinition, ctx: AgentContext): string 
 
   const toneBlock =
     def.domain === "drafting" && ctx.assignedLawyerTone
-      ? `\n────────────────────────────────────────────────────────────────\nASSIGNED LAWYER TONE PROFILE — mirror this voice in all drafted output:\n${ctx.assignedLawyerTone.injectionSnippet}\n`
+      ? `\n────────────────────────────────────────────────────────────────\nASSIGNED LAWYER TONE PROFILE — mirror this voice in all drafted output:\n${sanitizePromptContent(ctx.assignedLawyerTone.injectionSnippet)}\n`
       : "";
 
   return `TASK: ${taskDesc}

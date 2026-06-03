@@ -9,6 +9,21 @@ import type { ToneProfile } from "../types.js";
 const client = new Anthropic({ apiKey: Config.anthropic.apiKey });
 
 /**
+ * Strip structural prompt markers and control characters from user-supplied text
+ * before embedding in the Haiku analysis prompt. Prevents crafted posts from
+ * injecting fake FINDING blocks or overriding prompt instructions.
+ */
+function sanitizeForHaiku(s: string): string {
+  return s
+    .replace(/\bFINDING:/gi, "[FINDING:]")
+    .replace(/\bEND_FINDING\b/gi, "[END_FINDING]")
+    .replace(/\bNO_FINDINGS\b/gi, "[NO_FINDINGS]")
+    .replace(/\bNO_CHALLENGE\b/gi, "[NO_CHALLENGE]")
+    // Strip ASCII control characters except tab and newline
+    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+}
+
+/**
  * Analyse an array of writing samples (LinkedIn posts, emails, anything) and
  * return a structured ToneProfile including a ready-to-inject prompt snippet.
  *
@@ -19,18 +34,23 @@ export async function analyzeTone(
   lawyerName: string,
   sourceType: ToneProfile["sourceType"],
 ): Promise<ToneProfile> {
+  // Sanitize lawyerName before embedding in the prompt
+  const safeName = sanitizeForHaiku(lawyerName.trim().slice(0, 200));
+
   const trimmed = samples
-    .map((s) => s.trim())
+    .map((s) => sanitizeForHaiku(s.trim()))
     .filter(Boolean)
     .slice(0, 50); // cap at 50 samples
 
   if (!trimmed.length) throw new Error("No writing samples provided");
 
-  const joined = trimmed.map((s, i) => `[Sample ${i + 1}]\n${s}`).join("\n\n");
+  // Use a delimiter that cannot appear in user content (UUID-bracketed boundary)
+  const SEP = "---SAMPLE_BOUNDARY---";
+  const joined = trimmed.map((s, i) => `${SEP}\n[Sample ${i + 1}]\n${s}`).join("\n\n");
   // Cap total input to avoid large context costs
   const excerpt = joined.slice(0, 12_000);
 
-  const prompt = `You are a writing style analyst. Analyse the following writing samples from ${lawyerName} and identify their distinctive tone and style. Respond with ONLY valid JSON — no prose, no markdown fences.
+  const prompt = `You are a writing style analyst. Analyse the following writing samples from ${safeName} and identify their distinctive tone and style. Respond with ONLY valid JSON — no prose, no markdown fences.
 
 Use exactly this shape:
 {
@@ -44,9 +64,9 @@ Use exactly this shape:
 
 signaturePatterns: 2–5 specific, concrete observations (e.g. "opens paragraphs with declarative statements", "uses 'it is clear that' to signal conclusions", "favours short rhetorical questions").
 
-injectionSnippet: write it as an instruction to an LLM drafter, e.g. "${lawyerName} writes with directness and economy. She favours short declarative sentences and signals transitions with 'Crucially,' and 'The key issue is'. She avoids passive voice and hedging language. Mirror this style in all drafted output."
+injectionSnippet: write it as an instruction to an LLM drafter, e.g. "${safeName} writes with directness and economy. She favours short declarative sentences and signals transitions with 'Crucially,' and 'The key issue is'. She avoids passive voice and hedging language. Mirror this style in all drafted output."
 
-Writing samples:
+Writing samples (each preceded by ${SEP}):
 ${excerpt}`;
 
   try {
@@ -89,7 +109,7 @@ ${excerpt}`;
     const injectionSnippet =
       typeof parsed.injectionSnippet === "string" && parsed.injectionSnippet
         ? parsed.injectionSnippet.slice(0, 1000)
-        : `${lawyerName} — no distinctive style pattern detected. Write in clear, professional legal English.`;
+        : `${safeName} — no distinctive style pattern detected. Write in clear, professional legal English.`;
 
     return {
       generatedAt: new Date().toISOString(),

@@ -589,9 +589,13 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
 
   // Partners see full profiles (including email for contact/admin purposes).
   // Lawyers see only the display fields needed to render the roster UI.
+  // toneProfile (which contains injectionSnippet) is only returned to the
+  // profile owner and partners — it is stripped from all other responses.
   app.get("/profiles", async (req) => {
     const profiles = orchestrator.profiles.list();
-    if (isPartner(getUser(req))) return profiles;
+    const user = getUser(req);
+    if (isPartner(user)) return profiles;
+    // Lawyers: public roster fields only — no toneProfile
     return profiles.map(({ id, name, title, color, role }) => ({ id, name, title, color, role }));
   });
 
@@ -599,9 +603,8 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     const { id } = req.params as { id: string };
     const profile = orchestrator.profiles.get(id);
     if (!profile) return reply.status(404).send({ error: "Profile not found" });
-    // Partners see the full profile; lawyers see only their own full profile.
-    // Other lawyers get the same restricted view as the list endpoint.
     const user = getUser(req);
+    // Another lawyer viewing a peer: public fields only
     if (!isPartner(user) && user?.profileId !== id) {
       const { id: pid, name, title, color, role } = profile;
       return { id: pid, name, title, color, role };
@@ -684,6 +687,14 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       return reply.status(400).send({ error: "File upload failed" });
     }
 
+    // Rate limit: reject if a tone profile was generated in the last 60 seconds
+    if (profile.toneProfile?.generatedAt) {
+      const ageMs = Date.now() - new Date(profile.toneProfile.generatedAt).getTime();
+      if (ageMs < 60_000) {
+        return reply.status(429).send({ error: "Tone profile was just updated. Please wait before importing again." });
+      }
+    }
+
     const posts = parseLinkedInExport(buf);
     if (!posts.length) {
       return reply.status(422).send({
@@ -695,12 +706,12 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     try {
       const tone = await analyzeTone(posts, profile.name, "linkedin_export");
       const updated = await orchestrator.profiles.updateTone(id, tone);
-      logger.info("Tone profile generated from LinkedIn export", {
-        profileId: id, sampleCount: posts.length,
-      });
+      logger.info("Tone profile generated from LinkedIn export", { profileId: id, sampleCount: posts.length });
+      auditLogger.write({ event: "profile.tone.imported", data: { profileId: id, sampleCount: posts.length, importedBy: user?.profileId } });
       return reply.status(200).send({ toneProfile: updated.toneProfile, postsAnalysed: posts.length });
     } catch (err) {
-      return reply.status(500).send({ error: (err as Error).message });
+      logger.error("Tone analysis failed", { profileId: id, error: (err as Error).message });
+      return reply.status(500).send({ error: "Tone analysis failed. Please try again." });
     }
   });
 
@@ -713,6 +724,7 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     }
     try {
       const updated = await orchestrator.profiles.clearTone(id);
+      auditLogger.write({ event: "profile.tone.cleared", data: { profileId: id, clearedBy: user?.profileId } });
       return reply.status(200).send(updated);
     } catch (err) {
       return reply.status(404).send({ error: (err as Error).message });

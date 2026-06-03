@@ -16,6 +16,7 @@
  */
 
 import { inflateRawSync } from "node:zlib";
+import { basename } from "node:path";
 
 // ─── CSV parser (RFC 4180) ────────────────────────────────────────────────────
 
@@ -65,6 +66,9 @@ function extractPostsFromCSV(csv: string): string[] {
 
 // ─── Minimal ZIP reader (flat archive, STORED or DEFLATE) ────────────────────
 
+// Hard cap on inflated output per entry — protects against zip bombs.
+const MAX_INFLATED_BYTES = 50 * 1024 * 1024; // 50 MB
+
 function readZip(buf: Buffer): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
   let offset = 0;
@@ -73,25 +77,45 @@ function readZip(buf: Buffer): Map<string, Buffer> {
     const sig = buf.readUInt32LE(offset);
     if (sig !== 0x04034b50) break; // local file header signature
 
-    const flags = buf.readUInt16LE(offset + 6);
-    const compression = buf.readUInt16LE(offset + 8);
-    const compressedSize = buf.readUInt32LE(offset + 18);
-    const filenameLen = buf.readUInt16LE(offset + 26);
-    const extraLen = buf.readUInt16LE(offset + 28);
+    const flags        = buf.readUInt16LE(offset + 6);
+    const compression  = buf.readUInt16LE(offset + 8);
+    const compressedSize   = buf.readUInt32LE(offset + 18);
+    const uncompressedSize = buf.readUInt32LE(offset + 22);
+    const filenameLen  = buf.readUInt16LE(offset + 26);
+    const extraLen     = buf.readUInt16LE(offset + 28);
 
     const filenameStart = offset + 30;
-    const filename = buf.subarray(filenameStart, filenameStart + filenameLen).toString("utf8");
+
+    // Bounds-check filename + extra before computing dataStart
+    if (filenameStart + filenameLen + extraLen > buf.length) break;
+
+    // Strip directory components and null bytes from filename to prevent path traversal
+    const rawFilename = buf.subarray(filenameStart, filenameStart + filenameLen).toString("utf8");
+    const filename = basename(rawFilename.replace(/\x00/g, ""));
+
     const dataStart = filenameStart + filenameLen + extraLen;
+
+    // Bounds-check compressed data before reading
+    if (dataStart + compressedSize > buf.length) break;
 
     let fileData: Buffer;
     if (compression === 0) {
-      // STORED
+      // STORED — no decompression needed
       fileData = buf.subarray(dataStart, dataStart + compressedSize);
     } else if (compression === 8) {
-      // DEFLATE
-      fileData = inflateRawSync(buf.subarray(dataStart, dataStart + compressedSize));
+      // DEFLATE — reject if uncompressed size header exceeds cap.
+      // When the data-descriptor flag (bit 3) is set the header size fields are 0;
+      // in that case rely solely on maxOutputLength to enforce the cap.
+      if (!(flags & 0x8) && uncompressedSize > MAX_INFLATED_BYTES) {
+        fileData = Buffer.alloc(0); // entry too large — skip
+      } else {
+        fileData = inflateRawSync(
+          buf.subarray(dataStart, dataStart + compressedSize),
+          { maxOutputLength: MAX_INFLATED_BYTES },
+        );
+      }
     } else {
-      // unsupported compression — skip
+      // Unsupported compression — skip
       fileData = Buffer.alloc(0);
     }
 
@@ -100,8 +124,8 @@ function readZip(buf: Buffer): Map<string, Buffer> {
     let next = dataStart + compressedSize;
     // Data descriptor: present when bit 3 of flags is set
     if (flags & 0x8) {
-      if (buf.readUInt32LE(next) === 0x08074b50) next += 16; // with signature
-      else next += 12; // without signature
+      if (next + 4 <= buf.length && buf.readUInt32LE(next) === 0x08074b50) next += 16;
+      else next += 12;
     }
     offset = next;
   }
