@@ -135,6 +135,9 @@ function readZip(buf: Buffer): Map<string, Buffer> {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/** Low-level RFC 4180 CSV parse — exported for reuse in writingSamples.ts. */
+export { parseCSV, readZip };
+
 /**
  * Parse a LinkedIn data export buffer (ZIP or CSV) and return post text samples.
  * Returns an empty array — never throws — if no posts can be extracted.

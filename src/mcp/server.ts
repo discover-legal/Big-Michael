@@ -41,6 +41,7 @@ import { registerAuthRoutes, readSessionCookie } from "../auth/oauth.js";
 import { detectPracticeArea, detectClient } from "../services/classifier.js";
 import { analyzeTone } from "../services/toneAnalyzer.js";
 import { parseLinkedInExport } from "../linkedin/parser.js";
+import { extractWritingSamples } from "../services/writingSamples.js";
 import { pluginRegistry } from "../adapters/plugin.js";
 import { costStore } from "../cost/index.js";
 
@@ -659,16 +660,71 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   });
 
   /**
-   * POST /profiles/:id/tone/linkedin-import
+   * POST /profiles/:id/tone/import
    *
-   * Upload a LinkedIn data export (ZIP or CSV) to extract posts and generate a
-   * tone profile for the lawyer. Partners can import for any profile; lawyers
-   * can only import for themselves.
+   * Upload any writing sample source to build a tone profile:
+   *   - LinkedIn data export ZIP or CSV (Settings → Data privacy → Get a copy of your data)
+   *   - Generic CSV (one text-rich column, or all cells joined per row)
+   *   - DOCX / Word documents (prose extracted from word/document.xml)
+   *   - PDF (text extracted via PyMuPDF backend)
+   *   - Plain text / Markdown
    *
-   * How to get the export:
-   *   https://www.linkedin.com/mypreferences/d/download-my-data
-   *   → select "Posts & Articles" → Request archive → download ZIP
-   *   Upload the ZIP directly, or extract and upload Shares.csv / Posts and Articles.csv.
+   * Format is auto-detected from the file extension and content.
+   * Partners can import for any profile; lawyers can only import for themselves.
+   */
+  app.post("/profiles/:id/tone/import", async (req, reply) => {
+    const user = getUser(req);
+    const { id } = req.params as { id: string };
+    if (!isPartner(user) && user?.profileId !== id) {
+      return reply.status(403).send({ error: "You can only import tone for your own profile" });
+    }
+    const profile = orchestrator.profiles.get(id);
+    if (!profile) return reply.status(404).send({ error: "Profile not found" });
+
+    let buf: Buffer;
+    let filename = "upload";
+    try {
+      const data = await req.file();
+      if (!data) return reply.status(400).send({ error: "No file uploaded" });
+      buf = await data.toBuffer();
+      filename = data.filename || "upload";
+    } catch {
+      return reply.status(400).send({ error: "File upload failed" });
+    }
+
+    // Rate limit: reject if a tone profile was generated in the last 60 seconds
+    if (profile.toneProfile?.generatedAt) {
+      const ageMs = Date.now() - new Date(profile.toneProfile.generatedAt).getTime();
+      if (ageMs < 60_000) {
+        return reply.status(429).send({ error: "Tone profile was just updated. Please wait before importing again." });
+      }
+    }
+
+    const { samples, sourceType } = await extractWritingSamples(buf, filename);
+    if (!samples.length) {
+      return reply.status(422).send({
+        error: "No writing samples found in the uploaded file. Accepted formats: LinkedIn export ZIP/CSV, Word (.docx), PDF, plain text, or any CSV with a text column.",
+        linkedInExportUrl: "https://www.linkedin.com/mypreferences/d/download-my-data",
+      });
+    }
+
+    try {
+      const tone = await analyzeTone(samples, profile.name, sourceType, id);
+      const updated = await orchestrator.profiles.updateTone(id, tone);
+      logger.info("Tone profile generated", { profileId: id, sampleCount: samples.length, sourceType });
+      auditLogger.write({ event: "profile.tone.imported", data: { profileId: id, sampleCount: samples.length, sourceType, importedBy: user?.profileId } });
+      return reply.status(200).send({ toneProfile: updated.toneProfile, samplesAnalysed: samples.length, sourceType });
+    } catch (err) {
+      logger.error("Tone analysis failed", { profileId: id, error: (err as Error).message });
+      return reply.status(500).send({ error: "Tone analysis failed. Please try again." });
+    }
+  });
+
+  /**
+   * POST /profiles/:id/tone/linkedin-import  (backwards-compatible alias)
+   *
+   * Accepts LinkedIn data export ZIP or CSV.
+   * Calls the same logic as /tone/import — kept for API backwards compatibility.
    */
   app.post("/profiles/:id/tone/linkedin-import", async (req, reply) => {
     const user = getUser(req);
@@ -688,7 +744,6 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       return reply.status(400).send({ error: "File upload failed" });
     }
 
-    // Rate limit: reject if a tone profile was generated in the last 60 seconds
     if (profile.toneProfile?.generatedAt) {
       const ageMs = Date.now() - new Date(profile.toneProfile.generatedAt).getTime();
       if (ageMs < 60_000) {
@@ -708,8 +763,8 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       const tone = await analyzeTone(posts, profile.name, "linkedin_export", id);
       const updated = await orchestrator.profiles.updateTone(id, tone);
       logger.info("Tone profile generated from LinkedIn export", { profileId: id, sampleCount: posts.length });
-      auditLogger.write({ event: "profile.tone.imported", data: { profileId: id, sampleCount: posts.length, importedBy: user?.profileId } });
-      return reply.status(200).send({ toneProfile: updated.toneProfile, postsAnalysed: posts.length });
+      auditLogger.write({ event: "profile.tone.imported", data: { profileId: id, sampleCount: posts.length, sourceType: "linkedin_export", importedBy: user?.profileId } });
+      return reply.status(200).send({ toneProfile: updated.toneProfile, samplesAnalysed: posts.length, sourceType: "linkedin_export" });
     } catch (err) {
       logger.error("Tone analysis failed", { profileId: id, error: (err as Error).message });
       return reply.status(500).send({ error: "Tone analysis failed. Please try again." });
