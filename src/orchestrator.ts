@@ -718,11 +718,21 @@ EXPECTED_OUTPUT_3: <third expected output>`;
       .join("\n\n")
       .slice(0, 200_000);
 
+    const lawyerTone = (() => {
+      const profileId = task.createdByProfileId ?? task.assignedLawyerIds?.[0];
+      if (!profileId) return undefined;
+      return this.profiles.get(profileId)?.toneProfile;
+    })();
+
+    const toneBlock = lawyerTone
+      ? `\nLAWYER TONE PROFILE — write the final output in this voice:\n${lawyerTone.injectionSnippet}\n`
+      : "";
+
     const prompt = `TASK: ${task.description}
 
 ALL FINDINGS FROM ALL ROUNDS:
 ${findingsSummary}
-
+${toneBlock}
 Produce the final legal output for this task. Structure appropriately for the workflow type: ${task.workflowType}.
 Every claim must trace to a specific finding number from the list above.`;
 
