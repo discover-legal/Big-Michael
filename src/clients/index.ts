@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { readFile, writeFile, rename } from "fs/promises";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
-import type { Client, ClientMatter, ConflictCheckResult } from "../types.js";
+import type { Client, ClientMatter, ClientVoiceGuide, ConflictCheckResult } from "../types.js";
 
 export class ClientStore {
   private readonly path = Config.persistence.clientsFile;
@@ -108,6 +108,42 @@ export class ClientStore {
     if (this.clients.length === before) return false;
     await this.persist();
     return true;
+  }
+
+  async setOcg(clientId: string, ocgId: string): Promise<Client> {
+    const c = this.get(clientId);
+    if (!c) throw new Error("Client not found");
+    c.ocgId = ocgId;
+    c.updatedAt = new Date();
+    await this.persist();
+    return c;
+  }
+
+  async clearOcg(clientId: string): Promise<Client> {
+    const c = this.get(clientId);
+    if (!c) throw new Error("Client not found");
+    delete c.ocgId;
+    c.updatedAt = new Date();
+    await this.persist();
+    return c;
+  }
+
+  async setVoiceGuide(clientId: string, guide: ClientVoiceGuide): Promise<Client> {
+    const c = this.get(clientId);
+    if (!c) throw new Error("Client not found");
+    c.voiceGuide = guide;
+    c.updatedAt = new Date();
+    await this.persist();
+    return c;
+  }
+
+  async clearVoiceGuide(clientId: string): Promise<Client> {
+    const c = this.get(clientId);
+    if (!c) throw new Error("Client not found");
+    delete c.voiceGuide;
+    c.updatedAt = new Date();
+    await this.persist();
+    return c;
   }
 
   /** Check whether onboarding `newClientName` conflicts with existing clients. */

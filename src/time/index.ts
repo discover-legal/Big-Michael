@@ -17,7 +17,7 @@ import { randomUUID } from "crypto";
 import { readFile, writeFile, rename } from "fs/promises";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
-import type { TimeEntry, TimeEventType } from "../types.js";
+import type { TimeEntry, TimeEventType, OcgSuggestion } from "../types.js";
 
 export type { TimeEntry, TimeEventType };
 
@@ -98,6 +98,51 @@ export class TimeStore {
     if (!entry) return;
     entry.clioSyncedAt = new Date().toISOString();
     this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+  }
+
+  /** Set OCG suggestions for an entry (replaces any prior suggestions). */
+  setSuggestions(entryId: string, suggestions: OcgSuggestion[]): void {
+    const entry = this.entries.find((e) => e.id === entryId);
+    if (!entry) return;
+    entry.ocgSuggestions = suggestions;
+    entry.ocgCheckedAt = new Date().toISOString();
+    this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+  }
+
+  /**
+   * Accept a suggestion — rewrites the entry description and marks the
+   * suggestion accepted. Returns the updated entry, or undefined if not found.
+   */
+  acceptSuggestion(entryId: string, ruleId: string): TimeEntry | undefined {
+    const entry = this.entries.find((e) => e.id === entryId);
+    if (!entry || !entry.ocgSuggestions) return undefined;
+    const suggestion = entry.ocgSuggestions.find((s) => s.ruleId === ruleId);
+    if (!suggestion) return undefined;
+    entry.description = suggestion.suggestedDescription;
+    suggestion.status = "accepted";
+    this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+    return entry;
+  }
+
+  /**
+   * Dismiss a suggestion — marks it dismissed without changing the description.
+   * Returns the updated entry, or undefined if not found.
+   */
+  dismissSuggestion(entryId: string, ruleId: string): TimeEntry | undefined {
+    const entry = this.entries.find((e) => e.id === entryId);
+    if (!entry || !entry.ocgSuggestions) return undefined;
+    const suggestion = entry.ocgSuggestions.find((s) => s.ruleId === ruleId);
+    if (!suggestion) return undefined;
+    suggestion.status = "dismissed";
+    this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+    return entry;
+  }
+
+  /** List entries that have at least one pending OCG suggestion. */
+  listWithSuggestions(filter?: TimeFilter): TimeEntry[] {
+    return this.list(filter).filter(
+      (e) => e.ocgSuggestions?.some((s) => s.status === "pending"),
+    );
   }
 
   /** Explicit JSON export — same as list(), for the export endpoint. */

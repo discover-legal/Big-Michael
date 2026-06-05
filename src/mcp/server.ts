@@ -47,6 +47,8 @@ import { pluginRegistry } from "../adapters/plugin.js";
 import { costStore } from "../cost/index.js";
 import { clioClient } from "../integrations/clio.js";
 import { twentyClient } from "../integrations/twenty.js";
+import { ocgStore } from "../ocg/index.js";
+import { analyzeClientVoice } from "../services/clientVoiceAnalyzer.js";
 
 // ─── Tool schemas ─────────────────────────────────────────────────────────────
 
@@ -874,6 +876,138 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     return orchestrator.clients.checkConflict(trimmed);
   });
 
+  // ── Outside Counsel Guidelines ────────────────────────────────────────────────
+
+  /** POST /clients/:id/ocg — ingest OCG text for a client (JSON body or multipart file). */
+  app.post("/clients/:id/ocg", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const client = orchestrator.clients.get(id);
+    if (!client) return reply.status(404).send({ error: "Client not found" });
+
+    // Rate-limit: disallow re-ingestion within 60 s of last update
+    const existing = ocgStore.getByClient(id);
+    if (existing) {
+      const ageMs = Date.now() - new Date(existing.updatedAt).getTime();
+      if (ageMs < 60_000) {
+        return reply.status(429).send({ error: "OCG was just updated. Please wait before re-ingesting." });
+      }
+    }
+
+    let title = "Outside Counsel Guidelines";
+    let text = "";
+
+    const ct = req.headers["content-type"] ?? "";
+    if (ct.includes("multipart/form-data")) {
+      const parts: Array<import("@fastify/multipart").MultipartFile> = [];
+      for await (const part of req.parts()) {
+        if ("file" in part) {
+          parts.push(part as import("@fastify/multipart").MultipartFile);
+        } else {
+          const field = part as { fieldname: string; value: string };
+          if (field.fieldname === "title") title = String(field.value).trim() || title;
+        }
+      }
+      if (!parts.length) return reply.status(400).send({ error: "No file uploaded" });
+      const buf = await parts[0].toBuffer();
+      const { samples } = await extractWritingSamples(buf, parts[0].filename ?? "ocg");
+      text = samples.join("\n\n");
+    } else {
+      const body = req.body as { title?: string; text?: string };
+      if (body.title) title = String(body.title).trim() || title;
+      text = String(body.text ?? "").trim();
+    }
+
+    if (!text) return reply.status(400).send({ error: "OCG text is required" });
+
+    try {
+      const ocgDoc = await ocgStore.ingest(id, title, text);
+      await orchestrator.clients.setOcg(id, ocgDoc.id);
+      auditLogger.write({ event: "client.ocg.ingested", data: { clientId: id, ruleCount: ocgDoc.rules.length, ingestedBy: getUser(req)?.profileId } });
+      return reply.status(200).send({ ocg: ocgDoc, ruleCount: ocgDoc.rules.length });
+    } catch (err) {
+      logger.error("OCG ingestion failed", { clientId: id, error: (err as Error).message });
+      return reply.status(500).send({ error: "OCG ingestion failed. Please try again." });
+    }
+  });
+
+  /** GET /clients/:id/ocg — retrieve the OCG document for a client. */
+  app.get("/clients/:id/ocg", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const ocgDoc = ocgStore.getByClient(id);
+    if (!ocgDoc) return reply.status(404).send({ error: "No OCG document found for this client" });
+    return ocgDoc;
+  });
+
+  /** DELETE /clients/:id/ocg — remove the OCG document for a client. */
+  app.delete("/clients/:id/ocg", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    try {
+      await ocgStore.remove(id);
+      await orchestrator.clients.clearOcg(id);
+      auditLogger.write({ event: "client.ocg.deleted", data: { clientId: id, deletedBy: getUser(req)?.profileId } });
+      return reply.status(200).send({ ok: true });
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
+  // ── Client voice guide ────────────────────────────────────────────────────────
+
+  /** POST /clients/:id/voice-guide/import — build a ClientVoiceGuide from writing samples. */
+  app.post("/clients/:id/voice-guide/import", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const client = orchestrator.clients.get(id);
+    if (!client) return reply.status(404).send({ error: "Client not found" });
+
+    // Rate-limit: 60 s since last voice guide generation
+    if (client.voiceGuide?.generatedAt) {
+      const ageMs = Date.now() - new Date(client.voiceGuide.generatedAt).getTime();
+      if (ageMs < 60_000) {
+        return reply.status(429).send({ error: "Voice guide was just generated. Please wait before re-importing." });
+      }
+    }
+
+    let buf: Buffer;
+    let filename = "samples";
+    try {
+      const data = await req.file();
+      if (!data) return reply.status(400).send({ error: "No file uploaded" });
+      filename = data.filename ?? filename;
+      buf = await data.toBuffer();
+    } catch {
+      return reply.status(400).send({ error: "File upload failed" });
+    }
+
+    try {
+      const { samples } = await extractWritingSamples(buf, filename);
+      if (!samples.length) return reply.status(422).send({ error: "No text samples found in uploaded file" });
+      const guide = await analyzeClientVoice(samples, id);
+      await orchestrator.clients.setVoiceGuide(id, guide);
+      auditLogger.write({ event: "client.voiceguide.imported", data: { clientId: id, sampleCount: samples.length, importedBy: getUser(req)?.profileId } });
+      return reply.status(200).send({ voiceGuide: guide, samplesAnalysed: samples.length });
+    } catch (err) {
+      logger.error("Client voice analysis failed", { clientId: id, error: (err as Error).message });
+      return reply.status(500).send({ error: "Voice guide generation failed. Please try again." });
+    }
+  });
+
+  /** DELETE /clients/:id/voice-guide — clear the voice guide for a client. */
+  app.delete("/clients/:id/voice-guide", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    try {
+      await orchestrator.clients.clearVoiceGuide(id);
+      auditLogger.write({ event: "client.voiceguide.cleared", data: { clientId: id, clearedBy: getUser(req)?.profileId } });
+      return reply.status(200).send({ ok: true });
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
   // Both GET and PUT are partner-only: GET exposes the DocuSeal URL and
   // enabled state; PUT can redirect DocuSeal requests (SSRF) or weaken
@@ -982,12 +1116,13 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   // Lawyers see only their own entries; partners see all.
   app.get("/time-entries", async (req) => {
     const user = getUser(req);
-    const { profileId, taskId, matterNumber, from, to } = req.query as Record<string, string>;
+    const { profileId, taskId, matterNumber, clientNumber, from, to } = req.query as Record<string, string>;
     const filter = {
       // Lawyers are restricted to their own entries; partners may filter by any profileId.
       profileId: isPartner(user) ? (profileId || undefined) : user?.profileId,
       taskId: taskId || undefined,
       matterNumber: matterNumber || undefined,
+      clientNumber: clientNumber || undefined,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
     };
@@ -1020,6 +1155,110 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     reply.header("Content-Type", "text/csv; charset=utf-8");
     reply.header("Content-Disposition", "attachment; filename=\"time-entries.csv\"");
     return orchestrator.time.exportCsv(filter);
+  });
+
+  // ── OCG time-entry compliance ─────────────────────────────────────────────────
+
+  /**
+   * GET /time-entries/suggestions — list entries with pending OCG suggestions.
+   * Partners see all; lawyers see only their own.
+   */
+  app.get("/time-entries/suggestions", async (req) => {
+    const user = getUser(req);
+    const { profileId, clientNumber, matterNumber } = req.query as Record<string, string>;
+    const filter = {
+      profileId: isPartner(user) ? (profileId || undefined) : user?.profileId,
+      clientNumber: clientNumber || undefined,
+      matterNumber: matterNumber || undefined,
+    };
+    return orchestrator.time.listWithSuggestions(filter);
+  });
+
+  /**
+   * POST /time-entries/run-ocg-check — run OCG compliance check on a batch
+   * of time entries for a given client or matter. Partner only.
+   */
+  app.post("/time-entries/run-ocg-check", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { clientNumber, matterNumber, limit } = req.body as { clientNumber?: string; matterNumber?: string; limit?: number };
+    const cap = Math.min(limit ?? 100, 500);
+
+    const allEntries = orchestrator.time.list({
+      clientNumber: clientNumber || undefined,
+      matterNumber: matterNumber || undefined,
+    }).slice(0, cap);
+
+    // Group entries by clientId (resolved via clientNumber on the entry)
+    const byClientId = new Map<string, typeof allEntries>();
+    for (const entry of allEntries) {
+      if (!entry.clientNumber) continue;
+      const client = orchestrator.clients.getByClientNumber(entry.clientNumber);
+      if (!client) continue;
+      const ocgDoc = ocgStore.getByClient(client.id);
+      if (!ocgDoc) continue;
+      const arr = byClientId.get(client.id) ?? [];
+      arr.push(entry);
+      byClientId.set(client.id, arr);
+    }
+
+    let checked = 0;
+    let withSuggestions = 0;
+
+    for (const [clientId, entries] of byClientId) {
+      const ocgDoc = ocgStore.getByClient(clientId);
+      if (!ocgDoc) continue;
+      try {
+        const suggestions = await ocgStore.checkEntries(entries, ocgDoc);
+        for (const [entryId, sug] of suggestions) {
+          orchestrator.time.setSuggestions(entryId, sug);
+          if (sug.length) withSuggestions++;
+        }
+        checked += entries.length;
+      } catch (err) {
+        logger.warn("OCG check batch failed", { clientId, error: (err as Error).message });
+      }
+    }
+
+    return { checked, withSuggestions };
+  });
+
+  /** POST /time-entries/:id/suggestions/accept — accept a suggestion (rewrites description). */
+  app.post("/time-entries/:id/suggestions/accept", async (req, reply) => {
+    const user = getUser(req);
+    const { id } = req.params as { id: string };
+    const { ruleId } = req.body as { ruleId: string };
+    if (!ruleId) return reply.status(400).send({ error: "ruleId is required" });
+
+    // Find the entry and check access (partner or owner)
+    const entries = orchestrator.time.list();
+    const entry = entries.find((e) => e.id === id);
+    if (!entry) return reply.status(404).send({ error: "Time entry not found" });
+    if (!isPartner(user) && user?.profileId !== entry.profileId) {
+      return reply.status(403).send({ error: "Access denied" });
+    }
+
+    const updated = orchestrator.time.acceptSuggestion(id, ruleId);
+    if (!updated) return reply.status(404).send({ error: "Suggestion not found" });
+    return updated;
+  });
+
+  /** POST /time-entries/:id/suggestions/dismiss — dismiss a suggestion. */
+  app.post("/time-entries/:id/suggestions/dismiss", async (req, reply) => {
+    const user = getUser(req);
+    const { id } = req.params as { id: string };
+    const { ruleId } = req.body as { ruleId: string };
+    if (!ruleId) return reply.status(400).send({ error: "ruleId is required" });
+
+    const entries = orchestrator.time.list();
+    const entry = entries.find((e) => e.id === id);
+    if (!entry) return reply.status(404).send({ error: "Time entry not found" });
+    if (!isPartner(user) && user?.profileId !== entry.profileId) {
+      return reply.status(403).send({ error: "Access denied" });
+    }
+
+    const updated = orchestrator.time.dismissSuggestion(id, ruleId);
+    if (!updated) return reply.status(404).send({ error: "Suggestion not found" });
+    return updated;
   });
 
   // ── NOSLEGAL analytics ────────────────────────────────────────────────────────

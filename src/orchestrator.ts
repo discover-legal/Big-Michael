@@ -33,6 +33,7 @@ import { SettingsStore } from "./settings/index.js";
 import { ProfileStore } from "./auth/index.js";
 import { ClientStore } from "./clients/index.js";
 import { TimeStore } from "./time/index.js";
+import { OcgStore } from "./ocg/index.js";
 import { agentLearning } from "./learning/index.js";
 import { DyTopoEngine } from "./dytopo/engine.js";
 import { InterRoundMemoryStore } from "./memory/index.js";
@@ -121,6 +122,7 @@ export class Orchestrator {
   readonly profiles: ProfileStore;
   readonly clients: ClientStore;
   readonly time: TimeStore;
+  readonly ocg: OcgStore;
 
   private readonly tasks: Map<string, Task> = new Map();
   private readonly gateEmitter = new EventEmitter();
@@ -137,6 +139,7 @@ export class Orchestrator {
     this.profiles = new ProfileStore();
     this.clients = new ClientStore();
     this.time = new TimeStore();
+    this.ocg = new OcgStore();
   }
 
   async init(): Promise<void> {
@@ -145,6 +148,7 @@ export class Orchestrator {
     await this.profiles.init();
     await this.clients.init();
     await this.time.init();
+    await this.ocg.init();
     await agentLearning.init();
     await Promise.all([
       this.registry.init(),
