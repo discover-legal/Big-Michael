@@ -14,7 +14,8 @@
     "smoke-test": "cross-env ANTHROPIC_API_KEY=smoke-test OPENAI_API_KEY=smoke-test tsx src/scripts/smoke-test.ts",
     "test": "cross-env ANTHROPIC_API_KEY=test OPENAI_API_KEY=test tsx --test tests/unit.test.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "setup": "tsx scripts/setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
