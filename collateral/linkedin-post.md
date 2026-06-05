@@ -123,7 +123,7 @@ CSV exports now include the `clioSyncedAt` column. Audit trail in a spreadsheet,
 
 ## v0.5.0 post — The billing + audit drop
 
-Big Michael bills his own time, enforces your OCG, and keeps a diary you can subpoena.
+Big Michael bills his own time, enforces your OCG, and keeps receipts.
 
 That last one matters. Hash-chained, tamper-evident JSONL — OpenSearch, Splunk, or a webhook you control. Every message he sends. Every gate he holds. Every human call. The chain is verifiable. The record is yours, not ours.
 
@@ -157,7 +157,7 @@ Which of your matters does Big Michael take first?
 
 ## v0.5.0 post — The billing + audit drop (ultra-short)
 
-Big Michael bills his own time, enforces your OCG, and keeps a diary you can subpoena.
+Big Michael bills his own time, enforces your OCG, and keeps receipts.
 
 → LEDES 1998B + UTBMS, classified before it leaves his desk. OCG compliance pass before every pre-bill.
 → Pre-bill review cycle. Matter budgets with live burn alerts. Cost predictor from your own data.
