@@ -17,6 +17,7 @@ import { randomUUID } from "crypto";
 import { readFile, writeFile, rename } from "fs/promises";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
+import { auditLogger, ACTOR_SYSTEM } from "../audit/index.js";
 import { classifyUtbms } from "../billing/utbms.js";
 import type { TimeEntry, TimeEventType, OcgSuggestion } from "../types.js";
 
@@ -74,6 +75,13 @@ export class TimeStore {
     };
     this.entries.push(newEntry);
     this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+    auditLogger.write({
+      event: "time.opened",
+      actorId: newEntry.profileId ?? ACTOR_SYSTEM,
+      taskId: newEntry.taskId,
+      agentId: newEntry.agentId,
+      data: { entryId: newEntry.id, event: newEntry.event, description: newEntry.description.slice(0, 200), matterNumber: newEntry.matterNumber, clientNumber: newEntry.clientNumber },
+    });
     return newEntry;
   }
 
@@ -92,6 +100,14 @@ export class TimeStore {
       entry.billingAmountUsd = parseFloat((entry.billingUnits * 0.1 * entry.billingRate).toFixed(4));
     }
     this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+    auditLogger.write({
+      event: "time.closed",
+      actorId: entry.profileId ?? ACTOR_SYSTEM,
+      taskId: entry.taskId,
+      agentId: entry.agentId,
+      durationMs: entry.durationMs,
+      data: { entryId: entry.id, event: entry.event, billingUnits: entry.billingUnits, billingAmountUsd: entry.billingAmountUsd, matterNumber: entry.matterNumber, clientNumber: entry.clientNumber },
+    });
     classifyUtbms(entry.description ?? entry.event, entry.event).then(({ taskCode, activityCode }) => {
       entry.utbmsTaskCode = taskCode;
       entry.utbmsActivityCode = activityCode;

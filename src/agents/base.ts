@@ -29,6 +29,7 @@ import type {
   MemoryEntry,
   ToneProfile,
 } from "../types.js";
+import { auditLogger, ACTOR_SYSTEM } from "../audit/index.js";
 
 export interface AgentContext {
   roundGoal: RoundGoal;
@@ -92,6 +93,17 @@ export class Agent {
    */
   async process(ctx: AgentContext): Promise<Finding[]> {
     const startedAt = new Date();
+
+    if (ctx.taskId) {
+      auditLogger.write({
+        event: "agent.processing",
+        actorId: ctx.responsibleLawyerId ?? ACTOR_SYSTEM,
+        taskId: ctx.taskId,
+        agentId: this.definition.id,
+        data: { agentName: this.definition.name, tier: this.definition.tier, domain: this.definition.domain, round: ctx.roundGoal.round },
+      });
+    }
+
     const taskType = inferTaskType(this.definition);
     const complexity = estimateComplexity(ctx.roundGoal.description);
 
@@ -127,10 +139,31 @@ export class Agent {
           memory: ctx.memory!,
           taskId: ctx.taskId!,
           ownerId: ctx.ownerId,
+          responsibleLawyerId: ctx.responsibleLawyerId,
         })
       : await this.callModel(prompt, maxTokens, model, { taskId: ctx.taskId, costContext: "task" });
 
     const findings = parseFindings(text, this.definition);
+
+    if (ctx.taskId) {
+      for (const f of findings) {
+        auditLogger.write({
+          event: "finding.produced",
+          actorId: ctx.responsibleLawyerId ?? ACTOR_SYSTEM,
+          taskId: ctx.taskId,
+          agentId: this.definition.id,
+          data: { findingId: f.id, agentName: this.definition.name, confidence: f.confidence, round: ctx.roundGoal.round, contentPreview: f.content.slice(0, 150) },
+        });
+      }
+      auditLogger.write({
+        event: "agent.complete",
+        actorId: ctx.responsibleLawyerId ?? ACTOR_SYSTEM,
+        taskId: ctx.taskId,
+        agentId: this.definition.id,
+        durationMs: Date.now() - startedAt.getTime(),
+        data: { agentName: this.definition.name, findingCount: findings.length, round: ctx.roundGoal.round },
+      });
+    }
 
     // Record agent time entry if billing is configured and a task is in context.
     if (Config.agentBilling.enabled && ctx.timeStore && ctx.taskId) {
@@ -171,6 +204,7 @@ export class Agent {
       memory: InterRoundMemoryStore;
       taskId: string;
       ownerId?: string;
+      responsibleLawyerId?: string;
     },
   ): Promise<string> {
     const toolSchemas = refs.toolRegistry.schemasFor(this.definition.allowedTools);
@@ -179,6 +213,7 @@ export class Agent {
       memory: refs.memory,
       taskId: refs.taskId,
       ownerId: refs.ownerId,
+      responsibleLawyerId: refs.responsibleLawyerId,
     };
 
     const provider = getProvider(model);

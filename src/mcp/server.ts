@@ -319,6 +319,24 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   // a request somehow arrives with no session (should not happen on protected routes).
   const actorOf = (req: FastifyRequest): string => getUser(req)?.profileId ?? "anonymous";
 
+  // Emit access.denied / auth.session.expired for all 403 / 401 responses.
+  app.addHook("onSend", async (req, reply, payload) => {
+    if (reply.statusCode === 403) {
+      auditLogger.write({
+        event: "access.denied",
+        actorId: actorOf(req),
+        data: { method: req.method, url: req.url },
+      });
+    } else if (reply.statusCode === 401) {
+      auditLogger.write({
+        event: "auth.session.expired",
+        actorId: actorOf(req),
+        data: { url: req.url },
+      });
+    }
+    return payload;
+  });
+
   // Optional shared-secret auth. When API_KEY is set, every request except the
   // health check must present it as `x-api-key`. This is defence-in-depth for
   // anyone who runs the API off loopback; on 127.0.0.1 it can be left unset.
@@ -396,7 +414,7 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
     const { id } = req.params as { id: string };
     const { lawyerIds } = req.body as { lawyerIds: string[] };
-    const task = orchestrator.assignLawyers(id, Array.isArray(lawyerIds) ? lawyerIds : []);
+    const task = orchestrator.assignLawyers(id, Array.isArray(lawyerIds) ? lawyerIds : [], actorOf(req));
     if (!task) return reply.status(404).send({ error: "Task not found" });
     return task;
   });
@@ -536,12 +554,18 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   app.get("/documents/search", async (req) => {
     const { query, topK, jurisdiction, documentType } = req.query as Record<string, string>;
     const topKNum = topK ? parseInt(topK, 10) : undefined;
-    return orchestrator.knowledge.search(query, {
+    const results = await orchestrator.knowledge.search(query, {
       topK: topKNum && Number.isInteger(topKNum) && topKNum > 0 ? Math.min(topKNum, 50) : undefined,
       jurisdiction,
       documentType,
       ownerId: docOwnerScope(req),
     });
+    auditLogger.write({
+      event: "document.searched",
+      actorId: actorOf(req),
+      data: { query: query ?? "", resultCount: results.length, jurisdiction, documentType },
+    });
+    return results;
   });
 
   app.get("/agents", async (req) => {

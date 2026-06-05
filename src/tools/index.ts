@@ -52,6 +52,10 @@ export interface ToolContext {
   /** ProfileId of the task creator — used to scope document searches to the owner's
    *  documents only. Undefined for partner-submitted tasks (see all documents). */
   ownerId?: string;
+  /** ProfileId of the lawyer responsible for this task.  Used as actorId in audit
+   *  events so external connector calls (Westlaw, Clio, CourtListener, etc.) can be
+   *  traced back to a specific human rather than logged as "system". */
+  responsibleLawyerId?: string;
 }
 
 export interface ToolImpl {
@@ -319,6 +323,22 @@ const citationCheckTool: ToolImpl = {
 
 // ─── ToolRegistry ─────────────────────────────────────────────────────────────
 
+/** Classify a tool call as "external_connector" or "internal" for audit trail.
+ *  Courts need to see when a lawyer's task triggered access to an external system
+ *  (Westlaw, CourtListener, Clio, etc.) not just that "system" made a call. */
+const EXTERNAL_CONNECTOR_PREFIXES = [
+  "court_listener", "westlaw", "everlaw", "trellis", "descrybe", "solve_intelligence",
+  "ironclad", "docusign", "imanage", "definely", "lawve",
+  "google_drive", "box_", "slack", "topcounsel", "clio_", "twenty_",
+  "web_search",
+];
+function toolCategory(name: string): "external_connector" | "internal" {
+  const n = name.toLowerCase();
+  return EXTERNAL_CONNECTOR_PREFIXES.some((p) => n === p || n.startsWith(p + "_") || n.startsWith(p))
+    ? "external_connector"
+    : "internal";
+}
+
 const ALL_TOOLS: ToolImpl[] = [
   webSearchTool,
   searchKnowledgeTool,
@@ -373,25 +393,27 @@ export class ToolRegistry {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Unknown tool: ${name}`);
     const start = Date.now();
-    auditLogger.write({ event: "tool.call", actorId: ACTOR_SYSTEM, taskId: ctx.taskId, data: { tool: name, input } });
+    const actor = ctx.responsibleLawyerId ?? ACTOR_SYSTEM;
+    const category = toolCategory(name);
+    auditLogger.write({ event: "tool.call", actorId: actor, taskId: ctx.taskId, data: { tool: name, input, category } });
     logger.debug("Tool executing", { tool: name });
     try {
       const result = await tool.execute(input, ctx);
       auditLogger.write({
         event: "tool.result",
-        actorId: ACTOR_SYSTEM,
+        actorId: actor,
         taskId: ctx.taskId,
         durationMs: Date.now() - start,
-        data: { tool: name, ok: true },
+        data: { tool: name, ok: true, category },
       });
       return result;
     } catch (err) {
       auditLogger.write({
         event: "tool.result",
-        actorId: ACTOR_SYSTEM,
+        actorId: actor,
         taskId: ctx.taskId,
         durationMs: Date.now() - start,
-        data: { tool: name, ok: false, error: (err as Error).message },
+        data: { tool: name, ok: false, error: (err as Error).message, category },
       });
       throw err;
     }

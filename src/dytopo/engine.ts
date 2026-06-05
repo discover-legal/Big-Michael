@@ -26,6 +26,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Config } from "../config.js";
 import { embed, embedBatch, cosineSimilarity } from "../embeddings.js";
 import { logger } from "../logger.js";
+import { auditLogger, ACTOR_SYSTEM } from "../audit/index.js";
 import { Agent } from "../agents/base.js";
 import { AgentRegistry } from "../agents/registry.js";
 import { globalToolRegistry } from "../tools/index.js";
@@ -88,6 +89,13 @@ export class DyTopoEngine {
   async runRound(task: Task, goal: RoundGoal, lawyerTone?: ToneProfile, billingCtx?: AgentBillingCtx): Promise<RoundState> {
     const roundId = uuidv4();
     const intraMemory = new IntraRoundMemoryStore(roundId);
+
+    auditLogger.write({
+      event: "round.start",
+      actorId: ACTOR_SYSTEM,
+      taskId: task.id,
+      data: { round: goal.round, phase: goal.phase, roundId },
+    });
 
     logger.info("DyTopo round starting", {
       taskId: task.id,
@@ -187,6 +195,20 @@ export class DyTopoEngine {
       startedAt: new Date(),
       completedAt: new Date(),
     };
+
+    auditLogger.write({
+      event: "round.complete",
+      actorId: ACTOR_SYSTEM,
+      taskId: task.id,
+      data: {
+        round: goal.round,
+        phase: goal.phase,
+        roundId,
+        agents: activeDefinitions.map((a) => ({ id: a.id, name: a.name })),
+        findings: allFindings.length,
+        edges: edges.length,
+      },
+    });
 
     logger.info("DyTopo round complete", {
       round: goal.round,
