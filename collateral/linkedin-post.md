@@ -123,34 +123,34 @@ CSV exports now include the `clioSyncedAt` column. Audit trail in a spreadsheet,
 
 ## v0.5.0 post — The billing + audit drop
 
-Big Michael v0.5.0. The billing stack and the audit log landed together. That's what this is.
+Big Michael got a sling. The billing stack and the audit log landed together. That's what this is: v0.5.0.
 
-The billing stack:
+Your billing software doesn't enforce your OCG. This does:
 
-→ **LEDES 1998B export with UTBMS task codes** — auto-classified by Haiku, editable before submission. Real legal billing format, not a CSV with delusions.
-→ **OCG enforcement.** Outside Counsel Guidelines as a structured rule dictionary. Every time entry gets a compliance pass before it touches a pre-bill. Haiku extracts the mechanical parameters; the rules fire deterministically. No vibes.
-→ **Pre-bill review workflow** — draft, review, approve, invoice. The whole cycle. Partners see it; associates see their part.
-→ **Matter budget tracking with real-time burn alerts over SSE.** You set a budget. You get warned before it's a problem.
-→ **Budget predictor** — pure statistical forecasting from your own historical time data. If this matter looks like those matters, here's the range. No black-box ML.
-→ **AI work time accrues as billable entries automatically.** The agents work. The clock runs. You review it like any other time entry.
+→ LEDES 1998B + UTBMS task codes — Haiku classifies every entry before it leaves the agent. You edit. You submit. Real legal billing format, not a CSV with delusions.
+→ OCG compliance pass on every time entry. Structured rule dictionary, deterministic checks, Haiku-extracted parameters. Before the pre-bill, not after the client calls.
+→ Pre-bill review — draft, review, approve, invoice. Partners see the whole thing. Associates see their part.
+→ Matter budgets with live burn alerts over SSE. Set the number. Get warned before you have to explain it.
+→ Cost predictor from your own historical data. If this matter looks like those matters, here's the range. No vendor. No black box.
+→ AI work time accrues as billable entries automatically. The agents work. The clock runs. (An AI helped build the system that bills AI time. I find this more amusing than I probably should. — Claude)
 
-The audit log:
+The audit log your compliance team has been asking for: hash-chained, tamper-evident JSONL with pluggable sinks — OpenSearch, Splunk, or a webhook you control. Every agent message, every gate, every human call. The chain makes the record verifiable. The sinks make it yours to keep, not ours.
 
-**Hash-chained, tamper-evident JSONL** with pluggable sinks — OpenSearch, Splunk, or a webhook of your choice. Every agent message, every round, every gate decision, every human approval or rejection. The chain makes the record verifiable. The sinks make it yours to keep, not ours.
+The rest of what landed:
 
-The operational layer:
+→ CourtListener docket monitoring — new filings in, SSE alert out to counsel
+→ Regulatory pulse — new rules scanned against your open matters on a schedule
+→ Client status reports generated from actual round history, not from memory
+→ TypeDB multi-hop conflict graph — n-ary detection, not a list match
+→ Deadline calculator — FRCP / UK CPR / EU Competition; trigger date → every downstream date, cited
+→ Twenty CRM
+→ `curl -fsSL https://raw.githubusercontent.com/discover-legal/big-michael/main/setup.sh | bash`
 
-→ CourtListener docket monitoring — new filings auto-ingested, SSE alert pushed to counsel
-→ Regulatory pulse — scans for new regulatory updates against your open matters on a schedule
-→ Automated client status reports — generated from actual round history, not from memory
-→ TypeDB multi-hop conflict graph — n-ary conflict detection, not just a list match
-→ Court deadline calculator — FRCP / UK CPR / EU Competition; trigger date → every downstream deadline, cited
-→ Twenty CRM integration
-→ One-liner install: `curl -fsSL https://raw.githubusercontent.com/discover-legal/big-michael/main/setup.sh | bash`
+An AI, a lawyer, and open source walked into a GitHub repo. The audit log has the whole story. 🐢
 
-Still on Mike (Will Chen) and Lavern (Antti Innanen)'s shoulders. Still AGPL-3.0. Still turtles all the way down. 🐢
+Still on Mike (Will Chen) and Lavern (Antti Innanen)'s shoulders. Still AGPL-3.0.
 
-What part of your practice does this touch first?
+Which matter do you run through it first?
 
 #LegalAI #LegalTech #OpenSource #LegalBilling #OCG
 
@@ -158,19 +158,18 @@ What part of your practice does this touch first?
 
 ## v0.5.0 post — The billing + audit drop (ultra-short)
 
-Big Michael v0.5.0:
+Big Michael v0.5.0. Your billing software doesn't enforce your OCG. This does.
 
-→ LEDES 1998B + UTBMS auto-classification + OCG enforcement on every entry  
-→ Pre-bill review cycle — draft, review, approve, invoice  
-→ Matter budgets with real-time burn alerts; statistical cost predictor from your own data  
-→ AI work time → billable entries, automatically  
-→ Hash-chained tamper-evident audit log with OpenSearch / Splunk / webhook sinks  
-→ Docket monitoring, regulatory pulse, client status reports, TypeDB conflict graph  
-→ One-liner install now
+→ LEDES 1998B + UTBMS auto-classification + OCG compliance pass before every pre-bill
+→ Pre-bill review cycle. Matter budgets. Statistical cost predictor from your own data.
+→ AI work time → billable entries automatically. (An AI built the thing that bills AI time. — Claude)
+→ Hash-chained audit log. OpenSearch / Splunk / webhook. Yours to keep.
+→ Docket monitoring, regulatory pulse, client status reports, TypeDB conflict graph, deadline calculator, Twenty CRM.
+→ `curl -fsSL .../setup.sh | bash`
 
-Still turtles. 🐢
+An AI, a lawyer, and open source walked into a GitHub repo. The audit log has the whole story. 🐢
 
-#LegalAI #LegalTech #OpenSource
+#LegalAI #LegalTech #OpenSource #LegalBilling
 
 ---
 
