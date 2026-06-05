@@ -284,24 +284,64 @@ export interface Task {
 
 // ─── Time tracking ───────────────────────────────────────────────────────────
 
-export type TimeEventType = "task_run" | "gate_review";
+export type TimeEventType =
+  | "task_run"    // lawyer-supervised task execution
+  | "gate_review" // lawyer reviewing a human gate
+  | "agent_work"; // AI agent running a DyTopo round phase
+
+export type OcgRuleCategory =
+  | "billing_increments"
+  | "entry_specificity"
+  | "prohibited_tasks"
+  | "rate_limits"
+  | "staffing"
+  | "description_format"
+  | "timing"
+  | "other";
+
+export interface OcgSuggestion {
+  ruleId: string;
+  ruleText: string;
+  category: OcgRuleCategory;
+  severity: "hard" | "soft";
+  issue: string;
+  suggestedDescription: string;
+  status: "pending" | "accepted" | "dismissed";
+}
 
 export interface TimeEntry {
   id: string;
-  profileId: string;         // lawyer who submitted / reviewed
-  profileName: string;
+  /** Lawyer the entry is attributed to for billing. Optional on agent_work entries
+   *  where no responsible lawyer is assigned (partner-only visibility in that case). */
+  profileId?: string;
+  profileName?: string;
+  /** Set on agent_work entries — identifies which agent performed the work. */
+  agentId?: string;
+  agentName?: string;
   taskId: string;
   matterNumber?: string;
   clientNumber?: string;
-  description: string;       // auto-generated: e.g. "Task: Review employment contract" or "Gate review: Finding #3"
+  description: string;
   event: TimeEventType;
   startedAt: Date;
-  endedAt?: Date;            // undefined while task is still running
-  durationMs: number;        // 0 while running; populated on close
+  endedAt?: Date;
+  durationMs: number;
   /** 6-minute billing increments (0.1 hr each). Rounded UP. 0 while running. */
   billingUnits: number;
+  /** USD/hour rate captured at the time the entry is created (agent_work only). */
+  billingRate?: number;
+  /** Pre-computed fee: billingUnits × 0.1 × billingRate. Set on close. */
+  billingAmountUsd?: number;
   /** ISO timestamp set when this entry has been pushed to a Clio matter as an activity. */
   clioSyncedAt?: string;
+  /** OCG compliance suggestions for this entry. */
+  ocgSuggestions?: OcgSuggestion[];
+  /** ISO timestamp of the last OCG compliance check run on this entry. */
+  ocgCheckedAt?: string;
+  /** UTBMS Phase/Task code assigned on close, e.g. "L210" (Pleadings). */
+  utbmsTaskCode?: string;
+  /** UTBMS Activity code assigned on close, e.g. "A103" (Draft/Revise). */
+  utbmsActivityCode?: string;
 }
 
 /** Structured spreadsheet-style output for the `tabulate` workflow. */

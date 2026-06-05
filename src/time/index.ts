@@ -17,17 +17,21 @@ import { randomUUID } from "crypto";
 import { readFile, writeFile, rename } from "fs/promises";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
-import type { TimeEntry, TimeEventType } from "../types.js";
+import { classifyUtbms } from "../billing/utbms.js";
+import type { TimeEntry, TimeEventType, OcgSuggestion } from "../types.js";
 
 export type { TimeEntry, TimeEventType };
 
 export interface TimeFilter {
   profileId?: string;
+  agentId?: string;
   taskId?: string;
   matterNumber?: string;
   clientNumber?: string;
   from?: Date;
   to?: Date;
+  /** When true, only return agent_work entries. When false, exclude them. Omit for all. */
+  agentOnly?: boolean;
 }
 
 const SIX_MIN_MS = 6 * 60 * 1000; // 360 000 ms
@@ -83,8 +87,29 @@ export class TimeStore {
     entry.endedAt = endedAt;
     entry.durationMs = endedAt.getTime() - entry.startedAt.getTime();
     entry.billingUnits = Math.ceil(entry.durationMs / SIX_MIN_MS);
+    if (entry.billingRate) {
+      entry.billingAmountUsd = parseFloat((entry.billingUnits * 0.1 * entry.billingRate).toFixed(4));
+    }
     this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+    classifyUtbms(entry.description ?? entry.event, entry.event).then(({ taskCode, activityCode }) => {
+      entry.utbmsTaskCode = taskCode;
+      entry.utbmsActivityCode = activityCode;
+      this.persist().catch((err) => logger.warn("Failed to persist time entries after UTBMS", { error: (err as Error).message }));
+    }).catch(() => { /* classification failure is non-fatal */ });
     return entry;
+  }
+
+  /** Get a single entry by ID. */
+  getById(id: string): TimeEntry | undefined {
+    return this.entries.find((e) => e.id === id);
+  }
+
+  /** Overwrite the description on an entry (used by the queue worker). */
+  updateDescription(id: string, description: string): void {
+    const entry = this.entries.find((e) => e.id === id);
+    if (!entry) return;
+    entry.description = description;
+    this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
   }
 
   /** List entries with optional filtering. */
@@ -100,6 +125,51 @@ export class TimeStore {
     this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
   }
 
+  /** Set OCG suggestions for an entry (replaces any prior suggestions). */
+  setSuggestions(entryId: string, suggestions: OcgSuggestion[]): void {
+    const entry = this.entries.find((e) => e.id === entryId);
+    if (!entry) return;
+    entry.ocgSuggestions = suggestions;
+    entry.ocgCheckedAt = new Date().toISOString();
+    this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+  }
+
+  /**
+   * Accept a suggestion — rewrites the entry description and marks the
+   * suggestion accepted. Returns the updated entry, or undefined if not found.
+   */
+  acceptSuggestion(entryId: string, ruleId: string): TimeEntry | undefined {
+    const entry = this.entries.find((e) => e.id === entryId);
+    if (!entry || !entry.ocgSuggestions) return undefined;
+    const suggestion = entry.ocgSuggestions.find((s) => s.ruleId === ruleId);
+    if (!suggestion) return undefined;
+    entry.description = suggestion.suggestedDescription;
+    suggestion.status = "accepted";
+    this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+    return entry;
+  }
+
+  /**
+   * Dismiss a suggestion — marks it dismissed without changing the description.
+   * Returns the updated entry, or undefined if not found.
+   */
+  dismissSuggestion(entryId: string, ruleId: string): TimeEntry | undefined {
+    const entry = this.entries.find((e) => e.id === entryId);
+    if (!entry || !entry.ocgSuggestions) return undefined;
+    const suggestion = entry.ocgSuggestions.find((s) => s.ruleId === ruleId);
+    if (!suggestion) return undefined;
+    suggestion.status = "dismissed";
+    this.persist().catch((err) => logger.warn("Failed to persist time entries", { error: (err as Error).message }));
+    return entry;
+  }
+
+  /** List entries that have at least one pending OCG suggestion. */
+  listWithSuggestions(filter?: TimeFilter): TimeEntry[] {
+    return this.list(filter).filter(
+      (e) => e.ocgSuggestions?.some((s) => s.status === "pending"),
+    );
+  }
+
   /** Explicit JSON export — same as list(), for the export endpoint. */
   exportJson(filter?: TimeFilter): TimeEntry[] {
     return this.list(filter);
@@ -108,22 +178,28 @@ export class TimeStore {
   /** CSV export with headers. */
   exportCsv(filter?: TimeFilter): string {
     const rows = this.list(filter);
-    const header = "id,profileId,profileName,taskId,matterNumber,clientNumber,description,event,startedAt,endedAt,durationMs,billingUnits,clioSyncedAt";
-    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""').replace(/[\r\n]+/g, " ")}"`;  // also strip newlines to prevent CSV row injection
+    const header = "id,event,profileId,profileName,agentId,agentName,taskId,matterNumber,clientNumber,description,startedAt,endedAt,durationMs,billingUnits,billingRate,billingAmountUsd,utbmsTaskCode,utbmsActivityCode,clioSyncedAt";
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""').replace(/[\r\n]+/g, " ")}"`;
     const lines = rows.map((e) =>
       [
         esc(e.id),
-        esc(e.profileId),
-        esc(e.profileName),
+        esc(e.event),
+        esc(e.profileId ?? ""),
+        esc(e.profileName ?? ""),
+        esc(e.agentId ?? ""),
+        esc(e.agentName ?? ""),
         esc(e.taskId),
         esc(e.matterNumber ?? ""),
         esc(e.clientNumber ?? ""),
         esc(e.description),
-        esc(e.event),
         esc(e.startedAt.toISOString()),
         esc(e.endedAt?.toISOString() ?? ""),
         esc(e.durationMs),
         esc(e.billingUnits),
+        esc(e.billingRate ?? ""),
+        esc(e.billingAmountUsd ?? ""),
+        esc(e.utbmsTaskCode ?? ""),
+        esc(e.utbmsActivityCode ?? ""),
         esc(e.clioSyncedAt ?? ""),
       ].join(","),
     );
@@ -145,7 +221,11 @@ export class TimeStore {
 
 function matchesFilter(entry: TimeEntry, filter?: TimeFilter): boolean {
   if (!filter) return true;
+  if (filter.agentOnly === true && entry.event !== "agent_work") return false;
+  if (filter.agentOnly === false && entry.event === "agent_work") return false;
+  // profileId filter: match lawyer entries for that profile OR agent entries attributed to them
   if (filter.profileId && entry.profileId !== filter.profileId) return false;
+  if (filter.agentId && entry.agentId !== filter.agentId) return false;
   if (filter.taskId && entry.taskId !== filter.taskId) return false;
   if (filter.matterNumber && entry.matterNumber !== filter.matterNumber) return false;
   if (filter.clientNumber && entry.clientNumber !== filter.clientNumber) return false;

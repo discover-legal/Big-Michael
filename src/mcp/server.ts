@@ -46,6 +46,7 @@ import { extractWritingSamples } from "../services/writingSamples.js";
 import { pluginRegistry } from "../adapters/plugin.js";
 import { costStore } from "../cost/index.js";
 import { clioClient } from "../integrations/clio.js";
+import { exportLedes1998B } from "../billing/ledes.js";
 
 // ─── Tool schemas ─────────────────────────────────────────────────────────────
 
@@ -1019,6 +1020,23 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     reply.header("Content-Type", "text/csv; charset=utf-8");
     reply.header("Content-Disposition", "attachment; filename=\"time-entries.csv\"");
     return orchestrator.time.exportCsv(filter);
+  });
+
+  app.get("/time-entries/export.ledes", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber, clientNumber, from, to, invoiceNumber } = req.query as Record<string, string>;
+    if (!matterNumber && !clientNumber) return reply.status(400).send({ error: "matterNumber or clientNumber required" });
+    const entries = orchestrator.time.list({
+      matterNumber: matterNumber || undefined,
+      clientNumber: clientNumber || undefined,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    }).filter((e) => e.endedAt);
+    const invoice = invoiceNumber || `${matterNumber ?? clientNumber}-${new Date().toISOString().slice(0, 10)}`;
+    const ledes = exportLedes1998B(entries, { invoiceNumber: invoice, lawFirmId: "Big Michael" });
+    reply.header("Content-Type", "application/edi-x12");
+    reply.header("Content-Disposition", `attachment; filename="${invoice}.ledes"`);
+    return ledes;
   });
 
   // ── NOSLEGAL analytics ────────────────────────────────────────────────────────
