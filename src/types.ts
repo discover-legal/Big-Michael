@@ -48,6 +48,9 @@ export interface AgentDefinition {
    * prefix-matches one of these values (e.g. agent ["US"] matches task "US-NY").
    */
   jurisdictions?: string[];
+  /** USD/hour billing rate for this agent's work. Overrides the tier default
+   *  from AGENT_BILLING_RATE_T* config. Set to 0 to make this agent non-billable. */
+  billingRate?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -284,24 +287,44 @@ export interface Task {
 
 // ─── Time tracking ───────────────────────────────────────────────────────────
 
-export type TimeEventType = "task_run" | "gate_review";
+export type TimeEventType =
+  | "task_run"    // lawyer-supervised task execution
+  | "gate_review" // lawyer reviewing a human gate
+  | "agent_work"; // AI agent running a DyTopo round phase
 
 export interface TimeEntry {
   id: string;
-  profileId: string;         // lawyer who submitted / reviewed
-  profileName: string;
+  /** Lawyer the entry is attributed to for billing. Optional on agent_work entries
+   *  where no responsible lawyer is assigned (partner-only visibility in that case). */
+  profileId?: string;
+  profileName?: string;
+  /** Set on agent_work entries — identifies which agent performed the work. */
+  agentId?: string;
+  agentName?: string;
   taskId: string;
   matterNumber?: string;
   clientNumber?: string;
-  description: string;       // auto-generated: e.g. "Task: Review employment contract" or "Gate review: Finding #3"
+  description: string;
   event: TimeEventType;
   startedAt: Date;
-  endedAt?: Date;            // undefined while task is still running
-  durationMs: number;        // 0 while running; populated on close
+  endedAt?: Date;
+  durationMs: number;
   /** 6-minute billing increments (0.1 hr each). Rounded UP. 0 while running. */
   billingUnits: number;
+  /** USD/hour rate captured at the time the entry is created. */
+  billingRate?: number;
+  /** Pre-computed fee: billingUnits × 0.1 × billingRate. Set on close. */
+  billingAmountUsd?: number;
   /** ISO timestamp set when this entry has been pushed to a Clio matter as an activity. */
   clioSyncedAt?: string;
+  /** OCG compliance suggestions for this entry. */
+  ocgSuggestions?: OcgSuggestion[];
+  /** ISO timestamp of the last OCG compliance check run on this entry. */
+  ocgCheckedAt?: string;
+  /** UTBMS Phase/Task code assigned on close, e.g. "L210" (Pleadings). */
+  utbmsTaskCode?: string;
+  /** UTBMS Activity code assigned on close, e.g. "A103" (Draft/Revise). */
+  utbmsActivityCode?: string;
 }
 
 /** Structured spreadsheet-style output for the `tabulate` workflow. */
@@ -462,6 +485,19 @@ export interface ClientMatter {
   description: string;
   practiceArea?: string;
   openedAt: Date;
+  budgetUsd?: number;
+  budgetAlertThresholds?: number[];
+  budgetAlertsTriggered?: number[];
+}
+
+export interface BudgetAlert {
+  matterNumber: string;
+  clientNumber: string;
+  budgetUsd: number;
+  burnUsd: number;
+  burnPct: number;
+  threshold: number;
+  triggeredAt: string;
 }
 
 export interface Client {
@@ -473,6 +509,10 @@ export interface Client {
   /** Names of opposing/adverse parties — used for conflict-of-interest checks. */
   adversaries: string[];
   notes?: string;
+  /** ID of the OcgDocument for this client (if any). */
+  ocgId?: string;
+  /** Client voice/communication guide built from writing samples. */
+  voiceGuide?: ClientVoiceGuide;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -546,10 +586,213 @@ export interface SearchResult {
   excerpt: string;
 }
 
+// ─── Pre-bill review ─────────────────────────────────────────────────────────
+
+export type PreBillStatus = "draft" | "reviewed" | "approved" | "invoiced";
+
+export interface PreBillEntry {
+  entryId: string;
+  description: string;
+  billingUnits: number;
+  billingRate?: number;
+  billingAmountUsd?: number;
+  utbmsTaskCode?: string;
+  utbmsActivityCode?: string;
+  profileName?: string;
+  agentName?: string;
+  startedAt: string;
+  endedAt?: string;
+  ocgSuggestionCount: number;
+}
+
+export interface PreBill {
+  id: string;
+  matterNumber: string;
+  clientNumber?: string;
+  status: PreBillStatus;
+  createdByProfileId: string;
+  createdAt: string;
+  reviewedAt?: string;
+  approvedAt?: string;
+  invoicedAt?: string;
+  entries: PreBillEntry[];
+  totalBillingUnits: number;
+  totalAmountUsd: number;
+  notes?: string;
+}
+
 // ─── Embeddings ──────────────────────────────────────────────────────────────
 
 export interface EmbeddingResult {
   text: string;
   embedding: number[];
   model: string;
+}
+
+// ─── Outside Counsel Guidelines ───────────────────────────────────────────────
+
+export type OcgRuleCategory =
+  | "billing_increments"
+  | "entry_specificity"
+  | "prohibited_tasks"
+  | "rate_limits"
+  | "staffing"
+  | "description_format"
+  | "timing"
+  | "other";
+
+export type OcgMechCheckType =
+  | "min_duration_hours"      // entry duration must be >= value
+  | "max_duration_hours"      // entry duration must be <= value
+  | "max_age_days"            // entry must be submitted within value days of work
+  | "max_billing_rate_usd"    // billingRate must be <= value
+  | "min_description_chars"   // description.length must be >= value
+  | "no_block_billing"        // description must not combine 3+ distinct task types
+  | "no_vague_entries"        // description must not be a single generic verb phrase
+  | "require_matter_reference"; // matterNumber must be present on the entry
+
+export interface OcgMechCheck {
+  type: OcgMechCheckType;
+  value?: number;  // numeric threshold; omitted for boolean checks
+}
+
+export interface OcgRule {
+  id: string;
+  category: OcgRuleCategory;
+  text: string;
+  severity: "hard" | "soft";
+  /** Structured parameters for deterministic evaluation. Set at ingest time by Haiku.
+   *  When present, checkMechanically() uses this directly — no runtime regex parsing. */
+  mechCheck?: OcgMechCheck;
+}
+
+export interface OcgRuleStat {
+  violations: number;   // times this rule was flagged across all entries
+  accepted: number;     // times a suggestion for this rule was accepted
+  dismissed: number;    // times a suggestion was dismissed
+}
+
+export interface OcgDocument {
+  id: string;
+  clientId: string;
+  title: string;
+  rules: OcgRule[];
+  excerpt: string;    // first 500 chars of source text for display
+  createdAt: Date;
+  updatedAt: Date;
+  /** Per-rule violation and correction-acceptance counts. Keyed by ruleId. */
+  ruleStats?: Record<string, OcgRuleStat>;
+}
+
+export interface OcgSuggestion {
+  ruleId: string;
+  ruleText: string;
+  category: OcgRuleCategory;
+  severity: "hard" | "soft";
+  issue: string;
+  suggestedDescription: string;
+  status: "pending" | "accepted" | "dismissed";
+}
+
+// ─── Client voice guide ───────────────────────────────────────────────────────
+
+export interface ClientVoiceGuide {
+  generatedAt: string;         // ISO timestamp
+  sampleCount: number;
+  preferredFormality: string;  // e.g. "formal", "business-casual"
+  communicationStyle: string;  // e.g. "concise bullet points", "narrative"
+  terminologyPreferences: string;
+  reportingPreferences: string;
+  signaturePatterns: string[];
+  injectionSnippet: string;    // pre-built prompt fragment
+}
+
+// ── Budget prediction ───────────────────────────────────────────────────────
+export interface BudgetPrediction {
+  matterNumber: string;
+  practiceArea: string;
+  spentUsd: number;
+  spentBillingUnits: number;
+  estimatedTotalUsd: number;
+  estimatedRemainingUsd: number;
+  completionPct: number;
+  confidence: "high" | "medium" | "low" | "insufficient_data";
+  comparableMatterCount: number;
+  medianFinalCost: number;
+  p25FinalCost: number;
+  p75FinalCost: number;
+  basedOn: "practice_area+jurisdiction" | "practice_area" | "all_matters";
+}
+
+// ── Conflict graph ──────────────────────────────────────────────────────────
+export interface ConflictReport {
+  clientAId: string;
+  clientAName: string;
+  clientBId: string;
+  clientBName: string;
+  matterANumber: string;
+  matterBNumber: string;
+  conflictPath: string;
+  detectedAt: string;
+}
+
+// ── Regulatory pulse ────────────────────────────────────────────────────────
+export interface RegulationAlert {
+  id: string;
+  matterNumber?: string;
+  practiceArea: string;
+  jurisdiction: string;
+  headline: string;
+  url: string;
+  summary: string;
+  detectedAt: string;
+  source: "tavily";
+}
+
+// ── Status reports ──────────────────────────────────────────────────────────
+export interface StatusReport {
+  taskId: string;
+  matterNumber?: string;
+  clientNumber?: string;
+  generatedAt: string;
+  format: "html" | "markdown";
+  content: string;
+  wordCount: number;
+  costUsd: number;
+}
+
+// ── Docket monitoring ───────────────────────────────────────────────────────
+export interface DocketAlert {
+  id: string;
+  matterNumber: string;
+  docketNumber: string;
+  court: string;
+  caseName: string;
+  newFilingCount: number;
+  latestFilingDate: string;
+  courtListenerUrl: string;
+  detectedAt: string;
+}
+
+// ── Deadline calculator ─────────────────────────────────────────────────────
+export type DeadlineDayType = "calendar" | "business";
+
+export interface ComputedDeadline {
+  ruleId: string;
+  event: string;
+  dueDate: string;
+  warningDate?: string;
+  days: number;
+  dayType: DeadlineDayType;
+  cite: string;
+  note?: string;
+}
+
+export interface DeadlineResult {
+  jurisdiction: string;
+  jurisdictionName: string;
+  triggerEvent: string;
+  triggerDate: string;
+  computedAt: string;
+  deadlines: ComputedDeadline[];
 }

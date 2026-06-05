@@ -34,6 +34,7 @@ import { getProvider, resolveModelId } from "../providers/index.js";
 import { selectModel } from "../routing/model.js";
 import { agentLearning } from "../learning/index.js";
 import type { KnowledgeStore } from "../knowledge/index.js";
+import type { TimeStore } from "../time/index.js";
 import type {
   AgentDefinition,
   AgentMessage,
@@ -47,6 +48,15 @@ import type {
   ToneProfile,
 } from "../types.js";
 import { jurisdictionMatch } from "./jurisdiction.js";
+
+/** Billing context forwarded from the orchestrator into each agent's process() call. */
+export interface AgentBillingCtx {
+  timeStore: TimeStore;
+  responsibleLawyerId?: string;
+  responsibleLawyerName?: string;
+  matterNumber?: string;
+  clientNumber?: string;
+}
 
 export { jurisdictionMatch } from "./jurisdiction.js";
 
@@ -75,7 +85,7 @@ export class DyTopoEngine {
    * Execute one round of DyTopo orchestration.
    * Returns the completed RoundState including all messages, edges, and findings.
    */
-  async runRound(task: Task, goal: RoundGoal, lawyerTone?: ToneProfile): Promise<RoundState> {
+  async runRound(task: Task, goal: RoundGoal, lawyerTone?: ToneProfile, billingCtx?: AgentBillingCtx): Promise<RoundState> {
     const roundId = uuidv4();
     const intraMemory = new IntraRoundMemoryStore(roundId);
 
@@ -144,6 +154,12 @@ export class DyTopoEngine {
           memory: this.memory,
           ownerId: task.createdByProfileId,
           assignedLawyerTone: lawyerTone,
+          // Agent billing context — only present when a billing rate is configured
+          timeStore: billingCtx?.timeStore,
+          responsibleLawyerId: billingCtx?.responsibleLawyerId,
+          responsibleLawyerName: billingCtx?.responsibleLawyerName,
+          matterNumber: billingCtx?.matterNumber,
+          clientNumber: billingCtx?.clientNumber,
         }),
       ),
     )).flat();

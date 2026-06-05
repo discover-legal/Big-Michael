@@ -35,7 +35,7 @@ import { logger } from "../logger.js";
 import { auditLogger } from "../audit/index.js";
 import { Orchestrator } from "../orchestrator.js";
 import type { LegalBackend } from "../backend/index.js";
-import type { WorkflowType, SessionUser } from "../types.js";
+import type { WorkflowType, SessionUser, DocketAlert } from "../types.js";
 import { MODE_COLORS, MODE_CAPABILITIES } from "../types.js";
 import { LOCAL_PARTNER, filterVisible, canViewTask, isPartner, resolveMode } from "../auth/index.js";
 import { registerAuthRoutes, readSessionCookie } from "../auth/oauth.js";
@@ -46,6 +46,14 @@ import { extractWritingSamples } from "../services/writingSamples.js";
 import { pluginRegistry } from "../adapters/plugin.js";
 import { costStore } from "../cost/index.js";
 import { clioClient } from "../integrations/clio.js";
+import { twentyClient } from "../integrations/twenty.js";
+import { ocgStore } from "../ocg/index.js";
+import { analyzeClientVoice } from "../services/clientVoiceAnalyzer.js";
+import { jobQueue } from "../queue/index.js";
+import { startWorker } from "../queue/worker.js";
+import { exportLedes1998B } from "../billing/ledes.js";
+import { generateStatusReport } from "../reports/status.js";
+import type { StatusReportOptions } from "../reports/status.js";
 
 // ─── Tool schemas ─────────────────────────────────────────────────────────────
 
@@ -306,6 +314,11 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     return readSessionCookie(req);
   };
 
+  // Resolve the actor ID for audit events. LOCAL_PARTNER.profileId when auth
+  // is disabled; authenticated profileId when auth is enabled; "anonymous" if
+  // a request somehow arrives with no session (should not happen on protected routes).
+  const actorOf = (req: FastifyRequest): string => getUser(req)?.profileId ?? "anonymous";
+
   // Optional shared-secret auth. When API_KEY is set, every request except the
   // health check must present it as `x-api-key`. This is defence-in-depth for
   // anyone who runs the API off loopback; on 127.0.0.1 it can be left unset.
@@ -447,6 +460,11 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     const suggestedLawyers = practiceArea
       ? orchestrator.profiles.list().filter((p) => p.practiceAreas?.includes(practiceArea))
       : [];
+    auditLogger.write({
+      event: "document.ingested",
+      actorId: actorOf(req),
+      data: { docId, title: body.title, practiceArea, detectedClientNumber: detectedClient?.clientNumber },
+    });
     return reply.status(201).send({
       id: docId,
       practiceArea,
@@ -499,6 +517,11 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     const suggestedLawyers = practiceArea
       ? orchestrator.profiles.list().filter((p) => p.practiceAreas?.includes(practiceArea))
       : [];
+    auditLogger.write({
+      event: "document.uploaded",
+      actorId: actorOf(req),
+      data: { docId: id, title, filename, practiceArea, detectedClientNumber: detectedClient?.clientNumber },
+    });
     return reply.status(201).send({
       id, title, practiceArea, detectedClient,
       suggestedLawyers: suggestedLawyers.map((p) => ({ id: p.id, name: p.name, email: p.email })),
@@ -633,10 +656,16 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   app.post("/profiles", async (req, reply) => {
     if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
     try {
-      return reply.status(201).send(await orchestrator.profiles.create(req.body as {
+      const profile = await orchestrator.profiles.create(req.body as {
         name: string; email: string; role?: string; title?: string; color?: string;
         practiceAreas?: string[]; bio?: string;
-      }));
+      });
+      auditLogger.write({
+        event: "profile.created",
+        actorId: actorOf(req),
+        data: { profileId: profile.id, email: profile.email, role: profile.role },
+      });
+      return reply.status(201).send(profile);
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
     }
@@ -658,7 +687,13 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       return reply.status(403).send({ error: "Partner role required to set user mode" });
     }
     try {
-      return await orchestrator.profiles.update(id, patch as Record<string, never>);
+      const updated = await orchestrator.profiles.update(id, patch as Record<string, never>);
+      auditLogger.write({
+        event: "profile.updated",
+        actorId: actorOf(req),
+        data: { profileId: id, fields: Object.keys(patch) },
+      });
+      return updated;
     } catch (err) {
       return reply.status(404).send({ error: (err as Error).message });
     }
@@ -669,6 +704,13 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     const { id } = req.params as { id: string };
     try {
       const ok = await orchestrator.profiles.remove(id);
+      if (ok) {
+        auditLogger.write({
+          event: "profile.deleted",
+          actorId: actorOf(req),
+          data: { profileId: id },
+        });
+      }
       return ok ? reply.status(200).send({ ok: true }) : reply.status(404).send({ error: "Profile not found" });
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
@@ -728,7 +770,7 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       const tone = await analyzeTone(samples, profile.name, sourceType, id);
       const updated = await orchestrator.profiles.updateTone(id, tone);
       logger.info("Tone profile generated", { profileId: id, sampleCount: samples.length, sourceType });
-      auditLogger.write({ event: "profile.tone.imported", data: { profileId: id, sampleCount: samples.length, sourceType, importedBy: user?.profileId } });
+      auditLogger.write({ event: "profile.tone.imported", actorId: actorOf(req), data: { profileId: id, sampleCount: samples.length, sourceType } });
       return reply.status(200).send({ toneProfile: updated.toneProfile, samplesAnalysed: samples.length, sourceType });
     } catch (err) {
       logger.error("Tone analysis failed", { profileId: id, error: (err as Error).message });
@@ -779,7 +821,7 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       const tone = await analyzeTone(posts, profile.name, "linkedin_export", id);
       const updated = await orchestrator.profiles.updateTone(id, tone);
       logger.info("Tone profile generated from LinkedIn export", { profileId: id, sampleCount: posts.length });
-      auditLogger.write({ event: "profile.tone.imported", data: { profileId: id, sampleCount: posts.length, sourceType: "linkedin_export", importedBy: user?.profileId } });
+      auditLogger.write({ event: "profile.tone.imported", actorId: actorOf(req), data: { profileId: id, sampleCount: posts.length, sourceType: "linkedin_export" } });
       return reply.status(200).send({ toneProfile: updated.toneProfile, samplesAnalysed: posts.length, sourceType: "linkedin_export" });
     } catch (err) {
       logger.error("Tone analysis failed", { profileId: id, error: (err as Error).message });
@@ -796,7 +838,7 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     }
     try {
       const updated = await orchestrator.profiles.clearTone(id);
-      auditLogger.write({ event: "profile.tone.cleared", data: { profileId: id, clearedBy: user?.profileId } });
+      auditLogger.write({ event: "profile.tone.cleared", actorId: actorOf(req), data: { profileId: id } });
       return reply.status(200).send(updated);
     } catch (err) {
       return reply.status(404).send({ error: (err as Error).message });
@@ -815,6 +857,11 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
       const body = req.body as { name: string; clientNumber: string; adversaries?: string[]; notes?: string };
       const conflict = orchestrator.clients.checkConflict(body.name);
       const client = await orchestrator.clients.create(body);
+      auditLogger.write({
+        event: "client.created",
+        actorId: actorOf(req),
+        data: { clientId: client.id, clientNumber: client.clientNumber, name: client.name },
+      });
       return reply.status(201).send({ ...client, conflict });
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
@@ -825,7 +872,13 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
     const { id } = req.params as { id: string };
     try {
-      return await orchestrator.clients.update(id, req.body as Record<string, never>);
+      const updated = await orchestrator.clients.update(id, req.body as Record<string, never>);
+      auditLogger.write({
+        event: "client.updated",
+        actorId: actorOf(req),
+        data: { clientId: id, fields: Object.keys(req.body as object) },
+      });
+      return updated;
     } catch (err) {
       return reply.status(404).send({ error: (err as Error).message });
     }
@@ -836,6 +889,13 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     const { id } = req.params as { id: string };
     try {
       const ok = await orchestrator.clients.remove(id);
+      if (ok) {
+        auditLogger.write({
+          event: "client.deleted",
+          actorId: actorOf(req),
+          data: { clientId: id },
+        });
+      }
       return ok ? reply.status(200).send({ ok: true }) : reply.status(404).send({ error: "Client not found" });
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
@@ -848,6 +908,11 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     try {
       const body = req.body as { matterNumber: string; description: string; practiceArea?: string };
       const matter = await orchestrator.clients.addMatter(id, body);
+      auditLogger.write({
+        event: "matter.added",
+        actorId: actorOf(req),
+        data: { clientId: id, matterNumber: matter.matterNumber, practiceArea: matter.practiceArea },
+      });
       return reply.status(201).send(matter);
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
@@ -859,6 +924,13 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     const { id, matterNumber } = req.params as { id: string; matterNumber: string };
     try {
       const ok = await orchestrator.clients.removeMatter(id, matterNumber);
+      if (ok) {
+        auditLogger.write({
+          event: "matter.removed",
+          actorId: actorOf(req),
+          data: { clientId: id, matterNumber },
+        });
+      }
       return ok ? reply.status(200).send({ ok: true }) : reply.status(404).send({ error: "Matter not found" });
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
@@ -873,6 +945,397 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     return orchestrator.clients.checkConflict(trimmed);
   });
 
+  // ── Docket monitoring ─────────────────────────────────────────────────────────
+
+  app.post("/dockets/watch", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber, docketNumber, court, caseName } = req.body as {
+      matterNumber: string; docketNumber: string; court: string; caseName?: string;
+    };
+    if (!matterNumber || !docketNumber || !court) return reply.status(400).send({ error: "matterNumber, docketNumber, court required" });
+    try {
+      const entry = orchestrator.docketMonitor.watch(matterNumber, docketNumber, court, caseName);
+      return reply.status(201).send(entry);
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.delete("/dockets/watch/:matterNumber", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber } = req.params as { matterNumber: string };
+    const removed = orchestrator.docketMonitor.unwatch(matterNumber);
+    if (!removed) return reply.status(404).send({ error: "No watched docket for this matter" });
+    return { ok: true };
+  });
+
+  app.get("/dockets", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    return orchestrator.docketMonitor.list();
+  });
+
+  app.post("/dockets/check-now", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (!orchestrator.docketMonitor.isEnabled()) return reply.status(503).send({ error: "Docket monitoring not enabled (set DOCKET_MONITOR_ENABLED=true)" });
+    await orchestrator.docketMonitor.checkAll();
+    return { ok: true, watching: orchestrator.docketMonitor.list().length };
+  });
+
+  const MAX_DOCKET_SSE_LISTENERS = 20;
+  app.get("/dockets/alerts/stream", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (orchestrator.docketMonitor.listenerCount("alert") >= MAX_DOCKET_SSE_LISTENERS) {
+      return reply.status(429).send({ error: "Too many concurrent docket streams" });
+    }
+    reply.raw.setHeader("Content-Type", "text/event-stream");
+    reply.raw.setHeader("Cache-Control", "no-cache");
+    reply.raw.setHeader("Connection", "keep-alive");
+    reply.raw.flushHeaders();
+    const send = (alert: DocketAlert) => reply.raw.write(`data: ${JSON.stringify(alert)}\n\n`);
+    orchestrator.docketMonitor.on("alert", send);
+    req.raw.on("close", () => orchestrator.docketMonitor.off("alert", send));
+  });
+
+  // ── Outside Counsel Guidelines ────────────────────────────────────────────────
+
+  /** POST /clients/:id/ocg — ingest OCG text for a client (JSON body or multipart file). */
+  app.post("/clients/:id/ocg", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const client = orchestrator.clients.get(id);
+    if (!client) return reply.status(404).send({ error: "Client not found" });
+
+    // Rate-limit: disallow re-ingestion within 60 s of last update
+    const existing = ocgStore.getByClient(id);
+    if (existing) {
+      const ageMs = Date.now() - new Date(existing.updatedAt).getTime();
+      if (ageMs < 60_000) {
+        return reply.status(429).send({ error: "OCG was just updated. Please wait before re-ingesting." });
+      }
+    }
+
+    let title = "Outside Counsel Guidelines";
+    let text = "";
+
+    const ct = req.headers["content-type"] ?? "";
+    if (ct.includes("multipart/form-data")) {
+      const parts: Array<import("@fastify/multipart").MultipartFile> = [];
+      for await (const part of req.parts()) {
+        if ("file" in part) {
+          parts.push(part as import("@fastify/multipart").MultipartFile);
+        } else {
+          const field = part as { fieldname: string; value: string };
+          if (field.fieldname === "title") title = String(field.value).trim() || title;
+        }
+      }
+      if (!parts.length) return reply.status(400).send({ error: "No file uploaded" });
+      const buf = await parts[0].toBuffer();
+      const { samples } = await extractWritingSamples(buf, parts[0].filename ?? "ocg");
+      text = samples.join("\n\n");
+    } else {
+      const body = req.body as { title?: string; text?: string };
+      if (body.title) title = String(body.title).trim() || title;
+      text = String(body.text ?? "").trim();
+    }
+
+    if (!text) return reply.status(400).send({ error: "OCG text is required" });
+
+    try {
+      const ocgDoc = await ocgStore.ingest(id, title, text);
+      await orchestrator.clients.setOcg(id, ocgDoc.id);
+      auditLogger.write({ event: "client.ocg.ingested", actorId: actorOf(req), data: { clientId: id, ruleCount: ocgDoc.rules.length } });
+      return reply.status(200).send({ ocg: ocgDoc, ruleCount: ocgDoc.rules.length });
+    } catch (err) {
+      logger.error("OCG ingestion failed", { clientId: id, error: (err as Error).message });
+      return reply.status(500).send({ error: "OCG ingestion failed. Please try again." });
+    }
+  });
+
+  /** GET /clients/:id/ocg — retrieve the OCG document for a client. */
+  app.get("/clients/:id/ocg", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const ocgDoc = ocgStore.getByClient(id);
+    if (!ocgDoc) return reply.status(404).send({ error: "No OCG document found for this client" });
+    return ocgDoc;
+  });
+
+  /** DELETE /clients/:id/ocg — remove the OCG document for a client. */
+  app.delete("/clients/:id/ocg", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    try {
+      await ocgStore.remove(id);
+      await orchestrator.clients.clearOcg(id);
+      auditLogger.write({ event: "client.ocg.deleted", actorId: actorOf(req), data: { clientId: id } });
+      return reply.status(200).send({ ok: true });
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
+  // ── Client voice guide ────────────────────────────────────────────────────────
+
+  /** POST /clients/:id/voice-guide/import — build a ClientVoiceGuide from writing samples. */
+  app.post("/clients/:id/voice-guide/import", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const client = orchestrator.clients.get(id);
+    if (!client) return reply.status(404).send({ error: "Client not found" });
+
+    // Rate-limit: 60 s since last voice guide generation
+    if (client.voiceGuide?.generatedAt) {
+      const ageMs = Date.now() - new Date(client.voiceGuide.generatedAt).getTime();
+      if (ageMs < 60_000) {
+        return reply.status(429).send({ error: "Voice guide was just generated. Please wait before re-importing." });
+      }
+    }
+
+    let buf: Buffer;
+    let filename = "samples";
+    try {
+      const data = await req.file();
+      if (!data) return reply.status(400).send({ error: "No file uploaded" });
+      filename = data.filename ?? filename;
+      buf = await data.toBuffer();
+    } catch {
+      return reply.status(400).send({ error: "File upload failed" });
+    }
+
+    try {
+      const { samples } = await extractWritingSamples(buf, filename);
+      if (!samples.length) return reply.status(422).send({ error: "No text samples found in uploaded file" });
+      const guide = await analyzeClientVoice(samples, id);
+      await orchestrator.clients.setVoiceGuide(id, guide);
+      auditLogger.write({ event: "client.voiceguide.imported", actorId: actorOf(req), data: { clientId: id, sampleCount: samples.length } });
+      return reply.status(200).send({ voiceGuide: guide, samplesAnalysed: samples.length });
+    } catch (err) {
+      logger.error("Client voice analysis failed", { clientId: id, error: (err as Error).message });
+      return reply.status(500).send({ error: "Voice guide generation failed. Please try again." });
+    }
+  });
+
+  /** DELETE /clients/:id/voice-guide — clear the voice guide for a client. */
+  app.delete("/clients/:id/voice-guide", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    try {
+      await orchestrator.clients.clearVoiceGuide(id);
+      auditLogger.write({ event: "client.voiceguide.cleared", actorId: actorOf(req), data: { clientId: id } });
+      return reply.status(200).send({ ok: true });
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
+  // ── Matter budget tracking ───────────────────────────────────────────────────
+
+  app.put("/clients/:id/matters/:matterNumber/budget", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id, matterNumber } = req.params as { id: string; matterNumber: string };
+    const { budgetUsd, thresholds } = req.body as { budgetUsd: number; thresholds?: number[] };
+    if (!budgetUsd || budgetUsd <= 0) return reply.status(400).send({ error: "budgetUsd must be positive" });
+    if (thresholds !== undefined && (
+      !Array.isArray(thresholds) ||
+      !thresholds.every((t) => Number.isFinite(t) && t > 0 && t <= 1)
+    )) {
+      return reply.status(400).send({ error: "thresholds must be an array of numbers between 0 (exclusive) and 1 (inclusive)" });
+    }
+    const matter = orchestrator.clients.setMatterBudget(id, matterNumber, budgetUsd, thresholds);
+    if (!matter) return reply.status(404).send({ error: "Client or matter not found" });
+    return matter;
+  });
+
+  app.get("/clients/:id/matters/:matterNumber/budget", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber } = req.params as { id: string; matterNumber: string };
+    const burn = orchestrator.budgetMonitor.getBurn(matterNumber);
+    if (!burn) return reply.status(404).send({ error: "No budget set for this matter" });
+    return { matterNumber, ...burn };
+  });
+
+  app.post("/clients/:id/matters/:matterNumber/budget/check", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber } = req.params as { id: string; matterNumber: string };
+    orchestrator.budgetMonitor.checkMatter(matterNumber);
+    return { ok: true };
+  });
+
+  const MAX_BUDGET_SSE_LISTENERS = 20;
+  app.get("/budget/alerts/stream", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (orchestrator.budgetMonitor.listenerCount("alert") >= MAX_BUDGET_SSE_LISTENERS) {
+      return reply.status(429).send({ error: "Too many concurrent budget streams" });
+    }
+    reply.raw.setHeader("Content-Type", "text/event-stream");
+    reply.raw.setHeader("Cache-Control", "no-cache");
+    reply.raw.setHeader("Connection", "keep-alive");
+    reply.raw.flushHeaders();
+
+    const send = (alert: import("../types.js").BudgetAlert) => {
+      reply.raw.write(`data: ${JSON.stringify(alert)}\n\n`);
+    };
+    orchestrator.budgetMonitor.on("alert", send);
+    req.raw.on("close", () => orchestrator.budgetMonitor.off("alert", send));
+  });
+
+  // ── Budget prediction ────────────────────────────────────────────────────────
+
+  app.get("/matters/:matterNumber/budget-prediction", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber } = req.params as { matterNumber: string };
+    const allTasks = orchestrator.listTasks();
+    const taskMap = new Map(
+      allTasks.flatMap((t) =>
+        t.matterNumber ? [[t.matterNumber, t] as [string, import("../types.js").Task]] : []
+      )
+    );
+    const prediction = orchestrator.budgetPredictor.predict(matterNumber, orchestrator.time, taskMap);
+    if (!prediction) return reply.status(404).send({ error: "No billing data found for this matter" });
+    return prediction;
+  });
+
+  // ── Conflict graph ───────────────────────────────────────────────────────────
+
+  app.post("/graph/sync", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (!orchestrator.conflictGraph.isEnabled()) return reply.status(503).send({ error: "TypeDB not configured (set TYPEDB_URL)" });
+    await orchestrator.conflictGraph.sync(orchestrator.clients, orchestrator.time);
+    return { ok: true, message: "Conflict graph synced" };
+  });
+
+  app.get("/clients/:id/conflicts", async (req, reply) => {
+    const user = getUser(req);
+    if (!isPartner(user)) return reply.status(403).send({ error: "Partner role required" });
+    if (!orchestrator.conflictGraph.isEnabled()) return reply.status(503).send({ error: "TypeDB not configured" });
+    const { id } = req.params as { id: string };
+    const conflicts = await orchestrator.conflictGraph.checkClient(id);
+    return conflicts;
+  });
+
+  app.post("/clients/check-conflict-graph", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (!orchestrator.conflictGraph.isEnabled()) return reply.status(503).send({ error: "TypeDB not configured" });
+    const { clientId, adversaryIds } = req.body as { clientId: string; adversaryIds: string[] };
+    if (!clientId) return reply.status(400).send({ error: "clientId required" });
+    const conflicts = await orchestrator.conflictGraph.checkNewMatter(clientId, adversaryIds ?? []);
+    return { conflicts, hasConflict: conflicts.length > 0 };
+  });
+
+  // ── Regulatory pulse ──────────────────────────────────────────────────────────
+
+  const MAX_REG_SSE_LISTENERS = 20;
+  app.get("/regulatory/alerts/stream", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (!orchestrator.regPulse.isEnabled()) return reply.status(503).send({ error: "Regulatory pulse not enabled (set REG_PULSE_ENABLED=true and TAVILY_API_KEY)" });
+    if (orchestrator.regPulse.listenerCount("alert") >= MAX_REG_SSE_LISTENERS) {
+      return reply.status(429).send({ error: "Too many concurrent regulatory streams" });
+    }
+    reply.raw.setHeader("Content-Type", "text/event-stream");
+    reply.raw.setHeader("Cache-Control", "no-cache");
+    reply.raw.setHeader("Connection", "keep-alive");
+    reply.raw.flushHeaders();
+
+    const send = (alert: import("../types.js").RegulationAlert) => {
+      reply.raw.write(`data: ${JSON.stringify(alert)}\n\n`);
+    };
+    orchestrator.regPulse.on("alert", send);
+    req.raw.on("close", () => orchestrator.regPulse.off("alert", send));
+  });
+
+  app.post("/regulatory/check-now", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (!orchestrator.regPulse.isEnabled()) return reply.status(503).send({ error: "Regulatory pulse not enabled" });
+    const tasks = orchestrator.listTasks();
+    const alerts = await orchestrator.regPulse.checkAll(tasks);
+    return { checked: tasks.length, alerts };
+  });
+
+  // ── Client status reports ─────────────────────────────────────────────────────
+
+  app.post("/tasks/:id/status-report", async (req, reply) => {
+    const user = getUser(req);
+    const { id } = req.params as { id: string };
+    const task = orchestrator.getTask(id);
+    if (!task) return reply.status(404).send({ error: "Task not found" });
+    if (!canViewTask(user, task)) return reply.status(403).send({ error: "Access denied" });
+    const {
+      format = "markdown",
+      includeTimeEntries = true,
+      includeBudgetBurn = true,
+      includeOcgFlags = false,
+      customNote,
+    } = (req.body ?? {}) as Partial<StatusReportOptions>;
+    if (format !== "html" && format !== "markdown") return reply.status(400).send({ error: "format must be html or markdown" });
+
+    const timeEntries = includeTimeEntries
+      ? orchestrator.time.list({ taskId: id })
+      : [];
+
+    // Resolve budget burn via budgetMonitor if available on the orchestrator
+    const budgetBurn = includeBudgetBurn && task.matterNumber && orchestrator.budgetMonitor
+      ? orchestrator.budgetMonitor.getBurn(task.matterNumber)
+      : null;
+
+    // Resolve the submitting lawyer's tone profile if available
+    const assignedId = task.assignedLawyerIds?.[0] ?? task.createdByProfileId;
+    const profile = assignedId ? orchestrator.profiles.get(assignedId) : null;
+
+    const report = await generateStatusReport(
+      task,
+      timeEntries,
+      budgetBurn ?? undefined,
+      { taskId: id, format, includeTimeEntries, includeBudgetBurn, includeOcgFlags, customNote },
+      profile ?? undefined,
+    );
+
+    if (format === "html") {
+      reply.header("Content-Type", "text/html; charset=utf-8");
+      return reply.send(report.content);
+    }
+    return report;
+  });
+
+  // ── Deadline calculator ───────────────────────────────────────────────────────
+
+  app.get("/deadlines/rules", async (_req, _reply) => {
+    return orchestrator.deadlines.listJurisdictions();
+  });
+
+  app.post("/deadlines/compute", async (req, reply) => {
+    const { jurisdiction, triggerEvent, triggerDate } = req.body as {
+      jurisdiction: string; triggerEvent: string; triggerDate: string;
+    };
+    if (!jurisdiction || !triggerEvent || !triggerDate) {
+      return reply.status(400).send({ error: "jurisdiction, triggerEvent, triggerDate required" });
+    }
+    if (isNaN(Date.parse(triggerDate))) {
+      return reply.status(400).send({ error: "triggerDate must be a valid ISO date string" });
+    }
+    try {
+      return orchestrator.deadlines.compute(jurisdiction, triggerEvent, triggerDate);
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/matters/:matterNumber/deadlines", async (req, reply) => {
+    const { matterNumber } = req.params as { matterNumber: string };
+    const { triggerEvent, triggerDate } = req.body as { triggerEvent: string; triggerDate: string };
+    if (!triggerEvent || !triggerDate) return reply.status(400).send({ error: "triggerEvent and triggerDate required" });
+    // Find this matter's jurisdiction from any associated task
+    const tasks = orchestrator.listTasks();
+    const task = tasks.find((t) => t.matterNumber === matterNumber);
+    const jurisdiction = task?.jurisdiction;
+    if (!jurisdiction) return reply.status(404).send({ error: "No task with jurisdiction found for this matter" });
+    if (isNaN(Date.parse(triggerDate))) return reply.status(400).send({ error: "triggerDate must be a valid ISO date string" });
+    try {
+      return orchestrator.deadlines.compute(jurisdiction, triggerEvent, triggerDate);
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
   // Both GET and PUT are partner-only: GET exposes the DocuSeal URL and
   // enabled state; PUT can redirect DocuSeal requests (SSRF) or weaken
@@ -885,6 +1348,11 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
     try {
       const updated = await orchestrator.settings.update(req.body as Record<string, unknown>);
+      auditLogger.write({
+        event: "settings.updated",
+        actorId: actorOf(req),
+        data: { fields: Object.keys(req.body as object) },
+      });
       return updated;
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
@@ -981,44 +1449,261 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   // Lawyers see only their own entries; partners see all.
   app.get("/time-entries", async (req) => {
     const user = getUser(req);
-    const { profileId, taskId, matterNumber, from, to } = req.query as Record<string, string>;
+    const { profileId, agentId, taskId, matterNumber, clientNumber, from, to, agentOnly } = req.query as Record<string, string>;
     const filter = {
       // Lawyers are restricted to their own entries; partners may filter by any profileId.
       profileId: isPartner(user) ? (profileId || undefined) : user?.profileId,
+      agentId: isPartner(user) ? (agentId || undefined) : undefined,
       taskId: taskId || undefined,
       matterNumber: matterNumber || undefined,
+      clientNumber: clientNumber || undefined,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
+      agentOnly: agentOnly === "true" ? true : agentOnly === "false" ? false : undefined,
     };
     return orchestrator.time.list(filter);
   });
 
+  /** GET /time-entries/agent-summary — per-agent billing totals. Partner only. */
+  app.get("/time-entries/agent-summary", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { taskId, matterNumber, clientNumber, from, to } = req.query as Record<string, string>;
+    const entries = orchestrator.time.list({
+      taskId: taskId || undefined,
+      matterNumber: matterNumber || undefined,
+      clientNumber: clientNumber || undefined,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+      agentOnly: true,
+    });
+    const byAgent = new Map<string, { agentId: string; agentName: string; entries: number; billingUnits: number; billingAmountUsd: number }>();
+    for (const e of entries) {
+      if (!e.agentId) continue;
+      const key = e.agentId;
+      const existing = byAgent.get(key) ?? { agentId: e.agentId, agentName: e.agentName ?? e.agentId, entries: 0, billingUnits: 0, billingAmountUsd: 0 };
+      existing.entries++;
+      existing.billingUnits += e.billingUnits;
+      existing.billingAmountUsd += e.billingAmountUsd ?? 0;
+      byAgent.set(key, existing);
+    }
+    return Array.from(byAgent.values()).sort((a, b) => b.billingAmountUsd - a.billingAmountUsd);
+  });
+
   app.get("/time-entries/export.json", async (req, reply) => {
     if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
-    const { profileId, taskId, matterNumber, from, to } = req.query as Record<string, string>;
+    const { profileId, agentId, taskId, matterNumber, from, to, agentOnly } = req.query as Record<string, string>;
     const filter = {
       profileId: profileId || undefined,
+      agentId: agentId || undefined,
       taskId: taskId || undefined,
       matterNumber: matterNumber || undefined,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
+      agentOnly: agentOnly === "true" ? true : agentOnly === "false" ? false : undefined,
     };
     return orchestrator.time.exportJson(filter);
   });
 
   app.get("/time-entries/export.csv", async (req, reply) => {
     if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
-    const { profileId, taskId, matterNumber, from, to } = req.query as Record<string, string>;
+    const { profileId, agentId, taskId, matterNumber, from, to, agentOnly } = req.query as Record<string, string>;
     const filter = {
       profileId: profileId || undefined,
+      agentId: agentId || undefined,
       taskId: taskId || undefined,
       matterNumber: matterNumber || undefined,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
+      agentOnly: agentOnly === "true" ? true : agentOnly === "false" ? false : undefined,
     };
     reply.header("Content-Type", "text/csv; charset=utf-8");
     reply.header("Content-Disposition", "attachment; filename=\"time-entries.csv\"");
     return orchestrator.time.exportCsv(filter);
+  });
+
+  app.get("/time-entries/export.ledes", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber, clientNumber, from, to, invoiceNumber } = req.query as Record<string, string>;
+    if (!matterNumber && !clientNumber) return reply.status(400).send({ error: "matterNumber or clientNumber required" });
+    const entries = orchestrator.time.list({
+      matterNumber: matterNumber || undefined,
+      clientNumber: clientNumber || undefined,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    }).filter((e) => e.endedAt);
+    const invoice = invoiceNumber || `${matterNumber ?? clientNumber}-${new Date().toISOString().slice(0, 10)}`;
+    const ledes = exportLedes1998B(entries, { invoiceNumber: invoice });
+    reply.header("Content-Type", "application/edi-x12");
+    const safeFilename = invoice.replace(/[^\w\-\.]/g, "_");
+    reply.header("Content-Disposition", `attachment; filename="${safeFilename}.ledes"`);
+    return ledes;
+  });
+
+  // ── OCG time-entry compliance ─────────────────────────────────────────────────
+
+  app.get("/time-entries/suggestions", async (req) => {
+    const user = getUser(req);
+    const { profileId, clientNumber, matterNumber } = req.query as Record<string, string>;
+    const filter = {
+      profileId: isPartner(user) ? (profileId || undefined) : user?.profileId,
+      clientNumber: clientNumber || undefined,
+      matterNumber: matterNumber || undefined,
+    };
+    return orchestrator.time.listWithSuggestions(filter);
+  });
+
+  app.post("/time-entries/run-ocg-check", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { clientNumber, matterNumber, limit } = req.body as { clientNumber?: string; matterNumber?: string; limit?: number };
+    const cap = Math.min(limit ?? 100, 500);
+
+    const allEntries = orchestrator.time.list({
+      clientNumber: clientNumber || undefined,
+      matterNumber: matterNumber || undefined,
+    }).slice(0, cap);
+
+    const byClientId = new Map<string, typeof allEntries>();
+    for (const entry of allEntries) {
+      if (!entry.clientNumber) continue;
+      const client = orchestrator.clients.getByClientNumber(entry.clientNumber);
+      if (!client) continue;
+      const ocgDoc = ocgStore.getByClient(client.id);
+      if (!ocgDoc) continue;
+      const arr = byClientId.get(client.id) ?? [];
+      arr.push(entry);
+      byClientId.set(client.id, arr);
+    }
+
+    let checked = 0;
+    let withSuggestions = 0;
+
+    for (const [clientId, entries] of byClientId) {
+      const ocgDoc = ocgStore.getByClient(clientId);
+      if (!ocgDoc) continue;
+      try {
+        const suggestions = await ocgStore.checkEntries(entries, ocgDoc);
+        for (const [entryId, sug] of suggestions) {
+          orchestrator.time.setSuggestions(entryId, sug);
+          if (sug.length) withSuggestions++;
+        }
+        checked += entries.length;
+      } catch (err) {
+        logger.warn("OCG check batch failed", { clientId, error: (err as Error).message });
+      }
+    }
+
+    return { checked, withSuggestions };
+  });
+
+  app.post("/time-entries/:id/suggestions/accept", async (req, reply) => {
+    const user = getUser(req);
+    const { id } = req.params as { id: string };
+    const { ruleId } = req.body as { ruleId: string };
+    if (!ruleId) return reply.status(400).send({ error: "ruleId is required" });
+
+    const entries = orchestrator.time.list();
+    const entry = entries.find((e) => e.id === id);
+    if (!entry) return reply.status(404).send({ error: "Time entry not found" });
+    if (!isPartner(user) && user?.profileId !== entry.profileId) {
+      return reply.status(403).send({ error: "Access denied" });
+    }
+
+    const updated = orchestrator.time.acceptSuggestion(id, ruleId);
+    if (!updated) return reply.status(404).send({ error: "Suggestion not found" });
+    if (entry.clientNumber) {
+      const client = orchestrator.clients.list().find((c) => c.clientNumber === entry.clientNumber);
+      if (client) ocgStore.recordOutcome(client.id, ruleId, "accepted");
+    }
+    return updated;
+  });
+
+  app.post("/time-entries/:id/suggestions/dismiss", async (req, reply) => {
+    const user = getUser(req);
+    const { id } = req.params as { id: string };
+    const { ruleId } = req.body as { ruleId: string };
+    if (!ruleId) return reply.status(400).send({ error: "ruleId is required" });
+
+    const entries = orchestrator.time.list();
+    const entry = entries.find((e) => e.id === id);
+    if (!entry) return reply.status(404).send({ error: "Time entry not found" });
+    if (!isPartner(user) && user?.profileId !== entry.profileId) {
+      return reply.status(403).send({ error: "Access denied" });
+    }
+
+    const updated = orchestrator.time.dismissSuggestion(id, ruleId);
+    if (!updated) return reply.status(404).send({ error: "Suggestion not found" });
+    if (entry.clientNumber) {
+      const client = orchestrator.clients.list().find((c) => c.clientNumber === entry.clientNumber);
+      if (client) ocgStore.recordOutcome(client.id, ruleId, "dismissed");
+    }
+    return updated;
+  });
+
+  app.get("/clients/:id/ocg/stats", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const client = orchestrator.clients.get(id);
+    if (!client) return reply.status(404).send({ error: "Client not found" });
+    const stats = ocgStore.getStats(id);
+    if (!stats) return reply.status(404).send({ error: "No OCG document for this client" });
+    return stats;
+  });
+
+  // ── Pre-bill review workflow ──────────────────────────────────────────────────
+
+  app.post("/pre-bills", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber, clientNumber, from, to } = req.body as {
+      matterNumber: string; clientNumber?: string; from?: string; to?: string;
+    };
+    if (!matterNumber) return reply.status(400).send({ error: "matterNumber required" });
+    const entries = orchestrator.time.list({
+      matterNumber,
+      clientNumber: clientNumber || undefined,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    }).filter((e) => e.endedAt);
+    if (!entries.length) return reply.status(422).send({ error: "No closed entries found for this matter" });
+    const bill = orchestrator.preBills.create(matterNumber, entries, actorOf(req), clientNumber);
+    return reply.status(201).send(bill);
+  });
+
+  app.get("/pre-bills", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber } = req.query as Record<string, string>;
+    return orchestrator.preBills.list(matterNumber || undefined);
+  });
+
+  app.get("/pre-bills/:id", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const bill = orchestrator.preBills.getById(id);
+    if (!bill) return reply.status(404).send({ error: "Pre-bill not found" });
+    return bill;
+  });
+
+  app.patch("/pre-bills/:id", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    const body = req.body as {
+      status?: import("../types.js").PreBillStatus;
+      notes?: string;
+      entryEdit?: { entryId: string; description: string };
+    };
+    let bill = orchestrator.preBills.getById(id);
+    if (!bill) return reply.status(404).send({ error: "Pre-bill not found" });
+    if (body.entryEdit) {
+      bill = orchestrator.preBills.updateEntryDescription(id, body.entryEdit.entryId, body.entryEdit.description) ?? bill;
+    }
+    if (body.notes !== undefined) {
+      bill = orchestrator.preBills.setNotes(id, body.notes) ?? bill;
+    }
+    if (body.status) {
+      const updated = orchestrator.preBills.transition(id, body.status);
+      if (!updated) return reply.status(422).send({ error: `Invalid transition from ${bill.status} to ${body.status}` });
+      bill = updated;
+    }
+    return bill;
   });
 
   // ── NOSLEGAL analytics ────────────────────────────────────────────────────────
@@ -1223,6 +1908,99 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     }
     return { synced, skipped, errors };
   });
+
+  // ─── Twenty CRM ─────────────────────────────────────────────────────────────
+
+  app.get("/auth/twenty/status", async () => twentyClient.status());
+
+  /**
+   * POST /clients/:id/sync-to-twenty
+   *
+   * Upsert a Big Michael client as a Twenty Company. Searches Twenty by exact
+   * name first to avoid duplicates; creates if not found. Partner only.
+   */
+  app.post("/clients/:id/sync-to-twenty", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.code(403).send({ error: "Partner role required" });
+    if (!twentyClient.isConfigured()) return reply.code(503).send({ error: "Twenty not configured — set TWENTY_API_URL and TWENTY_API_KEY" });
+    const { id } = req.params as { id: string };
+    const client = orchestrator.clients.get(id);
+    if (!client) return reply.code(404).send({ error: "Client not found" });
+    try {
+      const company = await twentyClient.upsertClientAsCompany(client);
+      return { ok: true, twentyCompanyId: company.id, name: company.name };
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+
+  /**
+   * POST /tasks/:id/push-to-twenty
+   *
+   * Push a completed task's synthesis output to Twenty as a Note on the
+   * specified company. Requires the task to have a synthesis finding.
+   * Partners and the assigned lawyer may push. Partner only if no assignment.
+   */
+  app.post("/tasks/:id/push-to-twenty", async (req, reply) => {
+    if (!twentyClient.isConfigured()) return reply.code(503).send({ error: "Twenty not configured — set TWENTY_API_URL and TWENTY_API_KEY" });
+    const user = getUser(req);
+    const { id } = req.params as { id: string };
+    const task = await orchestrator.backend.getTask(id);
+    if (!task) return reply.code(404).send({ error: "Task not found" });
+    if (!canViewTask(user, task)) return reply.code(403).send({ error: "Access denied" });
+
+    const { twentyCompanyId } = req.body as { twentyCompanyId?: string };
+
+    const synthesis = task.findings?.find((f) => f.type === "synthesis") ?? task.findings?.[task.findings.length - 1];
+    const body = synthesis?.content ?? task.description;
+    const title = `Big Michael: ${task.description.slice(0, 120)}`;
+
+    try {
+      const note = await twentyClient.createNote({
+        title,
+        body,
+        companyId: twentyCompanyId,
+      });
+      return { ok: true, noteId: note.id, createdAt: note.createdAt };
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+
+  // ─── Job queue monitoring routes (partner only) ──────────────────────────────
+
+  app.get("/jobs", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.code(403).send({ error: "Partner role required" });
+    const { status, limit, offset } = req.query as {
+      status?: string;
+      limit?: string;
+      offset?: string;
+    };
+    return jobQueue.list({
+      status: status as Parameters<typeof jobQueue.list>[0] extends { status?: infer S } ? S : never,
+      limit: limit ? parseInt(limit) : 50,
+      offset: offset ? parseInt(offset) : 0,
+    });
+  });
+
+  app.get("/jobs/stats", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.code(403).send({ error: "Partner role required" });
+    return jobQueue.stats();
+  });
+
+  app.post("/jobs/:id/retry", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.code(403).send({ error: "Partner role required" });
+    const { id } = req.params as { id: string };
+    try {
+      const job = await jobQueue.retry(id);
+      return { ok: true, job };
+    } catch (err) {
+      return reply.code(404).send({ error: (err as Error).message });
+    }
+  });
+
+  // ─── Start background worker ──────────────────────────────────────────────────
+
+  startWorker(orchestrator);
 
   await app.listen({ port: Config.api.port, host: Config.api.host });
   logger.info("REST API started", { port: Config.api.port, host: Config.api.host, auth: Config.api.apiKey ? "x-api-key" : "none" });

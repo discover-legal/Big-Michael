@@ -17,6 +17,7 @@ import type { ToolRegistry, ToolContext } from "../tools/index.js";
 import type { KnowledgeStore } from "../knowledge/index.js";
 import { sanitizePromptContent } from "../adapters/lavern.js";
 import type { InterRoundMemoryStore } from "../memory/index.js";
+import type { TimeStore } from "../time/index.js";
 import type {
   AgentDefinition,
   AgentMessage,
@@ -49,6 +50,14 @@ export interface AgentContext {
   ownerId?: string;
   /** Tone fingerprint of the assigned lawyer — injected into drafting-domain agent prompts. */
   assignedLawyerTone?: ToneProfile;
+  // ── Agent billing context ─────────────────────────────────────────────────
+  /** Time store to record agent work entries. When absent, no entry is created. */
+  timeStore?: TimeStore;
+  /** Responsible lawyer ID — agent entry is attributed to them for billing. */
+  responsibleLawyerId?: string;
+  responsibleLawyerName?: string;
+  matterNumber?: string;
+  clientNumber?: string;
 }
 
 export class Agent {
@@ -82,6 +91,7 @@ export class Agent {
    * Falls back to a single-shot call when tools are not wired up.
    */
   async process(ctx: AgentContext): Promise<Finding[]> {
+    const startedAt = new Date();
     const taskType = inferTaskType(this.definition);
     const complexity = estimateComplexity(ctx.roundGoal.description);
 
@@ -120,7 +130,30 @@ export class Agent {
         })
       : await this.callModel(prompt, maxTokens, model, { taskId: ctx.taskId, costContext: "task" });
 
-    return parseFindings(text, this.definition);
+    const findings = parseFindings(text, this.definition);
+
+    // Record agent time entry if billing is configured and a task is in context.
+    if (Config.agentBilling.enabled && ctx.timeStore && ctx.taskId) {
+      const rate = resolveAgentBillingRate(this.definition);
+      if (rate > 0) {
+        const entry = ctx.timeStore.open({
+          agentId: this.definition.id,
+          agentName: this.definition.name,
+          profileId: ctx.responsibleLawyerId,
+          profileName: ctx.responsibleLawyerName,
+          taskId: ctx.taskId,
+          matterNumber: ctx.matterNumber,
+          clientNumber: ctx.clientNumber,
+          description: `[AI] ${this.definition.name}: ${ctx.roundGoal.description.slice(0, 200)}`,
+          event: "agent_work",
+          billingRate: rate,
+          startedAt,
+        });
+        ctx.timeStore.close(entry.id);
+      }
+    }
+
+    return findings;
   }
 
   /**
@@ -275,6 +308,19 @@ function recordCost(
     context,
     ...meta,
   });
+}
+
+// ─── Agent billing rate resolution ────────────────────────────────────────────
+
+function resolveAgentBillingRate(def: AgentDefinition): number {
+  if (def.billingRate !== undefined) return def.billingRate;
+  const tierRates: Record<number, number> = {
+    0: Config.agentBilling.rateT0,
+    1: Config.agentBilling.rateT1,
+    2: Config.agentBilling.rateT2,
+    3: Config.agentBilling.rateT3,
+  };
+  return tierRates[def.tier] ?? Config.agentBilling.defaultRate;
 }
 
 // ─── Task type inference ──────────────────────────────────────────────────────

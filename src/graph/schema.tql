@@ -1,0 +1,90 @@
+define
+
+# ── Attributes ─────────────────────────────────────────────────────────────────
+external-id   sub attribute, value string;
+entity-name   sub attribute, value string;
+matter-number sub attribute, value string;
+practice-area sub attribute, value string;
+jurisdiction  sub attribute, value string;
+matter-status sub attribute, value string;
+conflict-path sub attribute, value string;
+
+# ── Entities ───────────────────────────────────────────────────────────────────
+legal-party sub entity, abstract,
+  owns external-id @key,
+  owns entity-name,
+  plays represents:client,
+  plays adverse-to:party,
+  plays subsidiary-of:child,
+  plays subsidiary-of:parent,
+  plays conflict:client-a,
+  plays conflict:client-b;
+
+company sub legal-party;
+natural-person sub legal-party;
+
+matter sub entity,
+  owns matter-number @key,
+  owns practice-area,
+  owns jurisdiction,
+  owns matter-status,
+  plays represents:matter,
+  plays conflict:matter-a,
+  plays conflict:matter-b;
+
+# ── Relations ──────────────────────────────────────────────────────────────────
+# TERNARY: captures the three-way (client ↔ matter) representation fact.
+# TypeDB's native n-ary relations mean we don't need two binary joins.
+represents sub relation,
+  relates client,
+  relates matter;
+
+adverse-to sub relation,    # symmetric — both players fill "party"
+  relates party;
+
+subsidiary-of sub relation,
+  relates child,
+  relates parent;
+
+conflict sub relation,      # NEVER inserted — always inferred by rules
+  owns conflict-path,
+  relates client-a,
+  relates client-b,
+  relates matter-a,
+  relates matter-b;
+
+# ── Inference rules ────────────────────────────────────────────────────────────
+rule direct-conflict:
+when {
+  $m1 isa matter; $m2 isa matter; not { $m1 is $m2; };
+  (client: $c1, matter: $m1) isa represents;
+  (client: $c2, matter: $m2) isa represents;
+  not { $c1 is $c2; };
+  (party: $c1, party: $c2) isa adverse-to;
+} then {
+  (client-a: $c1, client-b: $c2, matter-a: $m1, matter-b: $m2) isa conflict;
+};
+
+rule subsidiary-conflict:
+when {
+  $m1 isa matter; $m2 isa matter; not { $m1 is $m2; };
+  (client: $c1, matter: $m1) isa represents;
+  (client: $c2, matter: $m2) isa represents;
+  not { $c1 is $c2; };
+  (party: $c1, party: $sub) isa adverse-to;
+  (child: $c2, parent: $sub) isa subsidiary-of;
+} then {
+  (client-a: $c1, client-b: $c2, matter-a: $m1, matter-b: $m2) isa conflict;
+};
+
+rule subsidiary-conflict-inverse:
+when {
+  $m1 isa matter; $m2 isa matter; not { $m1 is $m2; };
+  (client: $c1, matter: $m1) isa represents;
+  (client: $c2, matter: $m2) isa represents;
+  not { $c1 is $c2; };
+  (party: $sub, party: $c2) isa adverse-to;
+  (child: $c1, parent: $sub) isa subsidiary-of;
+} then {
+  (client-a: $c1, client-b: $c2, matter-a: $m1, matter-b: $m2) isa conflict;
+};

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "./api";
-import type { Client, ClientMatter, ConflictCheckResult } from "./types";
+import type { Client, ClientMatter, ConflictCheckResult, OcgDocument, OcgRule } from "./types";
 import { PRACTICE_AREAS } from "./types";
 
 export function ClientsPanel({ onClose, notify }: { onClose: () => void; notify: (m: string) => void }) {
@@ -15,10 +15,86 @@ export function ClientsPanel({ onClose, notify }: { onClose: () => void; notify:
   const [nc, setNc] = useState({ name: "", clientNumber: "", adversaries: "", notes: "" });
   const [nm, setNm] = useState({ matterNumber: "", description: "", practiceArea: "" });
 
+  // OCG sub-panel state
+  const [ocgOpen, setOcgOpen] = useState(false);
+  const [ocgDoc, setOcgDoc] = useState<OcgDocument | null>(null);
+  const [ocgTitle, setOcgTitle] = useState("Outside Counsel Guidelines");
+  const [ocgText, setOcgText] = useState("");
+  const [ocgBusy, setOcgBusy] = useState(false);
+
+  // Voice guide sub-panel state
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const voiceFileRef = useRef<HTMLInputElement>(null);
+  const ocgFileRef = useRef<HTMLInputElement>(null);
+
   const selected = clients.find((c) => c.id === selectedId) ?? null;
 
   const load = () => api.listClients().then(setClients).catch((e) => notify((e as Error).message)).finally(() => setLoading(false));
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load OCG doc when switching to a new client
+  useEffect(() => {
+    setOcgDoc(null);
+    setOcgOpen(false);
+    setVoiceOpen(false);
+    if (!selectedId) return;
+    api.getClientOcg(selectedId).then(setOcgDoc).catch(() => setOcgDoc(null));
+  }, [selectedId]);
+
+  async function extractOcg() {
+    if (!selectedId || !ocgText.trim()) return;
+    setOcgBusy(true);
+    try {
+      const res = await api.ingestClientOcg(selectedId, { title: ocgTitle, text: ocgText });
+      setOcgDoc(res.ocg);
+      setOcgText("");
+      notify(`${res.ruleCount} OCG rules extracted`);
+      await load();
+    } catch (e) { notify((e as Error).message); } finally { setOcgBusy(false); }
+  }
+
+  async function uploadOcgFile(file: File) {
+    if (!selectedId) return;
+    setOcgBusy(true);
+    try {
+      const res = await api.uploadClientOcg(selectedId, ocgTitle, file);
+      setOcgDoc(res.ocg);
+      notify(`${res.ruleCount} OCG rules extracted from file`);
+      await load();
+    } catch (e) { notify((e as Error).message); } finally { setOcgBusy(false); }
+  }
+
+  async function deleteOcg() {
+    if (!selectedId || !window.confirm("Delete OCG document for this client?")) return;
+    setOcgBusy(true);
+    try {
+      await api.deleteClientOcg(selectedId);
+      setOcgDoc(null);
+      notify("OCG document removed");
+      await load();
+    } catch (e) { notify((e as Error).message); } finally { setOcgBusy(false); }
+  }
+
+  async function uploadVoiceFile(file: File) {
+    if (!selectedId) return;
+    setVoiceBusy(true);
+    try {
+      const res = await api.importClientVoice(selectedId, file);
+      notify(`Voice guide generated from ${res.samplesAnalysed} samples`);
+      await load();
+    } catch (e) { notify((e as Error).message); } finally { setVoiceBusy(false); }
+  }
+
+  async function deleteVoiceGuide() {
+    if (!selectedId || !window.confirm("Delete voice guide for this client?")) return;
+    setVoiceBusy(true);
+    try {
+      await api.deleteClientVoice(selectedId);
+      notify("Voice guide removed");
+      await load();
+    } catch (e) { notify((e as Error).message); } finally { setVoiceBusy(false); }
+  }
 
   async function checkConflict() {
     if (!nc.name.trim()) return;
@@ -155,6 +231,108 @@ export function ClientsPanel({ onClose, notify }: { onClose: () => void; notify:
                         {selected.matters.map((m) => (
                           <MatterRow key={m.matterNumber} matter={m} onRemove={() => removeMatter(selected.id, m.matterNumber)} />
                         ))}
+
+                        {/* ── Client guidelines ── */}
+                        <div style={{ marginTop: 18 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                            Client guidelines
+                          </div>
+                          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                            <button className="btn ghost sm" onClick={() => { setOcgOpen((o) => !o); setVoiceOpen(false); }}>
+                              {ocgDoc ? `⚖ OCG · ${ocgDoc.rules.length} rules` : "⚖ OCG rules"}
+                            </button>
+                            <button className="btn ghost sm" onClick={() => { setVoiceOpen((o) => !o); setOcgOpen(false); }}>
+                              {selected.voiceGuide ? "✦ Voice guide ✓" : "✦ Voice guide"}
+                            </button>
+                          </div>
+
+                          {/* OCG sub-panel */}
+                          <AnimatePresence>
+                            {ocgOpen && (
+                              <motion.div key="ocg-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                                style={{ overflow: "hidden", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", marginBottom: 10 }}>
+                                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Outside Counsel Guidelines</div>
+
+                                {ocgDoc ? (
+                                  <div>
+                                    <div style={{ color: "var(--text-dim)", fontSize: 12.5, marginBottom: 8 }}>{ocgDoc.title} · {ocgDoc.rules.length} rules extracted</div>
+                                    {ocgDoc.rules.slice(0, 5).map((r: OcgRule) => (
+                                      <div key={r.id} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 5 }}>
+                                        <span className={`pill sm ${r.severity === "hard" ? "red" : "gold"}`} style={{ fontSize: 10, marginTop: 1 }}>{r.severity.toUpperCase()}</span>
+                                        <span className="pill sm blue" style={{ fontSize: 10, marginTop: 1 }}>{r.category.replace(/_/g, " ")}</span>
+                                        <span style={{ fontSize: 12.5, color: "var(--text-dim)", flex: 1 }}>{r.text}</span>
+                                      </div>
+                                    ))}
+                                    {ocgDoc.rules.length > 5 && <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>…and {ocgDoc.rules.length - 5} more rules</div>}
+                                    <button className="btn reject sm" style={{ marginTop: 10 }} disabled={ocgBusy} onClick={deleteOcg}>Delete OCG</button>
+                                  </div>
+                                ) : null}
+
+                                <div style={{ marginTop: ocgDoc ? 14 : 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)", marginBottom: 6 }}>
+                                    {ocgDoc ? "Re-import OCG" : "Import OCG document"}
+                                  </div>
+                                  <div className="field" style={{ marginBottom: 8 }}>
+                                    <label>Title</label>
+                                    <input value={ocgTitle} onChange={(e) => setOcgTitle(e.target.value)} placeholder="Outside Counsel Guidelines" />
+                                  </div>
+                                  <div className="field" style={{ marginBottom: 8 }}>
+                                    <label>OCG text <span style={{ fontWeight: 400, color: "var(--text-faint)" }}>(paste billing rules)</span></label>
+                                    <textarea style={{ minHeight: 72, fontSize: 12 }} value={ocgText} onChange={(e) => setOcgText(e.target.value)} placeholder="Paste OCG billing provisions here…" />
+                                  </div>
+                                  <div style={{ display: "flex", gap: 8 }}>
+                                    <button className="btn primary sm" disabled={ocgBusy || !ocgText.trim()} onClick={extractOcg}>
+                                      {ocgBusy ? "Extracting…" : "Extract rules"}
+                                    </button>
+                                    <span style={{ color: "var(--text-faint)", fontSize: 12, alignSelf: "center" }}>or</span>
+                                    <button className="btn ghost sm" disabled={ocgBusy} onClick={() => ocgFileRef.current?.click()}>
+                                      Upload file
+                                    </button>
+                                    <input ref={ocgFileRef} type="file" accept=".pdf,.txt,.docx,.doc" style={{ display: "none" }}
+                                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOcgFile(f); e.target.value = ""; }} />
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          {/* Voice guide sub-panel */}
+                          <AnimatePresence>
+                            {voiceOpen && (
+                              <motion.div key="voice-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                                style={{ overflow: "hidden", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
+                                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Client voice guide</div>
+
+                                {selected.voiceGuide ? (
+                                  <div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                                      <div style={{ fontSize: 12.5 }}><span style={{ color: "var(--text-faint)", fontWeight: 600 }}>Formality: </span>{selected.voiceGuide.preferredFormality}</div>
+                                      <div style={{ fontSize: 12.5 }}><span style={{ color: "var(--text-faint)", fontWeight: 600 }}>Style: </span>{selected.voiceGuide.communicationStyle}</div>
+                                      <div style={{ fontSize: 12.5 }}><span style={{ color: "var(--text-faint)", fontWeight: 600 }}>Terminology: </span>{selected.voiceGuide.terminologyPreferences}</div>
+                                      <div style={{ fontSize: 12.5 }}><span style={{ color: "var(--text-faint)", fontWeight: 600 }}>Reporting focus: </span>{selected.voiceGuide.reportingPreferences}</div>
+                                    </div>
+                                    <button className="btn reject sm" disabled={voiceBusy} onClick={deleteVoiceGuide}>Delete voice guide</button>
+                                  </div>
+                                ) : (
+                                  <div style={{ color: "var(--text-faint)", fontSize: 12.5, marginBottom: 10 }}>
+                                    No voice guide yet. Upload client emails, briefs, or other writing samples to generate one.
+                                  </div>
+                                )}
+
+                                <div style={{ marginTop: selected.voiceGuide ? 14 : 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)", marginBottom: 8 }}>
+                                    {selected.voiceGuide ? "Re-generate from new samples" : "Upload writing samples"}
+                                  </div>
+                                  <button className="btn primary sm" disabled={voiceBusy} onClick={() => voiceFileRef.current?.click()}>
+                                    {voiceBusy ? "Analysing…" : "Upload samples (PDF/TXT/DOCX)"}
+                                  </button>
+                                  <input ref={voiceFileRef} type="file" accept=".pdf,.txt,.docx,.doc" style={{ display: "none" }}
+                                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadVoiceFile(f); e.target.value = ""; }} />
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </div>
                     )}
                   </div>

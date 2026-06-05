@@ -6,7 +6,8 @@
 
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { resolve, join as pathJoin } from "node:path";
+import * as os from "node:os";
 
 import { estimateComplexity, shouldUseThinking } from "../src/routing/model.js";
 import { LavernAdapter, LavernWorkflowAdapter, fromMikeOSSWorkflow, fromExternalConfig, instantiateTemplate, sanitizePromptContent } from "../src/adapters/lavern.js";
@@ -14,7 +15,8 @@ import { jurisdictionMatch } from "../src/dytopo/jurisdiction.js";
 import { assertSafeReadPath } from "../src/tools/pdf.js";
 import { assertPublicHttpUrl } from "../src/settings/index.js";
 import { canViewTask, filterVisible, isPartner } from "../src/auth/index.js";
-import type { SessionUser, AgentDefinition } from "../src/types.js";
+import type { SessionUser, AgentDefinition, Task } from "../src/types.js";
+import { RegPulseMonitor } from "../src/regulatory/pulse.js";
 
 // validatePlugin is not exported — test via the public PluginRegistry interface instead
 import { PluginRegistry } from "../src/adapters/plugin.js";
@@ -24,6 +26,10 @@ import { detectNosLegal } from "../src/services/classifier.js";
 import { Config } from "../src/config.js";
 import { ClioClient, clioClient } from "../src/integrations/clio.js";
 import { CLIO_TOOLS, CLIO_TOOL_NAMES } from "../src/tools/clio.js";
+import { validateSinkUrl } from "../src/audit/sinks/utils.js";
+import { exportLedes1998B } from "../src/billing/ledes.js";
+import { markdownToHtml } from "../src/reports/status.js";
+import { DocketMonitor } from "../src/dockets/monitor.js";
 
 // ─── Model routing: complexity heuristic ────────────────────────────────────
 
@@ -561,8 +567,10 @@ test("TimeStore: exportCsv() includes header row", () => {
   const csv = store.exportCsv();
   const lines = csv.split(/\r?\n/);
   assert.ok(lines.length >= 2, "CSV should have header + at least one data row");
-  assert.ok(lines[0].startsWith("id,profileId,profileName"), `Header row was: ${lines[0]}`);
+  assert.ok(lines[0].startsWith("id,event,profileId,profileName"), `Header row was: ${lines[0]}`);
   assert.ok(lines[0].includes("billingUnits"), "Header must include billingUnits");
+  assert.ok(lines[0].includes("utbmsTaskCode"), "Header must include utbmsTaskCode");
+  assert.ok(lines[0].includes("utbmsActivityCode"), "Header must include utbmsActivityCode");
 });
 
 test("detectNosLegal: returns empty object on LLM/provider failure", async () => {
@@ -675,4 +683,471 @@ test("clio_list_matters: default limit is 50 when not specified", async () => {
   await tool.execute({});
   fn.mock.restore();
   assert.equal(capturedOpts!.limit, 50, "default limit must be 50");
+});
+
+// ─── Security: audit sink SSRF guard ────────────────────────────────────────
+
+test("validateSinkUrl: accepts a public https URL", () => {
+  const u = validateSinkUrl("https://logs.example.com:9200", "TestSink");
+  assert.equal(u.hostname, "logs.example.com");
+});
+
+test("validateSinkUrl: rejects file:// protocol", () => {
+  assert.throws(() => validateSinkUrl("file:///etc/passwd", "TestSink"), /only http\/https/);
+});
+
+test("validateSinkUrl: rejects loopback 127.0.0.1", () => {
+  assert.throws(() => validateSinkUrl("http://127.0.0.1:9200", "TestSink"), /private\/loopback/);
+});
+
+test("validateSinkUrl: rejects localhost hostname", () => {
+  assert.throws(() => validateSinkUrl("http://localhost:9200", "TestSink"), /private\/loopback/);
+});
+
+test("validateSinkUrl: rejects RFC-1918 10.x", () => {
+  assert.throws(() => validateSinkUrl("https://10.0.0.1/opensearch", "TestSink"), /private\/loopback/);
+});
+
+test("validateSinkUrl: rejects RFC-1918 172.16-31", () => {
+  assert.throws(() => validateSinkUrl("https://172.20.5.1/splunk", "TestSink"), /private\/loopback/);
+});
+
+test("validateSinkUrl: rejects link-local 169.254.x", () => {
+  assert.throws(() => validateSinkUrl("http://169.254.169.254/latest/meta-data/", "TestSink"), /private\/loopback/);
+});
+
+test("validateSinkUrl: rejects IPv6 loopback ::1", () => {
+  assert.throws(() => validateSinkUrl("http://[::1]:9200", "TestSink"), /private\/loopback/);
+});
+
+// ─── Security: LEDES 1998B field injection guard ─────────────────────────────
+
+test("exportLedes1998B: pipe in invoiceNumber cannot create extra LEDES fields", () => {
+  const entry = {
+    id: "e1", event: "task_execution" as const,
+    startedAt: new Date("2026-01-01T10:00:00Z"),
+    endedAt: new Date("2026-01-01T10:30:00Z"),
+    durationMs: 1_800_000, billingUnits: 5,
+    description: "Review contract",
+  } as import("../src/types.js").TimeEntry;
+  const output = exportLedes1998B([entry], { invoiceNumber: "INV-001|INJECTED" });
+  const rows = output.split("\r\n");
+  const dataRow = rows[2];
+  assert.ok(dataRow !== undefined, "should have a data row");
+  // After sanitisation the pipe is replaced with a space; "INJECTED" must not be
+  // an isolated column (i.e. no field should equal the injected token verbatim).
+  assert.ok(!dataRow.split("|").includes("INJECTED"), "pipe must not create an isolated LEDES field");
+});
+
+test("exportLedes1998B: CRLF in description does not create extra LEDES rows", () => {
+  const entry = {
+    id: "e2", event: "task_execution" as const,
+    startedAt: new Date("2026-01-01T10:00:00Z"),
+    endedAt: new Date("2026-01-01T11:00:00Z"),
+    durationMs: 3_600_000, billingUnits: 10,
+    description: "Draft motion\r\nExtra line",
+  } as import("../src/types.js").TimeEntry;
+  const output = exportLedes1998B([entry], { invoiceNumber: "INV-002" });
+  // LEDES1998B[] + header + 1 data row + trailing empty = 4 parts when split on CRLF
+  const nonEmptyLines = output.split("\r\n").filter(Boolean);
+  assert.equal(nonEmptyLines.length, 3, "CRLF in description must not produce extra rows");
+});
+
+// ─── BudgetPredictor ─────────────────────────────────────────────────────────
+
+import { BudgetPredictor } from "../src/budget/predictor.js";
+import type { Task } from "../src/types.js";
+
+/** Helper: create a minimal closed Task */
+function makeTask(matterNumber: string, jurisdiction = "", workflowType: Task["workflowType"] = "roundtable"): Task {
+  return {
+    id: matterNumber,
+    description: "Test matter",
+    matterNumber,
+    jurisdiction,
+    workflowType,
+    status: "complete",
+    currentPhase: "delivery",
+    currentRound: 1,
+    maxRounds: 3,
+    activeAgentIds: [],
+    documentIds: [],
+    rounds: [],
+    findings: [],
+    pendingGates: [],
+    createdAt: new Date("2026-01-01"),
+    updatedAt: new Date("2026-01-02"),
+    completedAt: new Date("2026-01-02"),
+  };
+}
+
+/** Helper: open and immediately close a time entry on a store */
+function addClosedEntry(
+  store: TimeStore,
+  matterNumber: string,
+  billingAmountUsd: number,
+  billingUnits = 1,
+): void {
+  const startedAt = new Date(Date.now() - 30 * 60 * 1000); // 30 min ago
+  const entry = store.open({
+    taskId: matterNumber,
+    matterNumber,
+    description: "Test work",
+    event: "task_run",
+    startedAt,
+  });
+  // Manually set billing data (close() would compute it from wall-clock time)
+  const stored = store.list({ matterNumber }).find((e) => e.id === entry.id)!;
+  stored.endedAt = new Date();
+  stored.durationMs = 30 * 60 * 1000;
+  stored.billingUnits = billingUnits;
+  stored.billingAmountUsd = billingAmountUsd;
+}
+
+test("BudgetPredictor: returns null for unknown matter", () => {
+  const predictor = new BudgetPredictor();
+  const store = new TimeStore();
+  const taskMap = new Map<string, Task>();
+  const result = predictor.predict("MATTER-UNKNOWN", store, taskMap);
+  assert.equal(result, null);
+});
+
+test("BudgetPredictor: insufficient_data confidence when < 3 comparable matters", () => {
+  const predictor = new BudgetPredictor();
+  const store = new TimeStore();
+  const taskMap = new Map<string, Task>();
+
+  // Add 2 closed comparable matters (not enough for low confidence)
+  for (let i = 1; i <= 2; i++) {
+    const mn = `MATTER-HIST-${i}`;
+    addClosedEntry(store, mn, 1000, 2);
+    addClosedEntry(store, mn, 500, 1);
+    taskMap.set(mn, makeTask(mn));
+  }
+
+  // Add the open matter being predicted
+  const openMatter = "MATTER-OPEN";
+  addClosedEntry(store, openMatter, 400, 1);
+  taskMap.set(openMatter, makeTask(openMatter));
+
+  const result = predictor.predict(openMatter, store, taskMap);
+  assert.ok(result !== null, "should return a prediction");
+  assert.equal(result!.confidence, "insufficient_data");
+});
+
+test("BudgetPredictor: high confidence with 10+ comparable matters", () => {
+  const predictor = new BudgetPredictor();
+  const store = new TimeStore();
+  const taskMap = new Map<string, Task>();
+
+  // Add 10 closed comparable matters (qualifies for high confidence)
+  for (let i = 1; i <= 10; i++) {
+    const mn = `MATTER-HIST-HIGH-${i}`;
+    addClosedEntry(store, mn, 2000, 4);
+    addClosedEntry(store, mn, 1000, 2);
+    taskMap.set(mn, makeTask(mn, "US", "roundtable"));
+  }
+
+  // Open matter being predicted (same jurisdiction so we get high-confidence comparables)
+  const openMatter = "MATTER-OPEN-HIGH";
+  addClosedEntry(store, openMatter, 500, 1);
+  taskMap.set(openMatter, makeTask(openMatter, "US", "roundtable"));
+
+  const result = predictor.predict(openMatter, store, taskMap);
+  assert.ok(result !== null, "should return a prediction");
+  assert.equal(result!.confidence, "high");
+  assert.ok(result!.comparableMatterCount >= 10);
+});
+
+test("BudgetPredictor: percentile calculation is correct", () => {
+  const predictor = new BudgetPredictor();
+  // Test with a simple sorted array: [1, 2, 3, 4, 5]
+  const sorted = [1, 2, 3, 4, 5];
+  // Median (p=0.5) of [1,2,3,4,5] → index 2 → value 3
+  assert.equal(predictor.percentile(sorted, 0.5), 3);
+  // p=0 → first element
+  assert.equal(predictor.percentile(sorted, 0), 1);
+  // p=1 → last element
+  assert.equal(predictor.percentile(sorted, 1), 5);
+  // p=0.25 → index 1 → value 2
+  assert.equal(predictor.percentile(sorted, 0.25), 2);
+  // p=0.75 → index 3 → value 4
+  assert.equal(predictor.percentile(sorted, 0.75), 4);
+  // Linear interpolation: [10, 20] at p=0.5 → 15
+  assert.equal(predictor.percentile([10, 20], 0.5), 15);
+});
+
+test("BudgetPredictor: completionPct caps at 99 for open matters", () => {
+  const predictor = new BudgetPredictor();
+  const store = new TimeStore();
+  const taskMap = new Map<string, Task>();
+
+  // Add 5 closed comparable matters with median cost of $100
+  for (let i = 1; i <= 5; i++) {
+    const mn = `MATTER-HIST-CAP-${i}`;
+    addClosedEntry(store, mn, 50, 1);
+    addClosedEntry(store, mn, 50, 1);
+    taskMap.set(mn, makeTask(mn));
+  }
+
+  // Open matter that has already spent MORE than the median (overspent)
+  const openMatter = "MATTER-OPEN-CAP";
+  addClosedEntry(store, openMatter, 200, 4); // spent 200, median is 100
+  taskMap.set(openMatter, makeTask(openMatter));
+
+  const result = predictor.predict(openMatter, store, taskMap);
+  assert.ok(result !== null, "should return a prediction");
+  // Even though spent > estimated, completionPct should cap at 99
+  assert.ok(result!.completionPct <= 99, `completionPct ${result!.completionPct} must not exceed 99`);
+});
+
+// ─── ConflictGraph: TypeDB optional integration ───────────────────────────────
+
+import { ConflictGraph } from "../src/graph/conflict.js";
+import type { ConflictReport } from "../src/types.js";
+import { syncConflictGraph } from "../src/graph/sync.js";
+
+test("ConflictGraph: isEnabled() returns false when TYPEDB_URL is unset", () => {
+  const g = new ConflictGraph();
+  assert.equal(g.isEnabled(), false);
+});
+
+test("ConflictGraph: connect() is a no-op when disabled (returns without error)", async () => {
+  const g = new ConflictGraph();
+  await assert.doesNotReject(() => g.connect());
+});
+
+test("ConflictGraph: checkClient() returns [] when disabled", async () => {
+  const g = new ConflictGraph();
+  const result = await g.checkClient("client-abc");
+  assert.deepEqual(result, []);
+});
+
+test("ConflictGraph: checkNewMatter() returns [] when disabled", async () => {
+  const g = new ConflictGraph();
+  const result = await g.checkNewMatter("client-abc", ["adv-1", "adv-2"]);
+  assert.deepEqual(result, []);
+});
+
+test("ConflictReport: shape matches expected interface", () => {
+  const report: ConflictReport = {
+    clientAId:     "client-001",
+    clientAName:   "Acme Corp",
+    clientBId:     "client-002",
+    clientBName:   "Rival Ltd",
+    matterANumber: "M-2024-001",
+    matterBNumber: "M-2024-002",
+    conflictPath:  "direct",
+    detectedAt:    new Date().toISOString(),
+  };
+  assert.equal(typeof report.clientAId, "string");
+  assert.equal(typeof report.clientAName, "string");
+  assert.equal(typeof report.clientBId, "string");
+  assert.equal(typeof report.clientBName, "string");
+  assert.equal(typeof report.matterANumber, "string");
+  assert.equal(typeof report.matterBNumber, "string");
+  assert.equal(typeof report.conflictPath, "string");
+  assert.equal(typeof report.detectedAt, "string");
+});
+
+test("syncConflictGraph: no-op when graph is disabled", async () => {
+  const g = new ConflictGraph();
+  const stubClients = {
+    list: () => [],
+    get: () => undefined,
+    getByClientNumber: () => undefined,
+  } as unknown as import("../src/clients/index.js").ClientStore;
+  const stubTime = {} as unknown as import("../src/time/index.js").TimeStore;
+  await assert.doesNotReject(() => syncConflictGraph(g, stubClients, stubTime));
+});
+
+// ─── RegPulseMonitor ─────────────────────────────────────────────────────────
+
+test("RegPulseMonitor: isEnabled() false when TAVILY_API_KEY not set", () => {
+  const monitor = new RegPulseMonitor();
+  assert.equal(monitor.isEnabled(), false);
+});
+
+test("RegPulseMonitor: buildQuery produces search string with practice area and jurisdiction", () => {
+  const monitor = new RegPulseMonitor();
+  const query = monitor.buildQuery("Intellectual Property", "US");
+  assert.ok(query.includes("Intellectual Property"), "query must contain practice area");
+  assert.ok(query.includes("US"), "query must contain jurisdiction");
+  assert.ok(
+    query.includes("regulation") || query.includes("ruling") || query.includes("guidance"),
+    "query must include regulatory search terms",
+  );
+});
+
+test("RegPulseMonitor: skips matter without practiceArea (no noslegal.areaOfLaw)", async () => {
+  const monitor = new RegPulseMonitor();
+  const task = {
+    id: "t-nopa",
+    jurisdiction: "UK",
+    status: "running",
+  } as unknown as Task;
+  const alerts = await monitor.checkMatter(task);
+  assert.equal(alerts.length, 0, "should return no alerts when noslegal.areaOfLaw is missing");
+});
+
+test("RegPulseMonitor: skips matter without jurisdiction", async () => {
+  const monitor = new RegPulseMonitor();
+  const task = {
+    id: "t-nojur",
+    noslegal: { areaOfLaw: "Tax" },
+    status: "running",
+  } as unknown as Task;
+  const alerts = await monitor.checkMatter(task);
+  assert.equal(alerts.length, 0, "should return no alerts when jurisdiction is missing");
+});
+
+test("RegPulseMonitor: respects per-matter cooldown", async () => {
+  const monitor = new RegPulseMonitor();
+  const lastChecked = (monitor as unknown as { lastChecked: Map<string, number> }).lastChecked;
+  lastChecked.set("matter-123", Date.now());
+  const task = {
+    id: "t-cooldown",
+    matterNumber: "matter-123",
+    jurisdiction: "EU",
+    noslegal: { areaOfLaw: "Competition & Antitrust" },
+    status: "running",
+  } as unknown as Task;
+  const alerts = await monitor.checkMatter(task);
+  assert.equal(alerts.length, 0, "should skip matter within cooldown window");
+});
+
+// ─── Status report: markdownToHtml helper ─────────────────────────────────────
+
+test("markdownToHtml: ## Heading → contains <h2>", () => {
+  const html = markdownToHtml("## Summary");
+  assert.ok(html.includes("<h2>"), `Expected <h2> in output but got: ${html}`);
+  assert.ok(html.includes("Summary"), "Heading text should be preserved");
+});
+
+test("markdownToHtml: **bold** → contains <strong>", () => {
+  const html = markdownToHtml("This is **important** text.");
+  assert.ok(html.includes("<strong>"), `Expected <strong> in output but got: ${html}`);
+  assert.ok(html.includes("important"), "Bold text should be preserved");
+});
+
+test("markdownToHtml: - item → contains <li>", () => {
+  const html = markdownToHtml("- First item\n- Second item");
+  assert.ok(html.includes("<li>"), `Expected <li> in output but got: ${html}`);
+  assert.ok(html.includes("First item"), "List item text should be preserved");
+});
+
+test("markdownToHtml: ### Heading → contains <h3>", () => {
+  const html = markdownToHtml("### Sub-section");
+  assert.ok(html.includes("<h3>"), `Expected <h3> in output but got: ${html}`);
+});
+
+test("markdownToHtml: plain text → wrapped in <p>", () => {
+  const html = markdownToHtml("Hello world.");
+  assert.ok(html.includes("<p>"), `Expected <p> in output but got: ${html}`);
+  assert.ok(html.includes("Hello world."), "Paragraph text should be preserved");
+});
+
+test("markdownToHtml: HTML special chars are escaped", () => {
+  const html = markdownToHtml("This is <b>not</b> HTML & raw.");
+  assert.ok(!html.includes("<b>"), "Raw <b> must be escaped");
+  assert.ok(html.includes("&lt;b&gt;"), "< and > must be escaped to &lt;&gt;");
+  assert.ok(html.includes("&amp;"), "& must be escaped to &amp;");
+});
+
+// ─── DocketMonitor ────────────────────────────────────────────────────────────
+
+test("DocketMonitor: isEnabled() false by default", () => {
+  const orig = process.env["DOCKET_MONITOR_ENABLED"];
+  delete process.env["DOCKET_MONITOR_ENABLED"];
+  const monitor = new DocketMonitor(pathJoin(os.tmpdir(), `dockets-test-${Date.now()}.json`));
+  assert.equal(monitor.isEnabled(), false, "isEnabled() must be false when DOCKET_MONITOR_ENABLED is not set");
+  if (orig !== undefined) process.env["DOCKET_MONITOR_ENABLED"] = orig;
+});
+
+test("DocketMonitor: watch() validates docket number format", () => {
+  const monitor = new DocketMonitor(pathJoin(os.tmpdir(), `dockets-test-${Date.now()}.json`));
+  assert.throws(
+    () => monitor.watch("M-001", "bad docket number!", "nysd"),
+    /docketNumber/,
+    "must reject docket numbers containing invalid characters",
+  );
+});
+
+test("DocketMonitor: watch() rejects invalid court slug", () => {
+  const monitor = new DocketMonitor(pathJoin(os.tmpdir(), `dockets-test-${Date.now()}.json`));
+  assert.throws(
+    () => monitor.watch("M-001", "1:23-cv-01234", "INVALID-SLUG"),
+    /court/,
+    "must reject court slugs that contain uppercase or special characters",
+  );
+});
+
+test("DocketMonitor: unwatch() returns false for unknown matter", () => {
+  const monitor = new DocketMonitor(pathJoin(os.tmpdir(), `dockets-test-${Date.now()}.json`));
+  const result = monitor.unwatch("no-such-matter");
+  assert.equal(result, false, "unwatch() must return false for an unregistered matter");
+});
+
+test("DocketMonitor: list() returns all watched dockets", () => {
+  const monitor = new DocketMonitor(pathJoin(os.tmpdir(), `dockets-test-${Date.now()}.json`));
+  monitor.watch("M-101", "1:23-cv-01234", "nysd", "Acme v Beta");
+  monitor.watch("M-102", "2:24-cv-05678", "dcd");
+  const list = monitor.list();
+  assert.equal(list.length, 2, "list() must return both watched dockets");
+  const numbers = list.map((d) => d.matterNumber);
+  assert.ok(numbers.includes("M-101"), "must include M-101");
+  assert.ok(numbers.includes("M-102"), "must include M-102");
+});
+
+// ─── DeadlineEngine ──────────────────────────────────────────────────────────
+
+import { DeadlineEngine, addCalendarDays, addBusinessDays } from "../src/deadlines/engine.js";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const RULES_DIR = pathJoin(__dirname, "../src/deadlines/rules");
+
+test("DeadlineEngine: addCalendarDays adds exact days", () => {
+  // Monday 2026-01-05 + 7 calendar days = Monday 2026-01-12
+  const start = new Date("2026-01-05T00:00:00Z");
+  const result = addCalendarDays(start, 7);
+  assert.equal(result.toISOString().slice(0, 10), "2026-01-12");
+});
+
+test("DeadlineEngine: addBusinessDays skips weekends", () => {
+  // Friday 2026-01-02 + 5 business days should skip Sat/Sun and land on Friday 2026-01-09
+  const start = new Date("2026-01-02T00:00:00Z"); // Friday
+  const result = addBusinessDays(start, 5, "none");
+  assert.equal(result.toISOString().slice(0, 10), "2026-01-09"); // next Friday
+});
+
+test("DeadlineEngine: US federal holiday (July 4) is skipped for business days", () => {
+  // July 4 2025 = Friday → observed on Friday → it is a federal holiday
+  // So 1 business day from Thursday July 3 = Monday July 7
+  const start = new Date("2025-07-03T00:00:00Z"); // Thursday
+  const result = addBusinessDays(start, 1, "us_federal");
+  // July 4 2025 is a Friday and a federal holiday — skip it, land on Monday July 7
+  assert.equal(result.toISOString().slice(0, 10), "2025-07-07");
+});
+
+test("DeadlineEngine: compute returns empty deadlines for unknown trigger", async () => {
+  const engine = new DeadlineEngine();
+  await engine.loadRulesDir(RULES_DIR);
+  const result = engine.compute("US-FED", "nonexistent_trigger_xyz", "2026-01-01");
+  assert.equal(result.deadlines.length, 0);
+  assert.equal(result.triggerEvent, "nonexistent_trigger_xyz");
+  assert.equal(result.jurisdiction, "US-FED");
+});
+
+test("DeadlineEngine: listJurisdictions returns loaded rulesets", async () => {
+  const engine = new DeadlineEngine();
+  await engine.loadRulesDir(RULES_DIR);
+  const list = engine.listJurisdictions();
+  assert.ok(list.length >= 3, `Expected at least 3 rulesets, got ${list.length}`);
+  const jurisdictions = list.map((r) => r.jurisdiction);
+  assert.ok(jurisdictions.includes("US-FED"), "US-FED not found");
+  assert.ok(jurisdictions.includes("UK"), "UK not found");
+  assert.ok(jurisdictions.includes("EU-COMP"), "EU-COMP not found");
 });

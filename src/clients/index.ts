@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { readFile, writeFile, rename } from "fs/promises";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
-import type { Client, ClientMatter, ConflictCheckResult } from "../types.js";
+import type { Client, ClientMatter, ClientVoiceGuide, ConflictCheckResult } from "../types.js";
 
 export class ClientStore {
   private readonly path = Config.persistence.clientsFile;
@@ -110,6 +110,61 @@ export class ClientStore {
     return true;
   }
 
+  async setOcg(clientId: string, ocgId: string): Promise<Client> {
+    const c = this.get(clientId);
+    if (!c) throw new Error("Client not found");
+    c.ocgId = ocgId;
+    c.updatedAt = new Date();
+    await this.persist();
+    return c;
+  }
+
+  async clearOcg(clientId: string): Promise<Client> {
+    const c = this.get(clientId);
+    if (!c) throw new Error("Client not found");
+    delete c.ocgId;
+    c.updatedAt = new Date();
+    await this.persist();
+    return c;
+  }
+
+  async setVoiceGuide(clientId: string, guide: ClientVoiceGuide): Promise<Client> {
+    const c = this.get(clientId);
+    if (!c) throw new Error("Client not found");
+    c.voiceGuide = guide;
+    c.updatedAt = new Date();
+    await this.persist();
+    return c;
+  }
+
+  async clearVoiceGuide(clientId: string): Promise<Client> {
+    const c = this.get(clientId);
+    if (!c) throw new Error("Client not found");
+    delete c.voiceGuide;
+    c.updatedAt = new Date();
+    await this.persist();
+    return c;
+  }
+
+  setMatterBudget(
+    clientId: string,
+    matterNumber: string,
+    budgetUsd: number,
+    thresholds?: number[],
+  ): ClientMatter | undefined {
+    const client = this.clients.find((c) => c.id === clientId);
+    if (!client) return undefined;
+    const matter = client.matters.find((m) => m.matterNumber === matterNumber);
+    if (!matter) return undefined;
+    matter.budgetUsd = budgetUsd;
+    matter.budgetAlertThresholds = thresholds ?? [0.5, 0.8, 1.0];
+    matter.budgetAlertsTriggered = [];
+    this.persist().catch((err: Error) =>
+      logger.warn("Failed to persist matter budget", { error: err.message })
+    );
+    return matter;
+  }
+
   /** Check whether onboarding `newClientName` conflicts with existing clients. */
   checkConflict(newClientName: string): ConflictCheckResult {
     const name = newClientName.toLowerCase().trim();
@@ -135,7 +190,7 @@ export class ClientStore {
     return { hasConflict: false };
   }
 
-  private async persist(): Promise<void> {
+  async persist(): Promise<void> {
     const tmp = `${this.path}.tmp`;
     await writeFile(tmp, JSON.stringify(this.clients, null, 2), "utf8");
     await rename(tmp, this.path);

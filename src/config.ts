@@ -166,6 +166,28 @@ export const Config = {
     timeFile: optional("TIME_FILE", ".time-entries.json"),
     /** Persisted Q-table for agent recruitment learning (RuVector LearningEngine). */
     learningFile: optional("LEARNING_FILE", ".qtable.json"),
+    ocgFile: optional("OCG_FILE", ".ocg.json"),
+    jobsFile: optional("JOBS_FILE", ".jobs.json"),
+    preBillsFile: optional("PREBILLS_FILE", "./data/prebills.json"),
+  },
+
+  // ─── Background job queue ──────────────────────────────────────────────────
+  queue: {
+    concurrency: parseInt(optional("QUEUE_CONCURRENCY", "3")),
+    pollIntervalMs: parseInt(optional("QUEUE_POLL_INTERVAL_MS", "2000")),
+    maxRetries: parseInt(optional("QUEUE_MAX_RETRIES", "3")),
+    adapter: optional("QUEUE_ADAPTER", "memory") as "memory" | "redis",
+    redisUrl: optional("QUEUE_REDIS_URL", "redis://localhost:6379"),
+  },
+
+  // ─── Agent billing ────────────────────────────────────────────────────────
+  agentBilling: {
+    enabled: optional("AGENT_BILLING_ENABLED", "true") === "true",
+    defaultRate: parseFloat(optional("AGENT_BILLING_RATE_DEFAULT", "0")),
+    rateT0: parseFloat(optional("AGENT_BILLING_RATE_T0", "0")),
+    rateT1: parseFloat(optional("AGENT_BILLING_RATE_T1", "0")),
+    rateT2: parseFloat(optional("AGENT_BILLING_RATE_T2", "0")),
+    rateT3: parseFloat(optional("AGENT_BILLING_RATE_T3", "0")),
   },
 
   logging: {
@@ -176,6 +198,29 @@ export const Config = {
   audit: {
     enabled: optional("AUDIT_ENABLED", "true") === "true",
     logFile: optional("AUDIT_LOG_FILE", "./audit.jsonl"),
+    // ── OpenSearch sink (self-hosted, recommended) ──────────────────────────
+    // Set AUDIT_OPENSEARCH_URL to activate. API key is optional (basic auth).
+    opensearch: {
+      url: process.env.AUDIT_OPENSEARCH_URL ?? "",
+      apiKey: process.env.AUDIT_OPENSEARCH_API_KEY ?? "",
+      enabled: Boolean(process.env.AUDIT_OPENSEARCH_URL),
+    },
+    // ── Splunk HEC sink ─────────────────────────────────────────────────────
+    // Set both URL and token to activate.
+    splunk: {
+      url: process.env.AUDIT_SPLUNK_HEC_URL ?? "",
+      token: process.env.AUDIT_SPLUNK_HEC_TOKEN ?? "",
+      index: process.env.AUDIT_SPLUNK_INDEX ?? "",
+      enabled: Boolean(process.env.AUDIT_SPLUNK_HEC_URL && process.env.AUDIT_SPLUNK_HEC_TOKEN),
+    },
+    // ── Generic webhook sink ────────────────────────────────────────────────
+    // Set AUDIT_WEBHOOK_URL to activate. Bearer token is optional.
+    // Works with: Datadog Logs API, Azure Monitor, custom SIEMs.
+    webhook: {
+      url: process.env.AUDIT_WEBHOOK_URL ?? "",
+      token: process.env.AUDIT_WEBHOOK_TOKEN ?? "",
+      enabled: Boolean(process.env.AUDIT_WEBHOOK_URL),
+    },
   },
 
   // DocuSeal — open-source e-signature (https://www.docuseal.com)
@@ -302,6 +347,15 @@ export const Config = {
     enabled: Boolean(process.env.CLIO_CLIENT_ID),
   },
 
+  // Twenty — open-source CRM (https://twenty.com)
+  // Self-host: docker run -d -p 3000:3000 twentyhq/twenty
+  // API key:   Settings → API in the Twenty admin panel
+  twenty: {
+    apiKey: process.env.TWENTY_API_KEY ?? "",
+    apiUrl: optional("TWENTY_API_URL", ""),
+    enabled: Boolean(process.env.TWENTY_API_KEY && process.env.TWENTY_API_URL),
+  },
+
   // Infisical — open-source secrets manager (https://infisical.com)
   // Self-host: docker compose up (see https://infisical.com/docs/self-hosting)
   // These values are bootstrap-only; all other secrets are fetched from Infisical at startup.
@@ -312,5 +366,24 @@ export const Config = {
     projectId: process.env.INFISICAL_PROJECT_ID ?? "",
     environment: optional("INFISICAL_ENV", "production"),
     path: optional("INFISICAL_PATH", "/"),
+  },
+
+  typedb: {
+    url: process.env.TYPEDB_URL ?? "",
+  },
+  regulatory: {
+    enabled: optional("REG_PULSE_ENABLED", "false") === "true",
+    pollIntervalMs: parseInt(optional("REG_PULSE_INTERVAL_MS", String(7 * 24 * 60 * 60 * 1_000))),
+    tavilyApiKey: process.env.TAVILY_API_KEY ?? "",
+  },
+
+  dockets: {
+    enabled: optional("DOCKET_MONITOR_ENABLED", "false") === "true",
+    pollIntervalMs: parseInt(optional("DOCKET_POLL_INTERVAL_MS", String(4 * 60 * 60 * 1_000))), // 4 hours
+    file: optional("DOCKETS_FILE", "./data/dockets.json"),
+  },
+
+  deadlines: {
+    rulesDir: optional("DEADLINES_RULES_DIR", "./src/deadlines/rules"),
   },
 } as const;

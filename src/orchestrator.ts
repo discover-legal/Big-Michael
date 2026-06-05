@@ -25,7 +25,7 @@ import { Config } from "./config.js";
 import { logger } from "./logger.js";
 import { getProvider, resolveModelId } from "./providers/index.js";
 import { selectModel, shouldUseThinking } from "./routing/model.js";
-import { auditLogger } from "./audit/index.js";
+import { auditLogger, ACTOR_SYSTEM } from "./audit/index.js";
 import { AgentRegistry } from "./agents/registry.js";
 import { Agent } from "./agents/base.js";
 import { ROOT_ORCHESTRATOR, ALL_AGENT_DEFINITIONS } from "./agents/definitions.js";
@@ -33,8 +33,12 @@ import { SettingsStore } from "./settings/index.js";
 import { ProfileStore } from "./auth/index.js";
 import { ClientStore } from "./clients/index.js";
 import { TimeStore } from "./time/index.js";
+import { OcgStore } from "./ocg/index.js";
+import { PreBillStore } from "./billing/prebill.js";
 import { agentLearning } from "./learning/index.js";
 import { DyTopoEngine } from "./dytopo/engine.js";
+import type { AgentBillingCtx } from "./dytopo/engine.js";
+import { DocketMonitor } from "./dockets/monitor.js";
 import { InterRoundMemoryStore } from "./memory/index.js";
 import { KnowledgeStore } from "./knowledge/index.js";
 import { TemplateStore } from "./templates/store.js";
@@ -49,7 +53,13 @@ import {
 } from "./protocols/index.js";
 import { detectNosLegal } from "./services/classifier.js";
 import { costStore, calcCostUsd, calcWattHours } from "./cost/index.js";
+import { jobQueue } from "./queue/index.js";
 import { isOllamaModel, isLocalModel } from "./providers/index.js";
+import { BudgetMonitor } from "./budget/index.js";
+import { BudgetPredictor } from "./budget/predictor.js";
+import { ConflictGraph } from "./graph/conflict.js";
+import { RegPulseMonitor } from "./regulatory/pulse.js";
+import { DeadlineEngine } from "./deadlines/engine.js";
 import type {
   Task,
   WorkflowType,
@@ -121,6 +131,14 @@ export class Orchestrator {
   readonly profiles: ProfileStore;
   readonly clients: ClientStore;
   readonly time: TimeStore;
+  readonly ocg: OcgStore;
+  readonly budgetMonitor: BudgetMonitor;
+  readonly budgetPredictor: BudgetPredictor;
+  readonly preBills: PreBillStore;
+  readonly conflictGraph: ConflictGraph;
+  readonly regPulse = new RegPulseMonitor();
+  readonly docketMonitor: DocketMonitor;
+  readonly deadlines = new DeadlineEngine();
 
   private readonly tasks: Map<string, Task> = new Map();
   private readonly gateEmitter = new EventEmitter();
@@ -137,6 +155,12 @@ export class Orchestrator {
     this.profiles = new ProfileStore();
     this.clients = new ClientStore();
     this.time = new TimeStore();
+    this.ocg = new OcgStore();
+    this.budgetMonitor = new BudgetMonitor(this.time, this.clients);
+    this.budgetPredictor = new BudgetPredictor();
+    this.preBills = new PreBillStore(Config.persistence.preBillsFile);
+    this.conflictGraph = new ConflictGraph();
+    this.docketMonitor = new DocketMonitor(Config.dockets.file);
   }
 
   async init(): Promise<void> {
@@ -145,6 +169,9 @@ export class Orchestrator {
     await this.profiles.init();
     await this.clients.init();
     await this.time.init();
+    await this.ocg.init();
+    await this.preBills.init();
+    await this.conflictGraph.connect();
     await agentLearning.init();
     await Promise.all([
       this.registry.init(),
@@ -181,6 +208,23 @@ export class Orchestrator {
       knowledge: this.knowledge,
       pinnedAgents: [ROOT_ORCHESTRATOR],
     });
+
+    // Start regulatory pulse monitor if enabled
+    if (this.regPulse.isEnabled()) {
+      this.regPulse.start(() => this.listTasks());
+      logger.info("RegPulseMonitor started");
+    }
+
+    // Start docket monitoring if enabled
+    await this.docketMonitor.init();
+    this.docketMonitor.setKnowledgeStore(this.knowledge);
+    if (this.docketMonitor.isEnabled()) {
+      this.docketMonitor.start();
+      logger.info("DocketMonitor started");
+    }
+
+    // Load deadline rule files
+    await this.deadlines.loadRulesDir(Config.deadlines.rulesDir);
 
     logger.info("Orchestrator ready");
   }
@@ -261,7 +305,7 @@ export class Orchestrator {
 
     this.tasks.set(task.id, task);
     logger.info("Task submitted", { taskId: task.id, workflow: params.workflowType });
-    auditLogger.write({ event: "task.created", taskId: task.id, data: { description: params.description, workflowType: params.workflowType } });
+    auditLogger.write({ event: "task.created", actorId: task.createdByProfileId ?? ACTOR_SYSTEM, taskId: task.id, data: { description: params.description, workflowType: params.workflowType } });
     await this.persistTasks();
 
     // Run asynchronously — callers poll getTask() for status
@@ -271,11 +315,18 @@ export class Orchestrator {
       task.error = err.message;
       // Close the time entry even on failure.
       if (task.activeTimeEntryId) {
-        this.time.close(task.activeTimeEntryId);
+        const closedOnFail = this.time.close(task.activeTimeEntryId);
         task.activeTimeEntryId = undefined;
+        if (closedOnFail) {
+          jobQueue.enqueue("summarize_time_entry", {
+            entryId: closedOnFail.id,
+            taskId: task.id,
+            clientNumber: task.clientNumber,
+          }).catch((e) => logger.warn("Failed to enqueue summarize job", { error: (e as Error).message }));
+        }
       }
       this.emit(task.id, "failed", { error: err.message });
-      auditLogger.write({ event: "task.failed", taskId: task.id, data: { error: err.message } });
+      auditLogger.write({ event: "task.failed", actorId: ACTOR_SYSTEM, taskId: task.id, data: { error: err.message } });
     });
 
     return task;
@@ -299,7 +350,7 @@ export class Orchestrator {
       this.memory.deleteByTaskId(taskId).catch((err) =>
         logger.warn("Failed to delete task memory from Qdrant", { taskId, error: (err as Error).message }),
       );
-      auditLogger.write({ event: "task.deleted", taskId, data: {} });
+      auditLogger.write({ event: "task.deleted", actorId: ACTOR_SYSTEM, taskId, data: {} });
       logger.info("Task deleted", { taskId });
     }
     return existed;
@@ -313,7 +364,7 @@ export class Orchestrator {
     task.assignedLawyerIds = valid;
     task.updatedAt = new Date();
     this.persistTasks().catch((err) => logger.warn("Failed to persist tasks", { error: err.message }));
-    auditLogger.write({ event: "task.assigned", taskId, data: { lawyerIds: valid } });
+    auditLogger.write({ event: "task.assigned", actorId: ACTOR_SYSTEM, taskId, data: { lawyerIds: valid } });
     return task;
   }
 
@@ -346,7 +397,7 @@ export class Orchestrator {
     gate.reviewerNote = note;
     gate.reviewedAt = new Date();
     task.updatedAt = new Date();
-    auditLogger.write({ event: "gate.approved", taskId, data: { gateId, note } });
+    auditLogger.write({ event: "gate.approved", actorId: reviewerProfileId ?? ACTOR_SYSTEM, taskId, data: { gateId, note } });
 
     // Record a gate_review time entry for the reviewing lawyer.
     if (reviewerProfileId) {
@@ -362,7 +413,14 @@ export class Orchestrator {
           event: "gate_review",
           startedAt: new Date(),
         });
-        this.time.close(entry.id);
+        const closedApprove = this.time.close(entry.id);
+        if (closedApprove) {
+          jobQueue.enqueue("summarize_time_entry", {
+            entryId: closedApprove.id,
+            taskId,
+            clientNumber: task.clientNumber,
+          }).catch((e) => logger.warn("Failed to enqueue summarize job", { error: (e as Error).message }));
+        }
       }
     }
 
@@ -380,7 +438,7 @@ export class Orchestrator {
     gate.reviewedAt = new Date();
     task.findings = task.findings.filter((f) => f.id !== gate.findingId);
     task.updatedAt = new Date();
-    auditLogger.write({ event: "gate.rejected", taskId, data: { gateId, reason } });
+    auditLogger.write({ event: "gate.rejected", actorId: reviewerProfileId ?? ACTOR_SYSTEM, taskId, data: { gateId, reason } });
 
     // Record a gate_review time entry for the reviewing lawyer.
     if (reviewerProfileId) {
@@ -396,7 +454,14 @@ export class Orchestrator {
           event: "gate_review",
           startedAt: new Date(),
         });
-        this.time.close(entry.id);
+        const closedReject = this.time.close(entry.id);
+        if (closedReject) {
+          jobQueue.enqueue("summarize_time_entry", {
+            entryId: closedReject.id,
+            taskId,
+            clientNumber: task.clientNumber,
+          }).catch((e) => logger.warn("Failed to enqueue summarize job", { error: (e as Error).message }));
+        }
       }
     }
 
@@ -533,7 +598,7 @@ export class Orchestrator {
   private async runTask(task: Task): Promise<void> {
     task.status = "running";
     this.emit(task.id, "started", { taskId: task.id, workflowType: task.workflowType });
-    auditLogger.write({ event: "task.started", taskId: task.id, data: { workflowType: task.workflowType } });
+    auditLogger.write({ event: "task.started", actorId: ACTOR_SYSTEM, taskId: task.id, data: { workflowType: task.workflowType } });
     const phases = PHASE_SEQUENCES[task.workflowType];
 
     for (const phase of phases) {
@@ -571,8 +636,15 @@ export class Orchestrator {
 
     // Close the time entry now that the task has finished.
     if (task.activeTimeEntryId) {
-      this.time.close(task.activeTimeEntryId);
+      const closedOnComplete = this.time.close(task.activeTimeEntryId);
       task.activeTimeEntryId = undefined;
+      if (closedOnComplete) {
+        jobQueue.enqueue("summarize_time_entry", {
+          entryId: closedOnComplete.id,
+          taskId: task.id,
+          clientNumber: task.clientNumber,
+        }).catch((e) => logger.warn("Failed to enqueue summarize job", { error: (e as Error).message }));
+      }
     }
 
     // Feed agent performance back into the registry so recommend()-based
@@ -583,7 +655,7 @@ export class Orchestrator {
     );
 
     this.emit(task.id, "complete", { findings: task.findings.length, output: task.output?.slice(0, 200) });
-    auditLogger.write({ event: "task.complete", taskId: task.id, data: { findings: task.findings.length } });
+    auditLogger.write({ event: "task.complete", actorId: ACTOR_SYSTEM, taskId: task.id, data: { findings: task.findings.length } });
     this.persistTasks().catch((err) => logger.warn("Failed to persist tasks", { error: err.message }));
 
     logger.info("Task complete", { taskId: task.id, findings: task.findings.length });
@@ -639,21 +711,30 @@ export class Orchestrator {
 
   private async runPhase(task: Task, phase: TaskPhase): Promise<void> {
     logger.info("Phase starting", { taskId: task.id, phase });
-    auditLogger.write({ event: "phase.start", taskId: task.id, data: { phase } });
+    auditLogger.write({ event: "phase.start", actorId: ACTOR_SYSTEM, taskId: task.id, data: { phase } });
 
     // Root orchestrator generates the round goal for this phase
     const goal = await this.generateRoundGoal(task, phase);
     goal.round = ++task.currentRound;
 
-    // Look up tone profile from the task's primary lawyer (creator first, then first assignee)
-    const lawyerTone = (() => {
-      const profileId = task.createdByProfileId ?? task.assignedLawyerIds?.[0];
-      if (!profileId) return undefined;
-      return this.profiles.get(profileId)?.toneProfile;
-    })();
+    // Look up tone profile and billing attribution from the task's primary lawyer
+    const primaryProfileId = task.createdByProfileId ?? task.assignedLawyerIds?.[0];
+    const primaryProfile = primaryProfileId ? this.profiles.get(primaryProfileId) : undefined;
+    const lawyerTone = primaryProfile?.toneProfile;
+
+    // Build agent billing context when billing is enabled
+    const billingCtx: AgentBillingCtx | undefined = Config.agentBilling.enabled
+      ? {
+          timeStore: this.time,
+          responsibleLawyerId: primaryProfileId,
+          responsibleLawyerName: primaryProfile?.name,
+          matterNumber: task.matterNumber,
+          clientNumber: task.clientNumber,
+        }
+      : undefined;
 
     // Run DyTopo round
-    const roundState = await this.engine.runRound(task, goal, lawyerTone);
+    const roundState = await this.engine.runRound(task, goal, lawyerTone, billingCtx);
     task.rounds.push(roundState);
 
     // Build source-text map for citation gate (from knowledge store)
@@ -688,7 +769,7 @@ export class Orchestrator {
       findings: debated.length,
       gates: gates.length,
     });
-    auditLogger.write({ event: "phase.complete", taskId: task.id, data: { phase, findings: debated.length, gates: gates.length } });
+    auditLogger.write({ event: "phase.complete", actorId: ACTOR_SYSTEM, taskId: task.id, data: { phase, findings: debated.length, gates: gates.length } });
     logger.info("Phase complete", {
       taskId: task.id,
       phase,

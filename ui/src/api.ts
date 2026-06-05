@@ -1,4 +1,4 @@
-import type { Task, Template, Health, WorkflowType, SearchResult, AuditEntry, DocumentRef, AgentSummary, AppSettings, LawyerProfile, ToneProfile, Me, Client, ClientMatter, ConflictCheckResult, IngestResult, CostSummary, TaskCostResult } from "./types";
+import type { Task, Template, Health, WorkflowType, SearchResult, AuditEntry, DocumentRef, AgentSummary, AppSettings, LawyerProfile, ToneProfile, Me, Client, ClientMatter, ConflictCheckResult, IngestResult, CostSummary, TaskCostResult, TimeEntry, OcgDocument, ClientVoiceGuide } from "./types";
 
 type SettingsPatch = {
   presentation?: Partial<AppSettings["presentation"]>;
@@ -106,6 +106,46 @@ export const api = {
   getCostSummary: () => fetch("/cost/summary").then(json<CostSummary>),
   getTaskCost: (id: string) => fetch(`/tasks/${id}/cost`).then(json<TaskCostResult>),
   getProfileCost: (id: string) => fetch(`/profiles/${id}/cost`).then(json<{ profileId: string; summary: CostSummary; entries: unknown[] }>),
+
+  // OCG
+  getClientOcg: (clientId: string) => fetch(`/clients/${clientId}/ocg`).then(json<OcgDocument>),
+  ingestClientOcg: (clientId: string, body: { title: string; text: string }) =>
+    fetch(`/clients/${clientId}/ocg`, POST(body)).then(json<{ ocg: OcgDocument; ruleCount: number }>),
+  uploadClientOcg: (clientId: string, title: string, file: File) => {
+    const fd = new FormData(); fd.append("file", file); fd.append("title", title);
+    return fetch(`/clients/${clientId}/ocg`, { method: "POST", body: fd }).then(json<{ ocg: OcgDocument; ruleCount: number }>);
+  },
+  deleteClientOcg: (clientId: string) =>
+    fetch(`/clients/${clientId}/ocg`, { method: "DELETE" }).then(json<{ ok: true }>),
+  importClientVoice: (clientId: string, file: File) => {
+    const fd = new FormData(); fd.append("file", file);
+    return fetch(`/clients/${clientId}/voice-guide/import`, { method: "POST", body: fd })
+      .then(json<{ voiceGuide: ClientVoiceGuide; samplesAnalysed: number }>);
+  },
+  deleteClientVoice: (clientId: string) =>
+    fetch(`/clients/${clientId}/voice-guide`, { method: "DELETE" }).then(json<{ ok: true }>),
+
+  // Time entry suggestions
+  listTimeEntrySuggestions: (params?: { clientNumber?: string; matterNumber?: string; profileId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.clientNumber) qs.set("clientNumber", params.clientNumber);
+    if (params?.matterNumber) qs.set("matterNumber", params.matterNumber);
+    if (params?.profileId) qs.set("profileId", params.profileId);
+    return fetch(`/time-entries/suggestions?${qs}`).then(json<TimeEntry[]>);
+  },
+  listTimeEntries: (params?: { clientNumber?: string; matterNumber?: string; profileId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.clientNumber) qs.set("clientNumber", params.clientNumber);
+    if (params?.matterNumber) qs.set("matterNumber", params.matterNumber);
+    if (params?.profileId) qs.set("profileId", params.profileId);
+    return fetch(`/time-entries?${qs}`).then(json<TimeEntry[]>);
+  },
+  runOcgCheck: (body: { clientNumber?: string; matterNumber?: string; limit?: number }) =>
+    fetch("/time-entries/run-ocg-check", POST(body)).then(json<{ checked: number; withSuggestions: number }>),
+  acceptSuggestion: (entryId: string, ruleId: string) =>
+    fetch(`/time-entries/${entryId}/suggestions/accept`, POST({ ruleId })).then(json<TimeEntry>),
+  dismissSuggestion: (entryId: string, ruleId: string) =>
+    fetch(`/time-entries/${entryId}/suggestions/dismiss`, POST({ ruleId })).then(json<TimeEntry>),
 };
 
 /**

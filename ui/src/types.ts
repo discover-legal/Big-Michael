@@ -140,6 +140,48 @@ export interface ClientMatter {
   openedAt: string;
 }
 
+export type OcgRuleCategory =
+  | "billing_increments" | "entry_specificity" | "prohibited_tasks"
+  | "rate_limits" | "staffing" | "description_format" | "timing" | "other";
+
+export interface OcgRule {
+  id: string;
+  category: OcgRuleCategory;
+  text: string;
+  severity: "hard" | "soft";
+}
+
+export interface OcgDocument {
+  id: string;
+  clientId: string;
+  title: string;
+  rules: OcgRule[];
+  excerpt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OcgSuggestion {
+  ruleId: string;
+  ruleText: string;
+  category: OcgRuleCategory;
+  severity: "hard" | "soft";
+  issue: string;
+  suggestedDescription: string;
+  status: "pending" | "accepted" | "dismissed";
+}
+
+export interface ClientVoiceGuide {
+  generatedAt: string;
+  sampleCount: number;
+  preferredFormality: string;
+  communicationStyle: string;
+  terminologyPreferences: string;
+  reportingPreferences: string;
+  signaturePatterns: string[];
+  injectionSnippet: string;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -147,6 +189,8 @@ export interface Client {
   matters: ClientMatter[];
   adversaries: string[];
   notes?: string;
+  ocgId?: string;
+  voiceGuide?: ClientVoiceGuide;
   createdAt: string;
   updatedAt: string;
 }
@@ -281,9 +325,28 @@ export interface AuditEntry {
   data?: Record<string, unknown>;
 }
 
+export interface TimeEntry {
+  id: string;
+  profileId: string;
+  profileName: string;
+  taskId: string;
+  matterNumber?: string;
+  clientNumber?: string;
+  description: string;
+  event: string;
+  startedAt: string;
+  endedAt?: string;
+  durationMs: number;
+  billingUnits: number;
+  clioSyncedAt?: string;
+  ocgSuggestions?: OcgSuggestion[];
+  ocgCheckedAt?: string;
+}
+
 export type CostContext =
   | "task" | "descriptor" | "synthesis" | "tabulate" | "round_goal"
-  | "protocol_debate" | "protocol_verify" | "tone_analysis" | "classification";
+  | "protocol_debate" | "protocol_verify" | "tone_analysis" | "classification"
+  | "ocg_extraction" | "ocg_check" | "voice_analysis";
 
 export interface CostEntry {
   id: string;

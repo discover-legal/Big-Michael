@@ -29,6 +29,7 @@ import { randomUUID } from "crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Config } from "../config.js";
 import { logger } from "../logger.js";
+import { auditLogger, ACTOR_ANONYMOUS } from "../audit/index.js";
 import type { Orchestrator } from "../orchestrator.js";
 import type { SessionUser } from "../types.js";
 import { resolveMode } from "./index.js";
@@ -206,9 +207,19 @@ export function registerAuthRoutes(app: FastifyInstance, orchestrator: Orchestra
       };
       reply.setCookie(SESSION_COOKIE, JSON.stringify(payload), cookieOpts(60 * 60 * 12));
       logger.info("OAuth login", { provider, email: identity.email, role: profile.role });
+      auditLogger.write({
+        event: "auth.login",
+        actorId: profile.id,
+        data: { provider, role: profile.role },
+      });
       return reply.redirect(Config.auth.uiUrl);
     } catch (err) {
       logger.warn("OAuth callback failed", { provider, error: (err as Error).message });
+      auditLogger.write({
+        event: "auth.failed",
+        actorId: ACTOR_ANONYMOUS,
+        data: { provider, reason: (err as Error).message },
+      });
       return reply.redirect(`${Config.auth.uiUrl}?auth_error=1`);
     }
   });
@@ -231,7 +242,14 @@ export function registerAuthRoutes(app: FastifyInstance, orchestrator: Orchestra
         } catch { /* malformed cookie — clearing is sufficient */ }
       }
     }
+    // Resolve actor before clearing the cookie
+    const sessionUser = readSessionCookie(req);
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
+    auditLogger.write({
+      event: "auth.logout",
+      actorId: sessionUser?.profileId ?? ACTOR_ANONYMOUS,
+      data: {},
+    });
     return { ok: true };
   });
 }

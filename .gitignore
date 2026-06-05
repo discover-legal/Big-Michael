@@ -60,3 +60,4 @@ SECURITY_AUDIT.json
 # Claude Code local state
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/worktrees/

@@ -10,6 +10,7 @@ import { Library } from "./Library";
 import { AuditRail } from "./AuditRail";
 import { AdminPanel } from "./AdminPanel";
 import { ClientsPanel } from "./ClientsPanel";
+import { TimeEntryPane } from "./TimeEntryPane";
 import { Login } from "./Login";
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [clientsOpen, setClientsOpen] = useState(false);
+  const [timeEntriesOpen, setTimeEntriesOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [clientFilter, setClientFilter] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -125,6 +127,7 @@ export default function App() {
           <button className="btn primary full" onClick={() => setSubmitOpen(true)}>＋ New matter</button>
           <button className="btn full ghost" onClick={() => setLibraryOpen(true)}>⊕ Library · ingest &amp; search</button>
           {(me?.capabilities?.clientRoster !== false) && isPartner && <button className="btn full ghost" onClick={() => setClientsOpen(true)}>⚖ Clients &amp; matters</button>}
+          {(me?.capabilities?.timeTracking !== false) && <button className="btn full ghost" onClick={() => setTimeEntriesOpen(true)}>⏱ Time entries &amp; OCG</button>}
           {(me?.capabilities?.adminSettings !== false) && <button className="btn full ghost" onClick={() => setAdminOpen(true)}>⚙ Admin · settings</button>}
         </div>
 
@@ -208,6 +211,7 @@ export default function App() {
         {submitOpen && <SubmitModal onClose={() => setSubmitOpen(false)} onCreated={onCreated} notify={notify} />}
         {libraryOpen && <Library onClose={() => setLibraryOpen(false)} notify={notify} />}
         {clientsOpen && <ClientsPanel onClose={() => setClientsOpen(false)} notify={notify} />}
+        {timeEntriesOpen && <TimeEntryPane onClose={() => setTimeEntriesOpen(false)} notify={notify} isPartner={isPartner} />}
         {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} notify={notify} isPartner={isPartner} profiles={profiles} onProfilesChange={loadProfiles} me={me?.user} />}
       </AnimatePresence>
 

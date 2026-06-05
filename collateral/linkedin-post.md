@@ -118,3 +118,103 @@ Big Michael's Clio time-entry sync is now idempotent. Hit the endpoint twice —
 CSV exports now include the `clioSyncedAt` column. Audit trail in a spreadsheet, no guessing.
 
 #LegalTech #Clio #OpenSource
+
+---
+
+## v0.5.0 post — The billing + audit drop
+
+Big Michael v0.5.0. The billing stack and the audit log landed together. That's what this is.
+
+The billing stack:
+
+→ **LEDES 1998B export with UTBMS task codes** — auto-classified by Haiku, editable before submission. Real legal billing format, not a CSV with delusions.
+→ **OCG enforcement.** Outside Counsel Guidelines as a structured rule dictionary. Every time entry gets a compliance pass before it touches a pre-bill. Haiku extracts the mechanical parameters; the rules fire deterministically. No vibes.
+→ **Pre-bill review workflow** — draft, review, approve, invoice. The whole cycle. Partners see it; associates see their part.
+→ **Matter budget tracking with real-time burn alerts over SSE.** You set a budget. You get warned before it's a problem.
+→ **Budget predictor** — pure statistical forecasting from your own historical time data. If this matter looks like those matters, here's the range. No black-box ML.
+→ **AI work time accrues as billable entries automatically.** The agents work. The clock runs. You review it like any other time entry.
+
+The audit log:
+
+**Hash-chained, tamper-evident JSONL** with pluggable sinks — OpenSearch, Splunk, or a webhook of your choice. Every agent message, every round, every gate decision, every human approval or rejection. The chain makes the record verifiable. The sinks make it yours to keep, not ours.
+
+The operational layer:
+
+→ CourtListener docket monitoring — new filings auto-ingested, SSE alert pushed to counsel
+→ Regulatory pulse — scans for new regulatory updates against your open matters on a schedule
+→ Automated client status reports — generated from actual round history, not from memory
+→ TypeDB multi-hop conflict graph — n-ary conflict detection, not just a list match
+→ Court deadline calculator — FRCP / UK CPR / EU Competition; trigger date → every downstream deadline, cited
+→ Twenty CRM integration
+→ One-liner install: `curl -fsSL https://raw.githubusercontent.com/discover-legal/big-michael/main/setup.sh | bash`
+
+Still on Mike (Will Chen) and Lavern (Antti Innanen)'s shoulders. Still AGPL-3.0. Still turtles all the way down. 🐢
+
+What part of your practice does this touch first?
+
+#LegalAI #LegalTech #OpenSource #LegalBilling #OCG
+
+---
+
+## v0.5.0 post — The billing + audit drop (ultra-short)
+
+Big Michael v0.5.0:
+
+→ LEDES 1998B + UTBMS auto-classification + OCG enforcement on every entry  
+→ Pre-bill review cycle — draft, review, approve, invoice  
+→ Matter budgets with real-time burn alerts; statistical cost predictor from your own data  
+→ AI work time → billable entries, automatically  
+→ Hash-chained tamper-evident audit log with OpenSearch / Splunk / webhook sinks  
+→ Docket monitoring, regulatory pulse, client status reports, TypeDB conflict graph  
+→ One-liner install now
+
+Still turtles. 🐢
+
+#LegalAI #LegalTech #OpenSource
+
+---
+
+## v0.4.x post — Full feature set
+
+Big Michael v0.4.x. Things I'm actually pleased with:
+
+→ **Every finding is debated, then verified 10 times, then a human can reject it** before synthesis reaches you. Not a chatbot with a legal prompt. A bench that argues with itself.
+
+→ **Append-only audit log.** Every agent message, every round, every gate, every human decision — structured JSONL with a live SSE stream. You can read the entire bench's reasoning afterwards. No black box.
+
+→ **Billable time tracked automatically.** 6-minute billing units, per lawyer, per matter. Push entries to Clio. Export to CSV. It runs in the background — you don't configure it, it just happens.
+
+→ **Per-call cost tracking.** Cache-aware pricing across Haiku / Sonnet / Opus (Anthropic's three token buckets at 1×, 1.25×, and 0.10× of input rate). Local inference gets watt-hour estimates from your GPU's TDP. Admin dashboard breaks it down by model, context, and matter. You always know what you're spending and on what.
+
+→ **Voice fingerprinting.** Drop a LinkedIn export, a brief, a decade of memos. The bench learns how your lawyer writes and the drafting agents do the same.
+
+→ **32 connectors across 15 providers** — Westlaw, Everlaw, iManage, DocuSign CLM, Ironclad, Trellis, Clio, CourtListener (free, always). A checkbox picker wires up the ones you have. Unconfigured ones sit quietly off and never crash anything.
+
+→ **Court deadline calculator.** Trigger date → every FRCP / UK CPR / EU Competition deadline, calendar vs business days, with procedural citations. (Shipped marked SAMPLE — AI GENERATED until a practitioner with standing verifies them and submits a PR.)
+
+→ **One command to set it all up.** `curl -fsSL https://raw.githubusercontent.com/discover-legal/big-michael/main/setup.sh | bash`
+
+Still on Mike (Will Chen) and Lavern (Antti Innanen)'s shoulders. Still AGPL-3.0. Still turtles all the way down. 🐢
+
+What would a self-auditing bench do to your hardest matter?
+
+#LegalAI #LegalTech #OpenSource #MultiAgent
+
+---
+
+## v0.4.x post — Full feature set (ultra-short)
+
+Big Michael v0.4.x:
+
+→ Debate + 10-pass verification before any finding reaches a human  
+→ Append-only audit log — full JSONL + live SSE of every agent message and gate  
+→ Automatic billable time in 6-minute units, per lawyer per matter, syncs to Clio  
+→ Per-call cost tracking with cache-aware pricing and admin dashboard  
+→ Voice fingerprinting — LinkedIn export, brief, or memo → bench drafts in that lawyer's voice  
+→ 32 connectors, checkbox picker, unconfigured ones sit quietly off  
+→ Court deadline calculator — FRCP, UK CPR, EU Competition, cited  
+→ `curl -fsSL .../setup.sh | bash` — that's the whole install
+
+Still turtles all the way down. 🐢
+
+#LegalAI #OpenSource

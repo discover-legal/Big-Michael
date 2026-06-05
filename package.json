@@ -14,7 +14,8 @@
     "smoke-test": "cross-env ANTHROPIC_API_KEY=smoke-test OPENAI_API_KEY=smoke-test tsx src/scripts/smoke-test.ts",
     "test": "cross-env ANTHROPIC_API_KEY=test OPENAI_API_KEY=test tsx --test tests/unit.test.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "setup": "npx --yes tsx scripts/setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
@@ -31,8 +32,10 @@
     "fastify": "^5.8.5",
     "openai": "^4.67.0",
     "ruvector": "^0.2.27",
+    "typedb-driver": "^2.29.7",
     "uuid": "^11.1.1",
     "winston": "^3.13.0",
+    "typedb-driver": "^2.28.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

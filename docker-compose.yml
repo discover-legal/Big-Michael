@@ -3,16 +3,28 @@ version: "3.9"
 # Big Michael dev stack
 #
 # Included services:
-#   docuseal  — self-hosted e-signature (http://localhost:3000, admin@localhost/admin123)
+#   docuseal      — self-hosted e-signature (http://localhost:3000)
+#
+# Optional audit services (opt-in via --profile audit):
+#   opensearch    — self-hosted audit log indexer (http://localhost:9200)
+#   opensearch-dashboards — visualise audit logs (http://localhost:5601)
+#
+# Optional conflict graph (opt-in via --profile graph):
+#   typedb        — multi-hop conflict-of-interest graph (port 1729)
 #
 # Vector storage is handled by RuVector's native in-process HNSW — no Docker
 # service needed. Data persists to the ./data/ directory on the host.
 #
-# Infisical (secrets manager) requires its own docker compose setup — see:
-#   https://infisical.com/docs/self-hosting/docker-compose
-#
-# Quick start:
+# Quick start (core only):
 #   docker compose up -d
+#
+# Quick start (with audit backend):
+#   docker compose --profile audit up -d
+#   Then set AUDIT_OPENSEARCH_URL=http://localhost:9200 in .env
+#
+# Quick start (with conflict graph):
+#   docker compose --profile graph up -d
+#   Then set TYPEDB_URL=0.0.0.0:1729 in .env
 
 services:
   docuseal:
@@ -35,5 +47,67 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Audit backend (opt-in: docker compose --profile audit up -d) ─────────────
+  # OpenSearch stores audit events in monthly indices (big-michael-audit-YYYY.MM).
+  # No auth by default — suitable for local dev only. In production, enable
+  # OpenSearch Security (set OPENSEARCH_SECURITY_ENABLED=true and configure users).
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: big-michael-opensearch
+    profiles: [audit]
+    environment:
+      - discovery.type=single-node
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.13.0
+    container_name: big-michael-opensearch-dashboards
+    profiles: [audit]
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    ports:
+      - "5601:5601"
+    restart: unless-stopped
+
+  # ── Conflict graph (opt-in: docker compose --profile graph up -d) ─────────────
+  # TypeDB stores the multi-hop conflict-of-interest graph. Inference rules
+  # detect conflicts that flat substring matching cannot: if Client A is adverse
+  # to B, B is a subsidiary of C, and we represent C — TypeDB infers the conflict.
+  # No auth by default — suitable for local dev only.
+  typedb:
+    image: vaticle/typedb:2.28.0
+    container_name: big-michael-typedb
+    profiles: [graph]
+    ports:
+      - "1729:1729"
+    volumes:
+      - typedb_data:/opt/typedb-all-linux-x86_64/server/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "typedb server status || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
 volumes:
   docuseal_data:
+  opensearch_data:
+  typedb_data:

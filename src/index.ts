@@ -48,6 +48,38 @@ const { Orchestrator }                 = await import("./orchestrator.js");
 const { startMcpServer, startRestApi } = await import("./mcp/server.js");
 const { costStore }                    = await import("./cost/index.js");
 const { LocalBackend, RemoteBackend, probeBackend } = await import("./backend/index.js");
+const { auditLogger }                  = await import("./audit/index.js");
+
+// ── Audit sinks ───────────────────────────────────────────────────────────────
+// Each sink is opt-in via environment variables. All are validated at startup;
+// misconfigured sinks are skipped with a warning rather than crashing the server.
+if (Config.audit.opensearch.enabled) {
+  try {
+    const { OpenSearchSink } = await import("./audit/sinks/opensearch.js");
+    auditLogger.registerSink(new OpenSearchSink(Config.audit.opensearch.url, Config.audit.opensearch.apiKey));
+    logger.info("Audit sink registered: opensearch");
+  } catch (err) {
+    logger.warn("Audit sink failed to init: opensearch", { error: (err as Error).message });
+  }
+}
+if (Config.audit.splunk.enabled) {
+  try {
+    const { SplunkSink } = await import("./audit/sinks/splunk.js");
+    auditLogger.registerSink(new SplunkSink(Config.audit.splunk.url, Config.audit.splunk.token, Config.audit.splunk.index || undefined));
+    logger.info("Audit sink registered: splunk");
+  } catch (err) {
+    logger.warn("Audit sink failed to init: splunk", { error: (err as Error).message });
+  }
+}
+if (Config.audit.webhook.enabled) {
+  try {
+    const { WebhookSink } = await import("./audit/sinks/webhook.js");
+    auditLogger.registerSink(new WebhookSink(Config.audit.webhook.url, Config.audit.webhook.token || undefined));
+    logger.info("Audit sink registered: webhook");
+  } catch (err) {
+    logger.warn("Audit sink failed to init: webhook", { error: (err as Error).message });
+  }
+}
 
 // ─── Run mode ─────────────────────────────────────────────────────────────────
 // The RuVector stores under ./data take an EXCLUSIVE single-writer lock and the

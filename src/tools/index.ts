@@ -23,7 +23,7 @@ import { logger } from "../logger.js";
 import { getProvider, resolveModelId } from "../providers/index.js";
 import type { ProviderTool } from "../providers/index.js";
 import { selectModel } from "../routing/model.js";
-import { auditLogger } from "../audit/index.js";
+import { auditLogger, ACTOR_SYSTEM } from "../audit/index.js";
 import type { KnowledgeStore } from "../knowledge/index.js";
 import type { InterRoundMemoryStore } from "../memory/index.js";
 import { pdfExtractTextTool, pdfExtractTablesTool, pdfGenerateTool, pdfOcrTool } from "./pdf.js";
@@ -41,6 +41,7 @@ import {
 } from "./documents.js";
 import { CONNECTOR_TOOLS } from "./connectors.js";
 import { CLIO_TOOLS } from "./clio.js";
+import { TWENTY_TOOLS } from "./twenty.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -345,6 +346,8 @@ const ALL_TOOLS: ToolImpl[] = [
   ...CONNECTOR_TOOLS,
   // Clio practice management — enabled when CLIO_CLIENT_ID is configured
   ...(Config.clio.enabled ? CLIO_TOOLS : []),
+  // Twenty CRM — enabled when TWENTY_API_KEY + TWENTY_API_URL are configured
+  ...(Config.twenty.enabled ? TWENTY_TOOLS : []),
 ];
 
 export class ToolRegistry {
@@ -370,12 +373,13 @@ export class ToolRegistry {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Unknown tool: ${name}`);
     const start = Date.now();
-    auditLogger.write({ event: "tool.call", taskId: ctx.taskId, data: { tool: name, input } });
+    auditLogger.write({ event: "tool.call", actorId: ACTOR_SYSTEM, taskId: ctx.taskId, data: { tool: name, input } });
     logger.debug("Tool executing", { tool: name });
     try {
       const result = await tool.execute(input, ctx);
       auditLogger.write({
         event: "tool.result",
+        actorId: ACTOR_SYSTEM,
         taskId: ctx.taskId,
         durationMs: Date.now() - start,
         data: { tool: name, ok: true },
@@ -384,6 +388,7 @@ export class ToolRegistry {
     } catch (err) {
       auditLogger.write({
         event: "tool.result",
+        actorId: ACTOR_SYSTEM,
         taskId: ctx.taskId,
         durationMs: Date.now() - start,
         data: { tool: name, ok: false, error: (err as Error).message },
