@@ -318,6 +318,8 @@ export interface AuditEntry {
   id: string;
   ts: string;
   event: string;
+  actorId?: string;
+  prevHash?: string;
   taskId?: string;
   agentId?: string;
   model?: string;
