@@ -1296,6 +1296,46 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     return report;
   });
 
+  // ── Deadline calculator ───────────────────────────────────────────────────────
+
+  app.get("/deadlines/rules", async (_req, _reply) => {
+    return orchestrator.deadlines.listJurisdictions();
+  });
+
+  app.post("/deadlines/compute", async (req, reply) => {
+    const { jurisdiction, triggerEvent, triggerDate } = req.body as {
+      jurisdiction: string; triggerEvent: string; triggerDate: string;
+    };
+    if (!jurisdiction || !triggerEvent || !triggerDate) {
+      return reply.status(400).send({ error: "jurisdiction, triggerEvent, triggerDate required" });
+    }
+    if (isNaN(Date.parse(triggerDate))) {
+      return reply.status(400).send({ error: "triggerDate must be a valid ISO date string" });
+    }
+    try {
+      return orchestrator.deadlines.compute(jurisdiction, triggerEvent, triggerDate);
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/matters/:matterNumber/deadlines", async (req, reply) => {
+    const { matterNumber } = req.params as { matterNumber: string };
+    const { triggerEvent, triggerDate } = req.body as { triggerEvent: string; triggerDate: string };
+    if (!triggerEvent || !triggerDate) return reply.status(400).send({ error: "triggerEvent and triggerDate required" });
+    // Find this matter's jurisdiction from any associated task
+    const tasks = orchestrator.listTasks();
+    const task = tasks.find((t) => t.matterNumber === matterNumber);
+    const jurisdiction = task?.jurisdiction;
+    if (!jurisdiction) return reply.status(404).send({ error: "No task with jurisdiction found for this matter" });
+    if (isNaN(Date.parse(triggerDate))) return reply.status(400).send({ error: "triggerDate must be a valid ISO date string" });
+    try {
+      return orchestrator.deadlines.compute(jurisdiction, triggerEvent, triggerDate);
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
   // Both GET and PUT are partner-only: GET exposes the DocuSeal URL and
   // enabled state; PUT can redirect DocuSeal requests (SSRF) or weaken

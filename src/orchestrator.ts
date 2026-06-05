@@ -59,6 +59,7 @@ import { BudgetMonitor } from "./budget/index.js";
 import { BudgetPredictor } from "./budget/predictor.js";
 import { ConflictGraph } from "./graph/conflict.js";
 import { RegPulseMonitor } from "./regulatory/pulse.js";
+import { DeadlineEngine } from "./deadlines/engine.js";
 import type {
   Task,
   WorkflowType,
@@ -137,6 +138,7 @@ export class Orchestrator {
   readonly conflictGraph: ConflictGraph;
   readonly regPulse = new RegPulseMonitor();
   readonly docketMonitor: DocketMonitor;
+  readonly deadlines = new DeadlineEngine();
 
   private readonly tasks: Map<string, Task> = new Map();
   private readonly gateEmitter = new EventEmitter();
@@ -220,6 +222,9 @@ export class Orchestrator {
       this.docketMonitor.start();
       logger.info("DocketMonitor started");
     }
+
+    // Load deadline rule files
+    await this.deadlines.loadRulesDir(Config.deadlines.rulesDir);
 
     logger.info("Orchestrator ready");
   }
