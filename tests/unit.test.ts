@@ -1098,3 +1098,56 @@ test("DocketMonitor: list() returns all watched dockets", () => {
   assert.ok(numbers.includes("M-101"), "must include M-101");
   assert.ok(numbers.includes("M-102"), "must include M-102");
 });
+
+// ─── DeadlineEngine ──────────────────────────────────────────────────────────
+
+import { DeadlineEngine, addCalendarDays, addBusinessDays } from "../src/deadlines/engine.js";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const RULES_DIR = pathJoin(__dirname, "../src/deadlines/rules");
+
+test("DeadlineEngine: addCalendarDays adds exact days", () => {
+  // Monday 2026-01-05 + 7 calendar days = Monday 2026-01-12
+  const start = new Date("2026-01-05T00:00:00Z");
+  const result = addCalendarDays(start, 7);
+  assert.equal(result.toISOString().slice(0, 10), "2026-01-12");
+});
+
+test("DeadlineEngine: addBusinessDays skips weekends", () => {
+  // Friday 2026-01-02 + 5 business days should skip Sat/Sun and land on Friday 2026-01-09
+  const start = new Date("2026-01-02T00:00:00Z"); // Friday
+  const result = addBusinessDays(start, 5, "none");
+  assert.equal(result.toISOString().slice(0, 10), "2026-01-09"); // next Friday
+});
+
+test("DeadlineEngine: US federal holiday (July 4) is skipped for business days", () => {
+  // July 4 2025 = Friday → observed on Friday → it is a federal holiday
+  // So 1 business day from Thursday July 3 = Monday July 7
+  const start = new Date("2025-07-03T00:00:00Z"); // Thursday
+  const result = addBusinessDays(start, 1, "us_federal");
+  // July 4 2025 is a Friday and a federal holiday — skip it, land on Monday July 7
+  assert.equal(result.toISOString().slice(0, 10), "2025-07-07");
+});
+
+test("DeadlineEngine: compute returns empty deadlines for unknown trigger", async () => {
+  const engine = new DeadlineEngine();
+  await engine.loadRulesDir(RULES_DIR);
+  const result = engine.compute("US-FED", "nonexistent_trigger_xyz", "2026-01-01");
+  assert.equal(result.deadlines.length, 0);
+  assert.equal(result.triggerEvent, "nonexistent_trigger_xyz");
+  assert.equal(result.jurisdiction, "US-FED");
+});
+
+test("DeadlineEngine: listJurisdictions returns loaded rulesets", async () => {
+  const engine = new DeadlineEngine();
+  await engine.loadRulesDir(RULES_DIR);
+  const list = engine.listJurisdictions();
+  assert.ok(list.length >= 3, `Expected at least 3 rulesets, got ${list.length}`);
+  const jurisdictions = list.map((r) => r.jurisdiction);
+  assert.ok(jurisdictions.includes("US-FED"), "US-FED not found");
+  assert.ok(jurisdictions.includes("UK"), "UK not found");
+  assert.ok(jurisdictions.includes("EU-COMP"), "EU-COMP not found");
+});

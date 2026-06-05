@@ -1,0 +1,54 @@
+id: uk-cpr
+jurisdiction: UK
+name: UK Civil Procedure Rules
+version: "2024"
+source: "https://www.justice.gov.uk/courts/procedure-rules/civil"
+holidays: uk_bank
+
+rules:
+  - id: cpr-acknowledgment-of-service
+    trigger: claim_form_served
+    event: acknowledgment_of_service_due
+    days: 14
+    dayType: calendar
+    warningDays: 3
+    cite: "CPR 10.3"
+
+  - id: cpr-defence
+    trigger: claim_form_served
+    event: defence_due
+    days: 28
+    dayType: calendar
+    warningDays: 7
+    cite: "CPR 15.4(1)(a)"
+
+  - id: cpr-defence-after-acknowledgment
+    trigger: acknowledgment_of_service_filed
+    event: defence_due
+    days: 28
+    dayType: calendar
+    warningDays: 7
+    cite: "CPR 15.4(1)(b)"
+
+  - id: cpr-reply-to-defence
+    trigger: defence_served
+    event: reply_due
+    days: 21
+    dayType: calendar
+    cite: "CPR 15.8"
+
+  - id: cpr-summary-judgment-response
+    trigger: summary_judgment_application_served
+    event: evidence_in_response_due
+    days: 7
+    dayType: business
+    warningDays: 2
+    cite: "CPR 24.5(1)"
+
+  - id: cpr-appeal-notice
+    trigger: judgment_handed_down
+    event: appellant_notice_due
+    days: 21
+    dayType: calendar
+    warningDays: 5
+    cite: "CPR 52.12(2)(b)"

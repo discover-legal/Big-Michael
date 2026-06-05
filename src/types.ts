@@ -773,3 +773,26 @@ export interface DocketAlert {
   courtListenerUrl: string;
   detectedAt: string;
 }
+
+// ── Deadline calculator ─────────────────────────────────────────────────────
+export type DeadlineDayType = "calendar" | "business";
+
+export interface ComputedDeadline {
+  ruleId: string;
+  event: string;
+  dueDate: string;
+  warningDate?: string;
+  days: number;
+  dayType: DeadlineDayType;
+  cite: string;
+  note?: string;
+}
+
+export interface DeadlineResult {
+  jurisdiction: string;
+  jurisdictionName: string;
+  triggerEvent: string;
+  triggerDate: string;
+  computedAt: string;
+  deadlines: ComputedDeadline[];
+}

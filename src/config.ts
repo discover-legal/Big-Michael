@@ -382,4 +382,8 @@ export const Config = {
     pollIntervalMs: parseInt(optional("DOCKET_POLL_INTERVAL_MS", String(4 * 60 * 60 * 1_000))), // 4 hours
     file: optional("DOCKETS_FILE", "./data/dockets.json"),
   },
+
+  deadlines: {
+    rulesDir: optional("DEADLINES_RULES_DIR", "./src/deadlines/rules"),
+  },
 } as const;
