@@ -732,6 +732,19 @@ export interface ConflictReport {
   clientBName: string;
   matterANumber: string;
   matterBNumber: string;
-  conflictPath: string;  // e.g. "direct" | "via-subsidiary" | "inferred"
-  detectedAt: string;    // ISO
+  conflictPath: string;
+  detectedAt: string;
+}
+
+// ── Regulatory pulse ────────────────────────────────────────────────────────
+export interface RegulationAlert {
+  id: string;
+  matterNumber?: string;
+  practiceArea: string;
+  jurisdiction: string;
+  headline: string;
+  url: string;
+  summary: string;
+  detectedAt: string;
+  source: "tavily";
 }

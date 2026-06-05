@@ -1169,6 +1169,35 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     return { conflicts, hasConflict: conflicts.length > 0 };
   });
 
+  // ── Regulatory pulse ──────────────────────────────────────────────────────────
+
+  const MAX_REG_SSE_LISTENERS = 20;
+  app.get("/regulatory/alerts/stream", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (!orchestrator.regPulse.isEnabled()) return reply.status(503).send({ error: "Regulatory pulse not enabled (set REG_PULSE_ENABLED=true and TAVILY_API_KEY)" });
+    if (orchestrator.regPulse.listenerCount("alert") >= MAX_REG_SSE_LISTENERS) {
+      return reply.status(429).send({ error: "Too many concurrent regulatory streams" });
+    }
+    reply.raw.setHeader("Content-Type", "text/event-stream");
+    reply.raw.setHeader("Cache-Control", "no-cache");
+    reply.raw.setHeader("Connection", "keep-alive");
+    reply.raw.flushHeaders();
+
+    const send = (alert: import("../types.js").RegulationAlert) => {
+      reply.raw.write(`data: ${JSON.stringify(alert)}\n\n`);
+    };
+    orchestrator.regPulse.on("alert", send);
+    req.raw.on("close", () => orchestrator.regPulse.off("alert", send));
+  });
+
+  app.post("/regulatory/check-now", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (!orchestrator.regPulse.isEnabled()) return reply.status(503).send({ error: "Regulatory pulse not enabled" });
+    const tasks = orchestrator.listTasks();
+    const alerts = await orchestrator.regPulse.checkAll(tasks);
+    return { checked: tasks.length, alerts };
+  });
+
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
   // Both GET and PUT are partner-only: GET exposes the DocuSeal URL and
   // enabled state; PUT can redirect DocuSeal requests (SSRF) or weaken

@@ -57,6 +57,7 @@ import { isOllamaModel, isLocalModel } from "./providers/index.js";
 import { BudgetMonitor } from "./budget/index.js";
 import { BudgetPredictor } from "./budget/predictor.js";
 import { ConflictGraph } from "./graph/conflict.js";
+import { RegPulseMonitor } from "./regulatory/pulse.js";
 import type {
   Task,
   WorkflowType,
@@ -133,6 +134,7 @@ export class Orchestrator {
   readonly budgetPredictor: BudgetPredictor;
   readonly preBills: PreBillStore;
   readonly conflictGraph: ConflictGraph;
+  readonly regPulse = new RegPulseMonitor();
 
   private readonly tasks: Map<string, Task> = new Map();
   private readonly gateEmitter = new EventEmitter();
@@ -201,6 +203,12 @@ export class Orchestrator {
       knowledge: this.knowledge,
       pinnedAgents: [ROOT_ORCHESTRATOR],
     });
+
+    // Start regulatory pulse monitor if enabled
+    if (this.regPulse.isEnabled()) {
+      this.regPulse.start(() => this.listTasks());
+      logger.info("RegPulseMonitor started");
+    }
 
     logger.info("Orchestrator ready");
   }

@@ -14,7 +14,8 @@ import { jurisdictionMatch } from "../src/dytopo/jurisdiction.js";
 import { assertSafeReadPath } from "../src/tools/pdf.js";
 import { assertPublicHttpUrl } from "../src/settings/index.js";
 import { canViewTask, filterVisible, isPartner } from "../src/auth/index.js";
-import type { SessionUser, AgentDefinition } from "../src/types.js";
+import type { SessionUser, AgentDefinition, Task } from "../src/types.js";
+import { RegPulseMonitor } from "../src/regulatory/pulse.js";
 
 // validatePlugin is not exported — test via the public PluginRegistry interface instead
 import { PluginRegistry } from "../src/adapters/plugin.js";
@@ -904,14 +905,12 @@ import type { ConflictReport } from "../src/types.js";
 import { syncConflictGraph } from "../src/graph/sync.js";
 
 test("ConflictGraph: isEnabled() returns false when TYPEDB_URL is unset", () => {
-  // TYPEDB_URL is not set in the test environment (no typedb env var in cross-env)
   const g = new ConflictGraph();
   assert.equal(g.isEnabled(), false);
 });
 
 test("ConflictGraph: connect() is a no-op when disabled (returns without error)", async () => {
   const g = new ConflictGraph();
-  // Should resolve cleanly with no TypeDB running
   await assert.doesNotReject(() => g.connect());
 });
 
@@ -928,7 +927,6 @@ test("ConflictGraph: checkNewMatter() returns [] when disabled", async () => {
 });
 
 test("ConflictReport: shape matches expected interface", () => {
-  // Verify the type is structurally correct — a full ConflictReport object
   const report: ConflictReport = {
     clientAId:     "client-001",
     clientAName:   "Acme Corp",
@@ -951,13 +949,66 @@ test("ConflictReport: shape matches expected interface", () => {
 
 test("syncConflictGraph: no-op when graph is disabled", async () => {
   const g = new ConflictGraph();
-  // Stub stores — syncConflictGraph only calls graph.sync() which is a no-op
   const stubClients = {
     list: () => [],
     get: () => undefined,
     getByClientNumber: () => undefined,
   } as unknown as import("../src/clients/index.js").ClientStore;
   const stubTime = {} as unknown as import("../src/time/index.js").TimeStore;
-  // Must resolve without error
   await assert.doesNotReject(() => syncConflictGraph(g, stubClients, stubTime));
+});
+
+// ─── RegPulseMonitor ─────────────────────────────────────────────────────────
+
+test("RegPulseMonitor: isEnabled() false when TAVILY_API_KEY not set", () => {
+  const monitor = new RegPulseMonitor();
+  assert.equal(monitor.isEnabled(), false);
+});
+
+test("RegPulseMonitor: buildQuery produces search string with practice area and jurisdiction", () => {
+  const monitor = new RegPulseMonitor();
+  const query = monitor.buildQuery("Intellectual Property", "US");
+  assert.ok(query.includes("Intellectual Property"), "query must contain practice area");
+  assert.ok(query.includes("US"), "query must contain jurisdiction");
+  assert.ok(
+    query.includes("regulation") || query.includes("ruling") || query.includes("guidance"),
+    "query must include regulatory search terms",
+  );
+});
+
+test("RegPulseMonitor: skips matter without practiceArea (no noslegal.areaOfLaw)", async () => {
+  const monitor = new RegPulseMonitor();
+  const task = {
+    id: "t-nopa",
+    jurisdiction: "UK",
+    status: "running",
+  } as unknown as Task;
+  const alerts = await monitor.checkMatter(task);
+  assert.equal(alerts.length, 0, "should return no alerts when noslegal.areaOfLaw is missing");
+});
+
+test("RegPulseMonitor: skips matter without jurisdiction", async () => {
+  const monitor = new RegPulseMonitor();
+  const task = {
+    id: "t-nojur",
+    noslegal: { areaOfLaw: "Tax" },
+    status: "running",
+  } as unknown as Task;
+  const alerts = await monitor.checkMatter(task);
+  assert.equal(alerts.length, 0, "should return no alerts when jurisdiction is missing");
+});
+
+test("RegPulseMonitor: respects per-matter cooldown", async () => {
+  const monitor = new RegPulseMonitor();
+  const lastChecked = (monitor as unknown as { lastChecked: Map<string, number> }).lastChecked;
+  lastChecked.set("matter-123", Date.now());
+  const task = {
+    id: "t-cooldown",
+    matterNumber: "matter-123",
+    jurisdiction: "EU",
+    noslegal: { areaOfLaw: "Competition & Antitrust" },
+    status: "running",
+  } as unknown as Task;
+  const alerts = await monitor.checkMatter(task);
+  assert.equal(alerts.length, 0, "should skip matter within cooldown window");
 });

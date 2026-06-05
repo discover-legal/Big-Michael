@@ -368,9 +368,12 @@ export const Config = {
     path: optional("INFISICAL_PATH", "/"),
   },
 
-  // TypeDB conflict graph (optional — enables multi-hop conflict detection)
-  // docker compose --profile graph up -d
   typedb: {
-    url: process.env.TYPEDB_URL ?? "",   // e.g. "0.0.0.0:1729"; empty = disabled
+    url: process.env.TYPEDB_URL ?? "",
+  },
+  regulatory: {
+    enabled: optional("REG_PULSE_ENABLED", "false") === "true",
+    pollIntervalMs: parseInt(optional("REG_PULSE_INTERVAL_MS", String(60 * 60 * 1_000))),
+    tavilyApiKey: process.env.TAVILY_API_KEY ?? "",
   },
 } as const;
