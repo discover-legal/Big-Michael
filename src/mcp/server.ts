@@ -873,6 +873,50 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     return orchestrator.clients.checkConflict(trimmed);
   });
 
+  // ── Matter budget tracking ───────────────────────────────────────────────────
+  app.put("/clients/:id/matters/:matterNumber/budget", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { id, matterNumber } = req.params as { id: string; matterNumber: string };
+    const { budgetUsd, thresholds } = req.body as { budgetUsd: number; thresholds?: number[] };
+    if (!budgetUsd || budgetUsd <= 0) return reply.status(400).send({ error: "budgetUsd must be positive" });
+    const matter = orchestrator.clients.setMatterBudget(id, matterNumber, budgetUsd, thresholds);
+    if (!matter) return reply.status(404).send({ error: "Client or matter not found" });
+    return matter;
+  });
+
+  app.get("/clients/:id/matters/:matterNumber/budget", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber } = req.params as { id: string; matterNumber: string };
+    const burn = orchestrator.budgetMonitor.getBurn(matterNumber);
+    if (!burn) return reply.status(404).send({ error: "No budget set for this matter" });
+    return { matterNumber, ...burn };
+  });
+
+  app.post("/clients/:id/matters/:matterNumber/budget/check", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber } = req.params as { id: string; matterNumber: string };
+    orchestrator.budgetMonitor.checkMatter(matterNumber);
+    return { ok: true };
+  });
+
+  const MAX_BUDGET_SSE_LISTENERS = 20;
+  app.get("/budget/alerts/stream", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    if (orchestrator.budgetMonitor.listenerCount("alert") >= MAX_BUDGET_SSE_LISTENERS) {
+      return reply.status(429).send({ error: "Too many concurrent budget streams" });
+    }
+    reply.raw.setHeader("Content-Type", "text/event-stream");
+    reply.raw.setHeader("Cache-Control", "no-cache");
+    reply.raw.setHeader("Connection", "keep-alive");
+    reply.raw.flushHeaders();
+
+    const send = (alert: import("../types.js").BudgetAlert) => {
+      reply.raw.write(`data: ${JSON.stringify(alert)}\n\n`);
+    };
+    orchestrator.budgetMonitor.on("alert", send);
+    req.socket.on("close", () => orchestrator.budgetMonitor.off("alert", send));
+  });
+
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
   // Both GET and PUT are partner-only: GET exposes the DocuSeal URL and
   // enabled state; PUT can redirect DocuSeal requests (SSRF) or weaken

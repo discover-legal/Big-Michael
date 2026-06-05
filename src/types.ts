@@ -300,6 +300,10 @@ export interface TimeEntry {
   durationMs: number;        // 0 while running; populated on close
   /** 6-minute billing increments (0.1 hr each). Rounded UP. 0 while running. */
   billingUnits: number;
+  /** USD/hour rate captured at the time the entry is created. */
+  billingRate?: number;
+  /** Pre-computed fee: billingUnits × 0.1 × billingRate. Set on close. */
+  billingAmountUsd?: number;
   /** ISO timestamp set when this entry has been pushed to a Clio matter as an activity. */
   clioSyncedAt?: string;
 }
@@ -462,6 +466,19 @@ export interface ClientMatter {
   description: string;
   practiceArea?: string;
   openedAt: Date;
+  budgetUsd?: number;
+  budgetAlertThresholds?: number[];
+  budgetAlertsTriggered?: number[];
+}
+
+export interface BudgetAlert {
+  matterNumber: string;
+  clientNumber: string;
+  budgetUsd: number;
+  burnUsd: number;
+  burnPct: number;
+  threshold: number;
+  triggeredAt: string;
 }
 
 export interface Client {

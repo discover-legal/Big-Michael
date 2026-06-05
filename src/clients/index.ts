@@ -110,6 +110,25 @@ export class ClientStore {
     return true;
   }
 
+  setMatterBudget(
+    clientId: string,
+    matterNumber: string,
+    budgetUsd: number,
+    thresholds?: number[],
+  ): ClientMatter | undefined {
+    const client = this.clients.find((c) => c.id === clientId);
+    if (!client) return undefined;
+    const matter = client.matters.find((m) => m.matterNumber === matterNumber);
+    if (!matter) return undefined;
+    matter.budgetUsd = budgetUsd;
+    matter.budgetAlertThresholds = thresholds ?? [0.5, 0.8, 1.0];
+    matter.budgetAlertsTriggered = [];
+    this.persist().catch((err: Error) =>
+      logger.warn("Failed to persist matter budget", { error: err.message })
+    );
+    return matter;
+  }
+
   /** Check whether onboarding `newClientName` conflicts with existing clients. */
   checkConflict(newClientName: string): ConflictCheckResult {
     const name = newClientName.toLowerCase().trim();
@@ -135,7 +154,7 @@ export class ClientStore {
     return { hasConflict: false };
   }
 
-  private async persist(): Promise<void> {
+  async persist(): Promise<void> {
     const tmp = `${this.path}.tmp`;
     await writeFile(tmp, JSON.stringify(this.clients, null, 2), "utf8");
     await rename(tmp, this.path);
