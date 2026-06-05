@@ -121,39 +121,46 @@ CSV exports now include the `clioSyncedAt` column. Audit trail in a spreadsheet,
 
 ---
 
-## v0.4.x post — Setup wizard + connectors + deadline calculator
+## v0.4.x post — Full feature set
 
-Big Michael got a sling.
+Big Michael v0.4.x. Things I'm actually pleased with:
 
-Until today it needed Node, npm, a `.env` file you had to understand, and a manual repo checkout. Fine for engineers. Not fine for lawyers.
+→ **Every finding is debated, then verified 10 times, then a human can reject it** before synthesis reaches you. Not a chatbot with a legal prompt. A bench that argues with itself.
 
-Now:
+→ **Append-only audit log.** Every agent message, every round, every gate, every human decision — structured JSONL with a live SSE stream. You can read the entire bench's reasoning afterwards. No black box.
 
-`curl -fsSL https://raw.githubusercontent.com/discover-legal/big-michael/main/setup.sh | bash`
+→ **Billable time tracked automatically.** 6-minute billing units, per lawyer, per matter. Push entries to Clio. Export to CSV. It runs in the background — you don't configure it, it just happens.
 
-That's it. The rest is a wizard. It checks your Node version, installs it if you need it, walks you through every key with inline instructions — and, this part I'm pleased with — shows you a **checkbox picker** for the 32 connectors.
+→ **Per-call cost tracking.** Cache-aware pricing across Haiku / Sonnet / Opus (Anthropic's three token buckets at 1×, 1.25×, and 0.10× of input rate). Local inference gets watt-hour estimates from your GPU's TDP. Admin dashboard breaks it down by model, context, and matter. You always know what you're spending and on what.
 
-Westlaw. Everlaw. iManage. DocuSign CLM. Ironclad. Trellis. CourtListener (free, always). Clio. Thirty-two tools across fifteen providers. Check the ones you have. The bench wires itself up. Ones you don't have yet sit quietly feature-flagged off — unconfigured connectors return a structured error and never crash anything.
+→ **Voice fingerprinting.** Drop a LinkedIn export, a brief, a decade of memos. The bench learns how your lawyer writes and the drafting agents do the same.
 
-One more stone in the sling: a **court deadline calculator**. Feed it a trigger date, it returns every deadline under FRCP, UK CPR, or EU Competition rules — calendar vs business days, jurisdiction-aware, with the procedural citation for each. More rule sets coming as the community verifies them.
+→ **32 connectors across 15 providers** — Westlaw, Everlaw, iManage, DocuSign CLM, Ironclad, Trellis, Clio, CourtListener (free, always). A checkbox picker wires up the ones you have. Unconfigured ones sit quietly off and never crash anything.
 
-(They ship marked SAMPLE — AI GENERATED, NEVER VERIFIED BY COUNSEL. Not a law firm. Not legal advice. A lawyer with standing removes the notice when they've verified the rules and submit a PR — the CONTRIBUTING.md has the process.)
+→ **Court deadline calculator.** Trigger date → every FRCP / UK CPR / EU Competition deadline, calendar vs business days, with procedural citations. (Shipped marked SAMPLE — AI GENERATED until a practitioner with standing verifies them and submits a PR.)
 
-Still open source. Still AGPL-3.0. Still standing on Mike and Lavern's shoulders. 🐢
+→ **One command to set it all up.** `curl -fsSL https://raw.githubusercontent.com/discover-legal/big-michael/main/setup.sh | bash`
 
-Which connector do you most want the bench reasoning across?
+Still on Mike (Will Chen) and Lavern (Antti Innanen)'s shoulders. Still AGPL-3.0. Still turtles all the way down. 🐢
+
+What would a self-auditing bench do to your hardest matter?
 
 #LegalAI #LegalTech #OpenSource #MultiAgent
 
 ---
 
-## v0.4.x post — Setup wizard + connectors + deadline calculator (ultra-short)
+## v0.4.x post — Full feature set (ultra-short)
 
 Big Michael v0.4.x:
 
-→ One-liner setup: `curl ... | bash` — checks prereqs, walks you through keys, checkbox picker for all 32 connectors  
-→ Court deadline calculator — FRCP, UK CPR, EU Competition; calendar vs business days; cited  
-→ Unconfigured connectors feature-flag off cleanly, never crash
+→ Debate + 10-pass verification before any finding reaches a human  
+→ Append-only audit log — full JSONL + live SSE of every agent message and gate  
+→ Automatic billable time in 6-minute units, per lawyer per matter, syncs to Clio  
+→ Per-call cost tracking with cache-aware pricing and admin dashboard  
+→ Voice fingerprinting — LinkedIn export, brief, or memo → bench drafts in that lawyer's voice  
+→ 32 connectors, checkbox picker, unconfigured ones sit quietly off  
+→ Court deadline calculator — FRCP, UK CPR, EU Competition, cited  
+→ `curl -fsSL .../setup.sh | bash` — that's the whole install
 
 Still turtles all the way down. 🐢
 
