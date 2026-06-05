@@ -123,33 +123,27 @@ CSV exports now include the `clioSyncedAt` column. Audit trail in a spreadsheet,
 
 ## v0.5.0 post — The billing + audit drop
 
-Big Michael got a sling. The billing stack and the audit log landed together. That's what this is: v0.5.0.
+Big Michael bills his own time, enforces your OCG, and keeps a diary you can subpoena.
 
-Big Michael enforces your OCG. Your billing software doesn't.
+That last one matters. Hash-chained, tamper-evident JSONL — OpenSearch, Splunk, or a webhook you control. Every message he sends. Every gate he holds. Every human call. The chain is verifiable. The record is yours, not ours.
 
-He classifies every time entry in LEDES 1998B with UTBMS task codes before it leaves his desk. You edit. You submit. He doesn't hand you a CSV and call it done.
+On the billing:
 
-He runs a compliance pass on every entry against your Outside Counsel Guidelines — structured rule dictionary, deterministic checks, parameters he extracted himself. He catches it before the pre-bill. Not after the client calls.
+He classifies every time entry in LEDES 1998B with UTBMS task codes before it leaves his desk. He runs a compliance pass against your Outside Counsel Guidelines — structured rule dictionary, deterministic, parameters he extracted himself. He catches it before the pre-bill. Not after the client calls.
 
-He runs the whole pre-bill review cycle: draft, review, approve, invoice. Partners see everything. Associates see their part. Big Michael sees all of it.
+He runs the whole cycle: draft, review, approve, invoice. He watches your matter budget live and alerts you before you have to explain yourself. He predicts what a matter will cost from your own historical data. Your matters. His maths.
 
-He watches your matter budget live and alerts you before you have to explain yourself.
+And yes — he logs his own hours. The agents work. The clock runs. You review it like any other entry. (An AI helped build the system that bills AI time. I find this more amusing than I probably should. — Claude)
 
-He predicts what a matter will cost from your own historical data. Not a vendor's model. Not a black box. Your matters. His maths.
+He also doesn't sleep:
 
-He bills his own time. The agents work. The clock runs. He logs it. You review it like any other entry. (An AI helped build the system that bills AI time. I find this more amusing than I probably should. — Claude)
-
-He keeps a diary, and you can subpoena it. Hash-chained, tamper-evident JSONL — OpenSearch, Splunk, or a webhook you control. Every message he sends. Every gate he holds. Every call a human makes. The chain is verifiable. The record is yours, not ours.
-
-He also:
-
-→ Watches your CourtListener dockets overnight — new filings in, SSE alert to counsel before morning
-→ Reads the regulatory updates so you don't have to — scans them against your open matters on a schedule
-→ Writes client status reports from what he actually did, not what anyone remembers
-→ Runs multi-hop conflict checks through TypeDB — n-ary, not a list
-→ Knows your deadlines — FRCP, UK CPR, EU Competition; trigger date in, every downstream date out, cited
-→ Connects to Twenty CRM
-→ Installs in one command: `curl -fsSL https://raw.githubusercontent.com/discover-legal/big-michael/main/setup.sh | bash`
+→ Watching your CourtListener dockets — new filing in, SSE alert to counsel before morning
+→ Reading the regulatory updates so you don't have to — scans them against your open matters on a schedule
+→ Writing client status reports from what he actually did, not what anyone remembers
+→ Running multi-hop conflict checks through TypeDB — n-ary, not a list
+→ Knowing your deadlines — FRCP, UK CPR, EU Competition; trigger date in, every downstream date out, cited
+→ Connecting to Twenty CRM
+→ Installing in one command: `curl -fsSL https://raw.githubusercontent.com/discover-legal/big-michael/main/setup.sh | bash`
 
 An AI, a lawyer, and open source walked into a GitHub repo. Big Michael kept the audit log. 🐢
 
@@ -163,18 +157,19 @@ Which of your matters does Big Michael take first?
 
 ## v0.5.0 post — The billing + audit drop (ultra-short)
 
-Big Michael got a sling. He enforces your OCG, bills his own time, and keeps a diary you can subpoena. That's v0.5.0.
+Big Michael bills his own time, enforces your OCG, and keeps a diary you can subpoena.
 
 → LEDES 1998B + UTBMS, classified before it leaves his desk. OCG compliance pass before every pre-bill.
 → Pre-bill review cycle. Matter budgets with live burn alerts. Cost predictor from your own data.
-→ He bills his own time. (An AI built the thing that bills AI time. — Claude)
+→ He logs his own hours. (An AI built the thing that bills AI time. — Claude)
 → Hash-chained audit log. OpenSearch / Splunk / webhook. His record. Yours to keep.
-→ He watches your dockets overnight. Reads the regulatory updates. Writes the status reports.
-→ TypeDB conflict graph. Deadline calculator. Twenty CRM. One-liner install.
+→ Doesn't sleep: docket monitoring, regulatory pulse, status reports, TypeDB conflict graph, deadline calculator, Twenty CRM.
+→ One-liner install.
 
 An AI, a lawyer, and open source walked into a GitHub repo. Big Michael kept the audit log. 🐢
 
 #LegalAI #LegalTech #OpenSource #LegalBilling #OCG
+
 
 ---
 
