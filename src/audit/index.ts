@@ -22,7 +22,7 @@
 
 import { EventEmitter } from "events";
 import { createHash } from "crypto";
-import { appendFile } from "fs/promises";
+import { appendFile, readFile } from "fs/promises";
 import { Config } from "../config.js";
 
 // ─── Actor constants ──────────────────────────────────────────────────────────
@@ -223,6 +223,40 @@ export class AuditLogger {
   /** Current number of active SSE subscribers (used by the server to enforce a cap). */
   listenerCount(): number {
     return this.emitter.listenerCount("entry");
+  }
+
+  /**
+   * Reload the most recent entries from the JSONL file into the in-memory buffer.
+   * Call once at startup so the REST endpoint and UI show historical events rather
+   * than "waiting for activity" after every restart.  The hash chain continues from
+   * the last loaded entry so new writes remain tamper-evident.
+   */
+  async restoreFromFile(): Promise<void> {
+    if (!Config.audit.enabled) return;
+    let raw: string;
+    try {
+      raw = await readFile(Config.audit.logFile, "utf8");
+    } catch {
+      return; // no file yet — first run
+    }
+    const lines = raw.trim().split("\n").filter(Boolean);
+    const toLoad = lines.slice(-this.maxBuffer);
+    for (const line of toLoad) {
+      try {
+        const entry = JSON.parse(line) as AuditEntry;
+        this.buffer.push(entry);
+      } catch {
+        // skip malformed lines
+      }
+    }
+    if (this.buffer.length > this.maxBuffer) {
+      this.buffer.splice(0, this.buffer.length - this.maxBuffer);
+    }
+    // Advance hash chain from the last restored entry so new events chain correctly
+    const last = this.buffer[this.buffer.length - 1];
+    if (last) {
+      this.lastHash = createHash("sha256").update(JSON.stringify(last)).digest("hex");
+    }
   }
 
   /** Flush all sinks — call on graceful shutdown to drain pending batches. */

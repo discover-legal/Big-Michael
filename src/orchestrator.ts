@@ -198,8 +198,9 @@ export class Orchestrator {
     // agents, templates, and tools into the live stores.
     await this.loadPlugins();
 
-    // Restore persisted tasks
+    // Restore persisted tasks and recent audit history into the in-memory buffer
     await this.restoreTasks();
+    await auditLogger.restoreFromFile();
 
     this.rootAgent = new Agent(ROOT_ORCHESTRATOR);
     this.engine = new DyTopoEngine({
@@ -357,14 +358,17 @@ export class Orchestrator {
   }
 
   /** Set the lawyer(s) assigned to a matter (a partner action). */
-  assignLawyers(taskId: string, lawyerIds: string[]): Task | null {
+  assignLawyers(taskId: string, lawyerIds: string[], actorId: string = ACTOR_SYSTEM): Task | null {
     const task = this.tasks.get(taskId);
     if (!task) return null;
+    const prev = task.assignedLawyerIds ?? [];
     const valid = [...new Set(lawyerIds)].slice(0, 50).filter((id) => this.profiles.get(id));
     task.assignedLawyerIds = valid;
     task.updatedAt = new Date();
     this.persistTasks().catch((err) => logger.warn("Failed to persist tasks", { error: err.message }));
-    auditLogger.write({ event: "task.assigned", actorId: ACTOR_SYSTEM, taskId, data: { lawyerIds: valid } });
+    const added = valid.filter((id) => !prev.includes(id));
+    const removed = prev.filter((id) => !valid.includes(id));
+    auditLogger.write({ event: "task.assigned", actorId, taskId, data: { lawyerIds: valid, added, removed } });
     return task;
   }
 
