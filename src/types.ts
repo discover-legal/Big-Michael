@@ -706,3 +706,19 @@ export interface ClientVoiceGuide {
   signaturePatterns: string[];
   injectionSnippet: string;    // pre-built prompt fragment
 }
+// ── Budget prediction ───────────────────────────────────────────────────────
+export interface BudgetPrediction {
+  matterNumber: string;
+  practiceArea: string;
+  spentUsd: number;
+  spentBillingUnits: number;
+  estimatedTotalUsd: number;
+  estimatedRemainingUsd: number;
+  completionPct: number;
+  confidence: "high" | "medium" | "low" | "insufficient_data";
+  comparableMatterCount: number;
+  medianFinalCost: number;
+  p25FinalCost: number;
+  p75FinalCost: number;
+  basedOn: "practice_area+jurisdiction" | "practice_area" | "all_matters";
+}

@@ -748,3 +748,151 @@ test("exportLedes1998B: CRLF in description does not create extra LEDES rows", (
   const nonEmptyLines = output.split("\r\n").filter(Boolean);
   assert.equal(nonEmptyLines.length, 3, "CRLF in description must not produce extra rows");
 });
+
+// ─── BudgetPredictor ─────────────────────────────────────────────────────────
+
+import { BudgetPredictor } from "../src/budget/predictor.js";
+import type { Task } from "../src/types.js";
+
+/** Helper: create a minimal closed Task */
+function makeTask(matterNumber: string, jurisdiction = "", workflowType: Task["workflowType"] = "roundtable"): Task {
+  return {
+    id: matterNumber,
+    description: "Test matter",
+    matterNumber,
+    jurisdiction,
+    workflowType,
+    status: "complete",
+    currentPhase: "delivery",
+    currentRound: 1,
+    maxRounds: 3,
+    activeAgentIds: [],
+    documentIds: [],
+    rounds: [],
+    findings: [],
+    pendingGates: [],
+    createdAt: new Date("2026-01-01"),
+    updatedAt: new Date("2026-01-02"),
+    completedAt: new Date("2026-01-02"),
+  };
+}
+
+/** Helper: open and immediately close a time entry on a store */
+function addClosedEntry(
+  store: TimeStore,
+  matterNumber: string,
+  billingAmountUsd: number,
+  billingUnits = 1,
+): void {
+  const startedAt = new Date(Date.now() - 30 * 60 * 1000); // 30 min ago
+  const entry = store.open({
+    taskId: matterNumber,
+    matterNumber,
+    description: "Test work",
+    event: "task_run",
+    startedAt,
+  });
+  // Manually set billing data (close() would compute it from wall-clock time)
+  const stored = store.list({ matterNumber }).find((e) => e.id === entry.id)!;
+  stored.endedAt = new Date();
+  stored.durationMs = 30 * 60 * 1000;
+  stored.billingUnits = billingUnits;
+  stored.billingAmountUsd = billingAmountUsd;
+}
+
+test("BudgetPredictor: returns null for unknown matter", () => {
+  const predictor = new BudgetPredictor();
+  const store = new TimeStore();
+  const taskMap = new Map<string, Task>();
+  const result = predictor.predict("MATTER-UNKNOWN", store, taskMap);
+  assert.equal(result, null);
+});
+
+test("BudgetPredictor: insufficient_data confidence when < 3 comparable matters", () => {
+  const predictor = new BudgetPredictor();
+  const store = new TimeStore();
+  const taskMap = new Map<string, Task>();
+
+  // Add 2 closed comparable matters (not enough for low confidence)
+  for (let i = 1; i <= 2; i++) {
+    const mn = `MATTER-HIST-${i}`;
+    addClosedEntry(store, mn, 1000, 2);
+    addClosedEntry(store, mn, 500, 1);
+    taskMap.set(mn, makeTask(mn));
+  }
+
+  // Add the open matter being predicted
+  const openMatter = "MATTER-OPEN";
+  addClosedEntry(store, openMatter, 400, 1);
+  taskMap.set(openMatter, makeTask(openMatter));
+
+  const result = predictor.predict(openMatter, store, taskMap);
+  assert.ok(result !== null, "should return a prediction");
+  assert.equal(result!.confidence, "insufficient_data");
+});
+
+test("BudgetPredictor: high confidence with 10+ comparable matters", () => {
+  const predictor = new BudgetPredictor();
+  const store = new TimeStore();
+  const taskMap = new Map<string, Task>();
+
+  // Add 10 closed comparable matters (qualifies for high confidence)
+  for (let i = 1; i <= 10; i++) {
+    const mn = `MATTER-HIST-HIGH-${i}`;
+    addClosedEntry(store, mn, 2000, 4);
+    addClosedEntry(store, mn, 1000, 2);
+    taskMap.set(mn, makeTask(mn, "US", "roundtable"));
+  }
+
+  // Open matter being predicted (same jurisdiction so we get high-confidence comparables)
+  const openMatter = "MATTER-OPEN-HIGH";
+  addClosedEntry(store, openMatter, 500, 1);
+  taskMap.set(openMatter, makeTask(openMatter, "US", "roundtable"));
+
+  const result = predictor.predict(openMatter, store, taskMap);
+  assert.ok(result !== null, "should return a prediction");
+  assert.equal(result!.confidence, "high");
+  assert.ok(result!.comparableMatterCount >= 10);
+});
+
+test("BudgetPredictor: percentile calculation is correct", () => {
+  const predictor = new BudgetPredictor();
+  // Test with a simple sorted array: [1, 2, 3, 4, 5]
+  const sorted = [1, 2, 3, 4, 5];
+  // Median (p=0.5) of [1,2,3,4,5] → index 2 → value 3
+  assert.equal(predictor.percentile(sorted, 0.5), 3);
+  // p=0 → first element
+  assert.equal(predictor.percentile(sorted, 0), 1);
+  // p=1 → last element
+  assert.equal(predictor.percentile(sorted, 1), 5);
+  // p=0.25 → index 1 → value 2
+  assert.equal(predictor.percentile(sorted, 0.25), 2);
+  // p=0.75 → index 3 → value 4
+  assert.equal(predictor.percentile(sorted, 0.75), 4);
+  // Linear interpolation: [10, 20] at p=0.5 → 15
+  assert.equal(predictor.percentile([10, 20], 0.5), 15);
+});
+
+test("BudgetPredictor: completionPct caps at 99 for open matters", () => {
+  const predictor = new BudgetPredictor();
+  const store = new TimeStore();
+  const taskMap = new Map<string, Task>();
+
+  // Add 5 closed comparable matters with median cost of $100
+  for (let i = 1; i <= 5; i++) {
+    const mn = `MATTER-HIST-CAP-${i}`;
+    addClosedEntry(store, mn, 50, 1);
+    addClosedEntry(store, mn, 50, 1);
+    taskMap.set(mn, makeTask(mn));
+  }
+
+  // Open matter that has already spent MORE than the median (overspent)
+  const openMatter = "MATTER-OPEN-CAP";
+  addClosedEntry(store, openMatter, 200, 4); // spent 200, median is 100
+  taskMap.set(openMatter, makeTask(openMatter));
+
+  const result = predictor.predict(openMatter, store, taskMap);
+  assert.ok(result !== null, "should return a prediction");
+  // Even though spent > estimated, completionPct should cap at 99
+  assert.ok(result!.completionPct <= 99, `completionPct ${result!.completionPct} must not exceed 99`);
+});

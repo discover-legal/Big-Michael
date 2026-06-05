@@ -55,6 +55,7 @@ import { costStore, calcCostUsd, calcWattHours } from "./cost/index.js";
 import { jobQueue } from "./queue/index.js";
 import { isOllamaModel, isLocalModel } from "./providers/index.js";
 import { BudgetMonitor } from "./budget/index.js";
+import { BudgetPredictor } from "./budget/predictor.js";
 import type {
   Task,
   WorkflowType,
@@ -128,6 +129,7 @@ export class Orchestrator {
   readonly time: TimeStore;
   readonly ocg: OcgStore;
   readonly budgetMonitor: BudgetMonitor;
+  readonly budgetPredictor: BudgetPredictor;
   readonly preBills: PreBillStore;
 
   private readonly tasks: Map<string, Task> = new Map();
@@ -147,6 +149,7 @@ export class Orchestrator {
     this.time = new TimeStore();
     this.ocg = new OcgStore();
     this.budgetMonitor = new BudgetMonitor(this.time, this.clients);
+    this.budgetPredictor = new BudgetPredictor();
     this.preBills = new PreBillStore(Config.persistence.preBillsFile);
   }
 

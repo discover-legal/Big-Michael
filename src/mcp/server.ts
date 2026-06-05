@@ -1126,6 +1126,22 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     req.raw.on("close", () => orchestrator.budgetMonitor.off("alert", send));
   });
 
+  // ── Budget prediction ────────────────────────────────────────────────────────
+
+  app.get("/matters/:matterNumber/budget-prediction", async (req, reply) => {
+    if (!isPartner(getUser(req))) return reply.status(403).send({ error: "Partner role required" });
+    const { matterNumber } = req.params as { matterNumber: string };
+    const allTasks = orchestrator.listTasks();
+    const taskMap = new Map(
+      allTasks.flatMap((t) =>
+        t.matterNumber ? [[t.matterNumber, t] as [string, import("../types.js").Task]] : []
+      )
+    );
+    const prediction = orchestrator.budgetPredictor.predict(matterNumber, orchestrator.time, taskMap);
+    if (!prediction) return reply.status(404).send({ error: "No billing data found for this matter" });
+    return prediction;
+  });
+
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
   // Both GET and PUT are partner-only: GET exposes the DocuSeal URL and
   // enabled state; PUT can redirect DocuSeal requests (SSRF) or weaken
