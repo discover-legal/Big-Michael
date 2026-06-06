@@ -1,5 +1,107 @@
 # BigLaw — LinkedIn launch collateral
 
+---
+
+## Cost chart post — AIDA · ABC · Do Likewise
+
+**[ATTENTION]**
+
+The tab nobody at your firm ever clicks is a $300,000 invoice.
+
+---
+
+**[INTEREST]**
+
+Per lawyer. Per year. In licensing fees.
+
+→ Westlaw + CoCounsel (Thomson Reuters): $15,000–50,000
+→ Practical Law standard docs (Thomson Reuters): $10,000–20,000
+→ Contract Express playbooks (Thomson Reuters): $5,000–20,000
+→ LexisNexis + PSL (RELX): $8,000–25,000
+→ Definely / Kira contract review: $2,000–8,000
+→ iManage document management: $2,000–5,000
+→ Everlaw eDiscovery: $3,000–10,000
+→ Clio Insights + Grow: $1,000–3,000
+
+Total: $46,000–141,000 per lawyer per year.
+
+---
+
+**[DESIRE]**
+
+10 lawyers.
+
+Low estimate: $460,000/year in licensing.
+High estimate: $1,410,000/year in licensing.
+
+BigLaw (the open-source one): $0 in licensing.
+Plus your Anthropic API bill — roughly $100–300/month for a 10-lawyer firm.
+
+Call it $2,400/year.
+
+The spread is $460,000 vs $2,400. For the same research. The same redlining. The same precedents. The same matter health dashboard. The same @-mentionable agent in your Teams.
+
+---
+
+**[ACTION]**
+
+```
+curl -fsSL https://raw.githubusercontent.com/discover-legal/BigLaw/main/setup.sh | bash
+```
+
+That's the whole install.
+
+---
+
+**[ALWAYS BE CLOSING]**
+
+Every line in that list above is a subscription you can cancel the day you run setup.sh.
+
+Not all at once. One at a time. Start with whatever costs the most.
+Run a matter through BigLaw. Compare the output. Cancel what you cancel.
+
+The bench will still be there tomorrow. It doesn't charge a renewal fee.
+
+---
+
+**[DO LIKEWISE]**
+
+A senior associate billed 2,200 hours last year. Her firm paid $80,000 in Westlaw fees for her seat. The Westlaw subscription cost more than her bonus.
+
+BigLaw gives that back.
+
+Built on Mike (Will Chen) and Lavern (Antti Innanen)'s shoulders. Standing on the work of people who gave theirs away too.
+
+Take it. Use it. Tell the next solo down the hall. Tell the boutique that just lost a pitch to a firm that could afford CoCounsel.
+
+Run the math on your firm. Run setup.sh.
+
+Go. Do likewise.
+
+#LegalAI #LegalTech #OpenSource #BigLaw
+
+---
+
+## Cost chart post (ultra-short)
+
+The tab nobody clicks: $460,000/year for 10 lawyers.
+
+→ Westlaw + CoCounsel: $15k–50k/seat
+→ Practical Law: $10k–20k/seat
+→ Contract Express: $5k–20k/seat
+→ LexisNexis + PSL: $8k–25k/seat
+→ Definely/Kira: $2k–8k/seat
+
+BigLaw (the open-source one): $0/seat.
+
+`curl -fsSL https://raw.githubusercontent.com/discover-legal/BigLaw/main/setup.sh | bash`
+
+Go. Do likewise.
+
+#LegalAI #OpenSource #BigLaw
+
+---
+
 ## Launch post (primary)
 
 I built **BigLaw** on the shoulders of two giants — **Mike** (legal document tooling) and **Lavern** (a roster of legal agents).

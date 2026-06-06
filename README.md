@@ -30,20 +30,67 @@ on top of everything else the firm already uses.
 
 ---
 
-## What it replaces
+## The cost chart
 
-| BigLaw firm vendor | Annual cost (est.) | BigLaw feature |
-|---|---|---|
-| Westlaw / CoCounsel (Thomson Reuters) | $30–80k/seat | Citation engine, research, AI drafting assist |
-| Practical Law (Thomson Reuters) | $15–25k/seat | Standard docs, precedents, know-how |
-| Contract Express (Thomson Reuters) | $20–40k/seat | Document automation, playbooks |
-| LexisNexis / PSL (RELX) | $15–25k/seat | Headnotes, legal analysis |
-| Definely / Kira / Luminance | $3–8k/seat | Contract review and redlining |
-| Clio Insights + CRM | $3–6k/seat | Matter health, client analytics |
-| iManage / NetDocuments | $5–10k/seat | Document management |
-| Everlaw / Relativity | $3–10k/seat | eDiscovery and document review |
-| Ironclad / DocuSign CLM | $2–5k/seat | Contract lifecycle |
-| **BigLaw** | **$0** | **All of the above** |
+> The tab in your browser you never click is a $300,000 invoice.
+
+Am Law 100 firms don't publish what they spend on legal tech. Let's do the math for them.
+
+### Per lawyer, per year
+
+| Vendor | What it does | Cost / lawyer / year | BigLaw |
+|---|---|---|---|
+| **Westlaw + CoCounsel** (Thomson Reuters) | Case law, statutes, AI research assist, citation checking | $15,000–50,000 | ✓ `citation_check`, `westlaw_research`, `court_listener_*` |
+| **Practical Law** (Thomson Reuters) | Standard documents, precedents, know-how notes | $10,000–20,000 | ✓ Precedent generator, playbook cascade |
+| **Contract Express** (Thomson Reuters) | Document automation, clause playbooks | $5,000–20,000 | ✓ Four-tier playbook cascade |
+| **LexisNexis + PSL** (RELX) | Headnotes, legal analysis, PSL standard docs | $8,000–25,000 | ✓ Headnote engine, `descrybe_*`, `trellis_*` |
+| **Definely / Kira / Luminance** | AI contract review, clause extraction, redlining | $2,000–8,000 | ✓ Playbook-aware redline engine |
+| **iManage / NetDocuments** | Document management, matter workspace | $2,000–5,000 | ✓ `imanage_search`, `imanage_get_document` |
+| **Everlaw / Relativity** | eDiscovery, document review | $3,000–10,000 | ✓ `everlaw_search_documents`, `_get_review_set` |
+| **Ironclad / DocuSign CLM** | Contract lifecycle management | $2,000–5,000 | ✓ `ironclad_*`, `docusign_*` |
+| **Clio Insights + Grow** | Matter health, client analytics, CRM | $1,000–3,000 | ✓ Matter health monitor, client briefing swarm |
+| **Solve Intelligence** | Patent drafting and claims | $2,000–6,000 | ✓ `solve_intelligence_*` |
+| **TOTAL** | | **$50,000–152,000 / lawyer / year** | **$0** |
+
+_Estimates based on publicly reported ranges and firm procurement disclosures. Enterprise deals vary; BigLaw firms negotiate volume pricing. Actual costs may be higher._
+
+### The math by firm size
+
+| Firm size | Annual tool stack (low) | Annual tool stack (high) | BigLaw cost | Year-1 savings |
+|---|---|---|---|---|
+| Solo | $50,000 | $152,000 | **$0** | $50k–152k |
+| 5 lawyers | $250,000 | $760,000 | **$0** | $250k–760k |
+| 10 lawyers | $500,000 | $1,520,000 | **$0** | $500k–1.5M |
+| 25 lawyers | $1,250,000 | $3,800,000 | **$0** | $1.25M–3.8M |
+| 50 lawyers | $2,500,000 | $7,600,000 | **$0** | $2.5M–7.6M |
+
+**What you actually pay to run BigLaw:** your Anthropic API bill.
+At typical usage (10 lawyers, moderate workload): ~$100–300/month — call it **$2,400/year**.
+
+That's the spread: $500,000/year vs $2,400/year for the same capability.
+
+### Always be closing
+
+Every tool in the table above is a subscription you can cancel the day you run setup.sh.
+
+Not all at once. One at a time. Start with whatever costs the most.
+Run the matter through BigLaw. Compare the output. Keep what you cancel.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/discover-legal/BigLaw/main/setup.sh | bash
+```
+
+### Do likewise
+
+A senior associate billed 2,200 hours last year. Her firm paid $80,000 in Westlaw fees
+for her seat. The Westlaw subscription cost more than her bonus.
+
+BigLaw gives it back.
+
+Take it. Use it. Tell the next solo down the hall.
+Run the math on your firm. Run setup.sh.
+
+**Go. Do likewise.**
 
 ---
 
