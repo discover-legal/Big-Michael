@@ -1,0 +1,271 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Discover Legal
+
+package clients
+
+import (
+	"crypto/rand"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/discover-legal/biglaw-go/internal/types"
+)
+
+// ClientStore holds the client roster in memory and persists it to a JSON file.
+type ClientStore struct {
+	mu      sync.RWMutex
+	clients []types.Client
+	path    string
+}
+
+// NewClientStore creates an uninitialised ClientStore. Call Init before use.
+func NewClientStore() *ClientStore {
+	return &ClientStore{}
+}
+
+// Init loads clients from the given JSON file path. Missing file is not an error.
+func (s *ClientStore) Init(path string) error {
+	s.path = path
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			s.clients = nil
+			return nil
+		}
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return json.Unmarshal(data, &s.clients)
+}
+
+// List returns a copy of all clients.
+func (s *ClientStore) List() []types.Client {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]types.Client, len(s.clients))
+	copy(out, s.clients)
+	return out
+}
+
+// Get returns a pointer to a copy of the client with the given ID, or nil.
+func (s *ClientStore) Get(id string) *types.Client {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for i, c := range s.clients {
+		if c.ID == id {
+			cp := s.clients[i]
+			return &cp
+		}
+	}
+	return nil
+}
+
+// GetByClientNumber returns the client whose ClientNumber matches num
+// (case-insensitive), or nil if not found.
+func (s *ClientStore) GetByClientNumber(num string) *types.Client {
+	lower := strings.ToLower(num)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for i, c := range s.clients {
+		if strings.ToLower(c.ClientNumber) == lower {
+			cp := s.clients[i]
+			return &cp
+		}
+	}
+	return nil
+}
+
+// Create adds a new client. name and clientNumber must be non-empty and
+// clientNumber must not already exist (case-insensitive).
+func (s *ClientStore) Create(name, clientNumber string, adversaries []string, notes string) (*types.Client, error) {
+	name = strings.TrimSpace(name)
+	clientNumber = strings.TrimSpace(clientNumber)
+	if name == "" {
+		return nil, fmt.Errorf("client name is required")
+	}
+	if clientNumber == "" {
+		return nil, fmt.Errorf("client number is required")
+	}
+	if s.GetByClientNumber(clientNumber) != nil {
+		return nil, fmt.Errorf("client number %s already exists", clientNumber)
+	}
+	if adversaries == nil {
+		adversaries = []string{}
+	}
+	now := time.Now()
+	c := types.Client{
+		ID:           generateID(),
+		Name:         name,
+		ClientNumber: clientNumber,
+		Matters:      []types.ClientMatter{},
+		Adversaries:  adversaries,
+		Notes:        notes,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	s.mu.Lock()
+	s.clients = append(s.clients, c)
+	s.mu.Unlock()
+	s.persist()
+	return &c, nil
+}
+
+// Update applies a partial patch to the client with the given ID.
+// Recognised patch keys: "name", "adversaries", "notes".
+func (s *ClientStore) Update(id string, patch map[string]interface{}) (*types.Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.clients {
+		if s.clients[i].ID != id {
+			continue
+		}
+		c := &s.clients[i]
+		if v, ok := patch["name"].(string); ok && strings.TrimSpace(v) != "" {
+			c.Name = strings.TrimSpace(v)
+		}
+		if v, ok := patch["adversaries"].([]string); ok {
+			c.Adversaries = v
+		} else if raw, ok := patch["adversaries"].([]interface{}); ok {
+			adv := make([]string, 0, len(raw))
+			for _, item := range raw {
+				if s, ok := item.(string); ok {
+					adv = append(adv, s)
+				}
+			}
+			c.Adversaries = adv
+		}
+		if v, ok := patch["notes"].(string); ok {
+			c.Notes = v
+		}
+		c.UpdatedAt = time.Now()
+		cp := *c
+		go s.persist()
+		return &cp, nil
+	}
+	return nil, fmt.Errorf("client not found")
+}
+
+// AddMatter appends a new matter to the client with the given ID.
+// Returns an error if the matterNumber already exists on this client.
+func (s *ClientStore) AddMatter(clientID string, matterNumber, description, practiceArea string) (*types.ClientMatter, error) {
+	matterNumber = strings.TrimSpace(matterNumber)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.clients {
+		if s.clients[i].ID != clientID {
+			continue
+		}
+		c := &s.clients[i]
+		for _, m := range c.Matters {
+			if strings.EqualFold(m.MatterNumber, matterNumber) {
+				return nil, fmt.Errorf("matter number %s already exists on this client", matterNumber)
+			}
+		}
+		matter := types.ClientMatter{
+			MatterNumber: matterNumber,
+			Description:  description,
+			PracticeArea: practiceArea,
+			OpenedAt:     time.Now(),
+		}
+		c.Matters = append(c.Matters, matter)
+		c.UpdatedAt = time.Now()
+		cp := matter
+		go s.persist()
+		return &cp, nil
+	}
+	return nil, fmt.Errorf("client not found")
+}
+
+// RemoveMatter removes the matter with the given matterNumber from the client.
+// Returns (true, nil) if removed, (false, nil) if the matter was not found,
+// or an error if the client was not found.
+func (s *ClientStore) RemoveMatter(clientID, matterNumber string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.clients {
+		if s.clients[i].ID != clientID {
+			continue
+		}
+		c := &s.clients[i]
+		before := len(c.Matters)
+		filtered := c.Matters[:0]
+		for _, m := range c.Matters {
+			if !strings.EqualFold(m.MatterNumber, matterNumber) {
+				filtered = append(filtered, m)
+			}
+		}
+		c.Matters = filtered
+		if len(c.Matters) == before {
+			return false, nil
+		}
+		c.UpdatedAt = time.Now()
+		go s.persist()
+		return true, nil
+	}
+	return false, fmt.Errorf("client not found")
+}
+
+// Remove deletes the client with the given ID.
+// Returns (true, nil) if deleted, (false, nil) if the ID was not found.
+func (s *ClientStore) Remove(id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	before := len(s.clients)
+	filtered := s.clients[:0]
+	for _, c := range s.clients {
+		if c.ID != id {
+			filtered = append(filtered, c)
+		}
+	}
+	s.clients = filtered
+	if len(s.clients) == before {
+		return false, nil
+	}
+	go s.persist()
+	return true, nil
+}
+
+// CheckConflict performs a case-insensitive substring match between newClientName
+// and every adversary string listed on every existing client.
+func (s *ClientStore) CheckConflict(newClientName string) types.ConflictCheckResult {
+	lower := strings.ToLower(strings.TrimSpace(newClientName))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, c := range s.clients {
+		for _, adv := range c.Adversaries {
+			if strings.Contains(lower, strings.ToLower(adv)) ||
+				strings.Contains(strings.ToLower(adv), lower) {
+				return types.ConflictCheckResult{
+					HasConflict:           true,
+					ConflictingClientID:   c.ID,
+					ConflictingClientName: c.Name,
+					MatchedAdversary:      adv,
+				}
+			}
+		}
+	}
+	return types.ConflictCheckResult{HasConflict: false}
+}
+
+// ─── internal helpers ─────────────────────────────────────────────────────────
+
+// persist writes the client list atomically: write to <path>.tmp then rename.
+func (s *ClientStore) persist() {
+	s.mu.RLock()
+	data, _ := json.MarshalIndent(s.clients, "", "  ")
+	s.mu.RUnlock()
+	tmp := s.path + ".tmp"
+	os.WriteFile(tmp, data, 0644)
+	os.Rename(tmp, s.path)
+}
+
+func generateID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
