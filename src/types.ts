@@ -774,6 +774,206 @@ export interface DocketAlert {
   detectedAt: string;
 }
 
+// ── Citation validity (KeyCite / Shepard's replacement) ─────────────────────
+
+export type CitationSignal = "green" | "yellow" | "red" | "blue";
+export type CitationStatus = "good_law" | "limited" | "overruled" | "superseded" | "unclear";
+
+export type CitationTreatmentType =
+  | "overruled"
+  | "distinguished"
+  | "questioned"
+  | "limited"
+  | "criticized"
+  | "followed"
+  | "explained";
+
+export interface CitationTreatment {
+  caseName: string;
+  citation?: string;
+  treatmentType: CitationTreatmentType;
+  court?: string;
+  year?: number;
+  url?: string;
+}
+
+export interface CitationCheckResult {
+  /** The query string as submitted. */
+  query: string;
+  resolvedCitation?: string;
+  clusterId?: string;
+  caseName?: string;
+  court?: string;
+  year?: number;
+  status: CitationStatus;
+  /** Westlaw-signal equivalent. green=still good law, yellow=caution, red=overruled/superseded, blue=background only. */
+  signal: CitationSignal;
+  signalLabel: string;
+  confidence: number;                  // 0–1
+  positiveTreatmentCount: number;
+  negativeTreatmentCount: number;
+  topNegativeTreatments: CitationTreatment[];
+  reasoning: string;
+  courtListenerUrl?: string;
+  checkedAt: string;
+  checkedBy: "big-michael";
+}
+
+// ── Matter health (Clio Insights replacement) ────────────────────────────────
+
+export type HealthSignal = "green" | "amber" | "red";
+export type HealthTrend = "improving" | "stable" | "deteriorating";
+
+export type MatterRiskType =
+  | "budget_overrun"
+  | "deadline_approaching"
+  | "gate_backlog"
+  | "ocg_violations"
+  | "stale_activity"
+  | "task_failure";
+
+export interface MatterRiskFactor {
+  type: MatterRiskType;
+  severity: "high" | "medium" | "low";
+  message: string;
+  suggestedAction?: string;
+}
+
+export interface MatterHealthScore {
+  matterNumber: string;
+  score: number;        // 0–100
+  signal: HealthSignal;
+  signalLabel: string;
+  dimensions: {
+    budgetHealth: number;      // 0–100
+    deadlineHealth: number;    // 0–100
+    activityFreshness: number; // 0–100
+    gateBacklog: number;       // 0–100  (100 = no gates; drops per open gate)
+    ocgCompliance: number;     // 0–100
+  };
+  riskFactors: MatterRiskFactor[];
+  trend: HealthTrend;
+  computedAt: string;
+}
+
+export interface PortfolioHealthSummary {
+  totalMatters: number;
+  green: number;
+  amber: number;
+  red: number;
+  matters: MatterHealthScore[];
+  computedAt: string;
+}
+
+// ── Playbook (Contract Express / Practical Law replacement) ──────────────────
+
+/**
+ * Four-tier playbook cascade — most-specific scope wins (like CSS specificity):
+ *
+ *   firm     — firm-wide market-standard defaults (applies to all matters)
+ *   client   — client-specific positions (overrides firm for this client's matters)
+ *   matter   — deal-specific negotiated outcomes (overrides client for this matter)
+ *   personal — individual lawyer's preferences and style notes (always surfaced)
+ *
+ * At query time, Big Michael resolves the single most-specific position available
+ * for each clause type, and surfaces personal-tier notes as an advisory layer
+ * regardless of which tier wins the resolution.
+ */
+export type PlaybookScope = "firm" | "client" | "matter" | "personal";
+
+export interface PlaybookEntry {
+  clauseType: string;
+  practiceArea: string;
+  /** The firm's typical opening position on this clause. */
+  standardPosition: string;
+  /** Acceptable fall-back when standard position is pushed back. */
+  fallbackPosition?: string;
+  /** Lines the firm will not cross. */
+  redLines: string[];
+  /** Key deal points / negotiation observations. */
+  dealPoints: string[];
+  /** Number of precedent documents this entry was derived from. */
+  sourceDocumentCount: number;
+  /** Representative precedent language snippets (≤3). */
+  exampleLanguage?: string[];
+  lastUpdated: string;
+}
+
+export interface Playbook {
+  id: string;
+  /** Which tier of the cascade this playbook belongs to. */
+  scope: PlaybookScope;
+  /** clientNumber, matterNumber, or profileId — depends on scope. Omitted for firm scope. */
+  ownerId?: string;
+  ownerName?: string;
+  name: string;
+  description?: string;
+  practiceArea: string;
+  jurisdiction?: string;
+  clauseTypes: string[];
+  entries: PlaybookEntry[];
+  documentCount: number;
+  createdAt: string;
+  updatedAt: string;
+  generatedByTaskId?: string;
+}
+
+// ── Invoice validation (reverse-OCG; in-house legal killer) ─────────────────
+
+export interface InvoiceLineItem {
+  lineId: string;
+  date?: string;
+  timekeeperName?: string;
+  timekeeperClass?: string;
+  taskCode?: string;
+  activityCode?: string;
+  description: string;
+  hours?: number;
+  rate?: number;
+  amount?: number;
+}
+
+export type InvoiceViolationType =
+  | "block_billing"
+  | "vague_description"
+  | "rate_exceeded"
+  | "unauthorized_task"
+  | "timing_violation"
+  | "staffing_violation"
+  | "excessive_hours"
+  | "other";
+
+export type InvoiceViolationAction = "reject" | "reduce" | "request_detail";
+
+export interface InvoiceViolation {
+  lineId: string;
+  ruleId?: string;
+  ruleText?: string;
+  type: InvoiceViolationType;
+  severity: "hard" | "soft";
+  message: string;
+  suggestedAction: InvoiceViolationAction;
+  /** Amount to reduce from the line item's billed amount, in USD. */
+  suggestedReduction?: number;
+}
+
+export interface InvoiceValidationResult {
+  id: string;
+  clientId?: string;
+  submittedByFirm?: string;
+  matterNumber?: string;
+  totalOriginalAmount: number;
+  totalSuggestedReduction: number;
+  totalApprovedAmount: number;
+  lineCount: number;
+  violationCount: number;
+  hardViolationCount: number;
+  violations: InvoiceViolation[];
+  /** AI-drafted dispute letter for the billing lawyer. */
+  disputeLetter?: string;
+  validatedAt: string;
+}
+
 // ── Deadline calculator ─────────────────────────────────────────────────────
 export type DeadlineDayType = "calendar" | "business";
 

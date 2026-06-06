@@ -42,7 +42,10 @@ export type CostContext =
   | "ocg_extraction"   // OCG rule extraction from document
   | "ocg_check"        // OCG billing compliance check on time entries
   | "voice_analysis"   // client voice/communication guide analysis
-  | "entry_summarize"; // worker-generated OCG-compliant time entry description
+  | "entry_summarize"  // worker-generated OCG-compliant time entry description
+  | "citation_check"   // CitationEngine — KeyCite/Shepard's replacement
+  | "playbook_build"   // PlaybookBuilder — Contract Express/Practical Law replacement
+  | "invoice_validation"; // InvoiceValidator — reverse-OCG in-house billing review
 
 export interface CostEntry {
   id: string;

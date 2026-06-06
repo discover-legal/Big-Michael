@@ -169,6 +169,7 @@ export const Config = {
     ocgFile: optional("OCG_FILE", ".ocg.json"),
     jobsFile: optional("JOBS_FILE", ".jobs.json"),
     preBillsFile: optional("PREBILLS_FILE", "./data/prebills.json"),
+    playbooksFile: optional("PLAYBOOKS_FILE", "./data/playbooks.json"),
   },
 
   // ─── Background job queue ──────────────────────────────────────────────────
