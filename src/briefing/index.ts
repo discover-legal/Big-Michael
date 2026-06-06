@@ -45,6 +45,7 @@ import { costStore, calcCostUsd } from "../cost/index.js";
 import { resolveModelId } from "../providers/index.js";
 import { mcpCall } from "../tools/connectors.js";
 import { searchGraphMail, searchGmail } from "../email/client.js";
+import { searchSharePoint, searchTeamsMessages } from "../integrations/graph.js";
 import type { Client, ClientMatter, Task, TimeEntry } from "../types.js";
 import type { KnowledgeStore } from "../knowledge/index.js";
 
@@ -80,6 +81,8 @@ export type IntelSource =
   | "box"
   | "email_graph"
   | "email_gmail"
+  | "sharepoint"
+  | "teams_chat"
   | "knowledge_store"
   | "internal_tasks"
   | "internal_time"
@@ -217,6 +220,8 @@ export class BriefingEngine {
       this.runSlackSpoke(clientRecord),
       this.runDriveBoxSpoke(clientRecord),
       this.runEmailSpoke(clientRecord),
+      this.runSharePointSpoke(clientRecord),
+      this.runTeamsChatSpoke(clientRecord),
       this.runInternalSpoke(clientRecord, allTasks, timeEntries),
     ];
     if (opts.knowledge) {
@@ -535,6 +540,54 @@ export class BriefingEngine {
     };
   }
 
+  // ─── Spoke: SharePoint ───────────────────────────────────────────────────
+
+  private async runSharePointSpoke(client: Client): Promise<SpokeResult> {
+    const start = Date.now();
+    const items: IntelItem[] = [];
+    if (!Config.email.graph.enabled) return { source: "sharepoint", items: [], durationMs: 0 };
+
+    try {
+      const files = await searchSharePoint(client.name, { maxResults: 15, daysBack: 90 });
+      for (const f of files) {
+        items.push({
+          source: "sharepoint", category: "document",
+          eventAt: f.lastModified,
+          matterNumber: f.matterRef,
+          headline: `${f.name}${f.siteName ? ` (${f.siteName})` : ""}`,
+          data: { id: f.id, name: f.name, webUrl: f.webUrl, lastModified: f.lastModified, size: f.size, siteId: f.siteId },
+        });
+      }
+    } catch (err) {
+      return { source: "sharepoint", items, durationMs: Date.now() - start, error: (err as Error).message };
+    }
+    return { source: "sharepoint", items, durationMs: Date.now() - start };
+  }
+
+  // ─── Spoke: Teams chat ────────────────────────────────────────────────────
+
+  private async runTeamsChatSpoke(client: Client): Promise<SpokeResult> {
+    const start = Date.now();
+    const items: IntelItem[] = [];
+    if (!Config.email.graph.enabled) return { source: "teams_chat", items: [], durationMs: 0 };
+
+    try {
+      const messages = await searchTeamsMessages(client.name, { maxResults: 15, daysBack: 60 });
+      for (const m of messages) {
+        items.push({
+          source: "teams_chat", category: "correspondence",
+          eventAt: m.createdAt,
+          matterNumber: m.matterRef,
+          headline: `${m.from}: ${m.body.slice(0, 100)}`,
+          data: { id: m.id, from: m.from, body: m.body, createdAt: m.createdAt, webUrl: m.webUrl, channelId: m.channelId },
+        });
+      }
+    } catch (err) {
+      return { source: "teams_chat", items, durationMs: Date.now() - start, error: (err as Error).message };
+    }
+    return { source: "teams_chat", items, durationMs: Date.now() - start };
+  }
+
   // ─── Spoke: Knowledge store ───────────────────────────────────────────────
 
   private async runKnowledgeSpoke(
@@ -785,6 +838,10 @@ Slack:
 ${bySource("slack")}
 Documents (Drive/Box):
 ${bySource("google_drive", 5)}
+SharePoint:
+${bySource("sharepoint", 5)}
+Teams Conversations:
+${bySource("teams_chat", 5)}
 Knowledge Store:
 ${bySource("knowledge_store")}
 
@@ -799,8 +856,8 @@ Write:
    ### Matter Status
    ### Billing Posture
    ### Recent Email Threads              ← synthesise Graph + Gmail, highlight open threads
-   ### Correspondence & Activity         ← synthesise Clio + iManage + Slack
-   ### Documents in Play                 ← synthesise Drive/Box/iManage docs
+   ### Correspondence & Activity         ← synthesise Clio + iManage + Slack + Teams
+   ### Documents in Play                 ← synthesise Drive/Box/iManage/SharePoint docs
    ### Regulatory / Industry Context     ← from knowledge store
    ### Open Items & Actions Required
    ### Relationship Notes

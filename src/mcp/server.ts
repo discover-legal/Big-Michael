@@ -54,6 +54,8 @@ import { startWorker } from "../queue/worker.js";
 import { exportLedes1998B } from "../billing/ledes.js";
 import { generateStatusReport } from "../reports/status.js";
 import type { StatusReportOptions } from "../reports/status.js";
+import { registerTeamsBotRoutes, attachTeamsTaskNotifier } from "../bots/teams.js";
+import { registerSlackBotRoutes, attachSlackTaskNotifier } from "../bots/slack.js";
 
 // ─── Tool schemas ─────────────────────────────────────────────────────────────
 
@@ -458,6 +460,16 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
   if (Config.clio.enabled) await clioClient.load();
 
   registerAuthRoutes(app, orchestrator);
+
+  // ── Channel bots (Teams Outgoing Webhook + Slack Events API) ─────────────
+  // These routes verify HMAC signatures before touching the orchestrator.
+  // No auth middleware applied — the bots have their own signature checks.
+  registerTeamsBotRoutes(app, orchestrator);
+  registerSlackBotRoutes(app, orchestrator);
+
+  // Attach proactive task-complete notifiers to the orchestrator event stream
+  attachTeamsTaskNotifier(orchestrator, Config.bots.teams.incomingWebhookUrl);
+  attachSlackTaskNotifier(orchestrator, Config.bots.slack.defaultChannel);
 
   // Resolve the principal for a request. Auth OFF (local) → the LOCAL_PARTNER
   // who sees everything. Auth ON → the signed session cookie from OAuth login.

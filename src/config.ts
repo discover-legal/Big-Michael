@@ -400,6 +400,52 @@ export const Config = {
     },
   },
 
+  // ── Teams + SharePoint bot ────────────────────────────────────────────────
+  //
+  //  Teams Outgoing Webhook (receive @-mentions):
+  //    TEAMS_WEBHOOK_SECRET       — security token shown when creating the webhook
+  //
+  //  Teams Incoming Webhook (post to channels):
+  //    TEAMS_INCOMING_WEBHOOK_URL — global fallback channel URL
+  //    TEAMS_MATTER_WEBHOOKS      — JSON map {"M-001":"https://..."}
+  //
+  //  SharePoint search uses the same GRAPH_* app credentials.
+  //  The Azure AD app needs Sites.Read.All + ChannelMessage.Read.All.
+  //
+  //  Slack bot:
+  //    SLACK_BOT_TOKEN            — xoxb-... Bot User OAuth Token
+  //    SLACK_SIGNING_SECRET       — App signing secret (for request verification)
+  //    SLACK_DEFAULT_CHANNEL      — fallback channel ID for notifications
+  //    SLACK_MATTER_CHANNELS      — JSON map {"M-001":"C0123ABCD"}
+  bots: {
+    teams: {
+      webhookSecret: process.env.TEAMS_WEBHOOK_SECRET ?? "",
+      incomingWebhookUrl: process.env.TEAMS_INCOMING_WEBHOOK_URL ?? "",
+      enabled: Boolean(process.env.TEAMS_WEBHOOK_SECRET || process.env.TEAMS_INCOMING_WEBHOOK_URL),
+    },
+    slack: {
+      botToken: process.env.SLACK_BOT_TOKEN ?? "",
+      signingSecret: process.env.SLACK_SIGNING_SECRET ?? "",
+      defaultChannel: process.env.SLACK_DEFAULT_CHANNEL ?? "",
+      enabled: Boolean(process.env.SLACK_BOT_TOKEN && process.env.SLACK_SIGNING_SECRET),
+    },
+    sharePoint: {
+      // SharePoint search uses Graph credentials — no additional config needed
+      // unless you want to scope to a specific site collection.
+      siteUrl: process.env.SHAREPOINT_SITE_URL ?? "",
+      enabled: Boolean(
+        process.env.GRAPH_ACCESS_TOKEN ||
+        (process.env.GRAPH_TENANT_ID && process.env.GRAPH_CLIENT_ID && process.env.GRAPH_CLIENT_SECRET),
+      ),
+    },
+    teamsSearch: {
+      enabled: Boolean(
+        process.env.GRAPH_ACCESS_TOKEN ||
+        (process.env.GRAPH_TENANT_ID && process.env.GRAPH_CLIENT_ID && process.env.GRAPH_CLIENT_SECRET),
+      ),
+    },
+  },
+
   // Infisical — open-source secrets manager (https://infisical.com)
   // Self-host: docker compose up (see https://infisical.com/docs/self-hosting)
   // These values are bootstrap-only; all other secrets are fetched from Infisical at startup.

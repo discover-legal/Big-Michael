@@ -1776,7 +1776,7 @@ Output a structured issues list, ordered HIGH risk first.`,
     id: "board-consent-drafter",
     name: "Board Consent Drafter",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Drafts board and shareholder written consents and resolutions — covers officer elections, " +
@@ -1977,7 +1977,7 @@ Output an investigation plan with timeline, witness list, and document collectio
     id: "employment-policy-drafter",
     name: "Employment Policy Drafter",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Drafts and updates employment policies — handbooks, codes of conduct, leave policies, " +
@@ -2109,7 +2109,7 @@ Output: COMPLIANT, MINOR GAPS (list), or NON-COMPLIANT (specific Article 28 fail
     id: "pia-generator",
     name: "Privacy Impact Assessment Generator",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Generates Data Protection Impact Assessments (DPIAs/PIAs) for high-risk processing " +
@@ -2342,7 +2342,7 @@ Output the updated gap register and the executive summary.`,
     id: "policy-redrafter",
     name: "Policy Redrafter",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Redrafts company policies to align with new or amended regulations — produces a " +
@@ -2426,7 +2426,7 @@ Output: classification, applicable obligations, and recommended next steps.`,
     id: "ai-impact-assessor",
     name: "AI Impact Assessor",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Conducts AI impact assessments — documents the system, assesses risks to fundamental " +
@@ -2534,7 +2534,7 @@ Note: this is a preliminary screening, not a full clearance search. Recommend a 
     id: "cease-desist-drafter",
     name: "Cease & Desist Drafter",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Drafts cease and desist letters for IP infringement — trademark, copyright, patent, " +
@@ -2563,7 +2563,7 @@ Output a complete draft letter, ready for partner review and signature.`,
     id: "dmca-drafter",
     name: "DMCA Takedown Drafter",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Drafts DMCA takedown notices and counter-notices — validates the elements of the " +
@@ -3145,7 +3145,7 @@ Output a structured intake form and an assignment recommendation with reasons.`,
     id: "case-memo-scaffolder",
     name: "Case Memo Scaffolder",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Scaffolds case memoranda for law students — generates the research questions, " +
@@ -3199,7 +3199,7 @@ Output a step-by-step research roadmap with estimated time for each step.`,
     id: "clinic-client-letter-drafter",
     name: "Clinic Client Letter Drafter",
     tier: 2,
-    type: "writer",
+    type: "specialist",
     domain: "drafting",
     description:
       "Drafts plain-language client advice letters for legal clinic matters — explains the " +
@@ -3557,6 +3557,36 @@ Provide a plain-English summary suitable for a partner's morning briefing.
 No technical jargon. State the action required, who should take it, and by when.`,
     allowedTools: ["get_matter_health", "get_portfolio_health", "get_time_entries"],
     skills: ["matter-analytics", "portfolio-health", "risk-identification", "partner-briefing"],
+  },
+
+  // ── Channel Liaison (Teams / Slack bot agent) ─────────────────────────────
+  {
+    id: "channel-liaison-agent",
+    name: "Channel Liaison",
+    tier: 2,
+    type: "specialist",
+    domain: "analysis",
+    description: "Lives in Teams and Slack channels; translates @-mentions into orchestrator tasks, posts progress updates, and surfaces matter status on demand.",
+    systemPrompt: `You are the Channel Liaison for Big Michael, embedded in the firm's collaboration channels (Microsoft Teams, Slack).
+
+Your role:
+1. RECEIVE — parse @BigMichael commands from lawyers in channel (@status, @briefing, @task, @search, @run).
+2. DISPATCH — translate commands to orchestrator tasks with appropriate context (matter number, client, jurisdiction).
+3. REPORT — post concise, well-formatted updates back to the channel. Use Markdown. Keep responses to 3–5 lines unless a full briefing is requested.
+4. MATTER LINKING — associate channel conversations with matter numbers so proactive notifications route correctly.
+
+Command handling:
+- status [matter]   → get matter health score and list active tasks
+- briefing [client] → trigger a full hub-and-spoke client intelligence briefing
+- search [query]    → search the knowledge store
+- task [description] → submit a new roundtable AI task
+- run [template-id] → run a named workflow template
+- help              → list available commands
+
+Tone: brief, professional, no emoji unless the user uses them first.
+Always identify yourself as "Big Michael" not the underlying model.`,
+    allowedTools: ["get_task", "list_tasks", "submit_task", "get_matter_health", "search_knowledge", "slack_send_message"],
+    skills: ["channel-command-parsing", "matter-status-reporting", "task-dispatch", "team-notification"],
   },
 ];
 
