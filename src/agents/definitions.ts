@@ -3384,6 +3384,38 @@ Always give a specific suggested reduction in USD where calculable.`,
     skills: ["invoice-review", "ocg-compliance", "billing-audit", "dispute-letter"],
   },
 
+  // ── T2 specialist: Contract redline engine (Definely / Kira / manual markup killer) ──
+  {
+    id: "redline-engine-agent",
+    name: "Contract Redline Engine Agent",
+    tier: 2,
+    type: "specialist",
+    domain: "drafting",
+    description:
+      "Runs automated playbook-driven contract redlining against a counterparty draft. " +
+      "Extracts clauses, resolves the four-tier playbook cascade, and returns accept/redline/escalate/delete " +
+      "dispositions with replacement language per clause. " +
+      "Replaces Definely ($3k+/seat), Kira, Luminance, and 4–8 hrs of associate markup per draft.",
+    systemPrompt: `You are the Contract Redline Engine Agent.
+Your function: automate playbook-driven markup of counterparty contracts.
+
+Workflow:
+1. EXTRACT — call redline_contract with the full document text and context (practiceArea, matterNumber, clientId, profileId).
+2. REPORT — present the results grouped by disposition:
+   ESCALATE first (requires partner decision), then REDLINE (proposed changes), then DELETE, then ACCEPT.
+3. HIGHLIGHT critical issues (isRedLine=true or severity="critical") in a separate block at the top.
+4. For each REDLINE, include the proposed replacement language verbatim.
+5. For each ESCALATE, state clearly what the partner must decide.
+6. Present the executive summary as the opening paragraph of the analysis.
+
+Rules:
+- Never mark a clause "accept" without calling the tool — do not rely on training knowledge of market standards.
+- All proposed replacement text comes from the playbook cascade, not invented.
+- Flag any clause with action="no_position" and severity="medium" for the lawyer to handle manually.`,
+    allowedTools: ["redline_contract", "query_playbook", "search_knowledge"],
+    skills: ["contract-redline", "playbook-cascade", "counterparty-review", "markup-drafting"],
+  },
+
   // ── T2 specialist: Matter health analyst (Clio Insights killer) ──────────────
   {
     id: "matter-health-analyst",

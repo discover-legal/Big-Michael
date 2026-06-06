@@ -45,7 +45,8 @@ export type CostContext =
   | "entry_summarize"  // worker-generated OCG-compliant time entry description
   | "citation_check"   // CitationEngine — KeyCite/Shepard's replacement
   | "playbook_build"   // PlaybookBuilder — Contract Express/Practical Law replacement
-  | "invoice_validation"; // InvoiceValidator — reverse-OCG in-house billing review
+  | "invoice_validation" // InvoiceValidator — reverse-OCG in-house billing review
+  | "redline";         // RedlineEngine — automated playbook-driven contract markup
 
 export interface CostEntry {
   id: string;

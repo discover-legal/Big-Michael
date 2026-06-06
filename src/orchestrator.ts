@@ -64,6 +64,7 @@ import { CitationEngine } from "./citations/engine.js";
 import { MatterHealthMonitor } from "./matters/health.js";
 import { PlaybookStore, PlaybookBuilder } from "./playbook/index.js";
 import { InvoiceValidator } from "./billing/invoice-validator.js";
+import { RedlineEngine } from "./redline/engine.js";
 import type {
   Task,
   WorkflowType,
@@ -148,6 +149,7 @@ export class Orchestrator {
   readonly playbookStore: PlaybookStore;
   readonly playbookBuilder = new PlaybookBuilder();
   readonly invoiceValidator = new InvoiceValidator();
+  readonly redline = new RedlineEngine();
 
   private readonly tasks: Map<string, Task> = new Map();
   private readonly gateEmitter = new EventEmitter();

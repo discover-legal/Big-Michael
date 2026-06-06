@@ -320,6 +320,25 @@ const TOOLS = [
       required: ["invoiceText"],
     },
   },
+  {
+    name: "redline_contract",
+    description: "Run automated playbook-driven contract redlining on a counterparty draft. Returns a structured redline report — clause-by-clause accept/redline/escalate/delete dispositions, proposed replacement language, and an executive summary. Replaces Definely, Kira/Luminance, and 4–8 hrs of manual associate markup per draft.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentText: { type: "string", description: "Full text of the counterparty draft to redline" },
+        practiceArea: { type: "string", description: "Practice area context (e.g. M&A, finance, employment)" },
+        jurisdiction: { type: "string", description: "Governing law jurisdiction (e.g. UK, US-DE)" },
+        matterNumber: { type: "string", description: "Matter number — loads matter-specific playbook tier" },
+        clientId: { type: "string", description: "Client ID — loads client-specific playbook tier" },
+        profileId: { type: "string", description: "Lawyer profile ID — loads personal playbook tier" },
+        documentId: { type: "string", description: "Document ID for cross-referencing (optional)" },
+        documentTitle: { type: "string", description: "Document title for the report (optional)" },
+        taskId: { type: "string", description: "Optional task ID for cost tracking" },
+      },
+      required: ["documentText"],
+    },
+  },
 ] as const;
 
 // ─── MCP server ───────────────────────────────────────────────────────────────
@@ -1578,6 +1597,24 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     );
   });
 
+  // ── Contract redline (Definely / Kira / manual markup replacement) ──────────
+
+  app.post("/redline", async (req, reply) => {
+    const {
+      documentText, practiceArea, jurisdiction, matterNumber, clientId,
+      profileId, documentId, documentTitle, taskId,
+    } = req.body as {
+      documentText: string; practiceArea?: string; jurisdiction?: string;
+      matterNumber?: string; clientId?: string; profileId?: string;
+      documentId?: string; documentTitle?: string; taskId?: string;
+    };
+    if (!documentText) return reply.status(400).send({ error: "documentText required" });
+    return orchestrator.redline.redline(documentText, orchestrator.playbookStore, {
+      practiceArea, jurisdiction, matterNumber, clientId, profileId,
+      documentId, documentTitle, taskId,
+    });
+  });
+
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
   // Both GET and PUT are partner-only: GET exposes the DocuSeal URL and
   // enabled state; PUT can redirect DocuSeal requests (SSRF) or weaken
@@ -2414,6 +2451,25 @@ async function handleTool(
           submittedByFirm: args.submittedByFirm as string | undefined,
           matterNumber: args.matterNumber as string | undefined,
           generateDisputeLetter: args.generateDisputeLetter as boolean | undefined,
+          taskId: args.taskId as string | undefined,
+        },
+      );
+    }
+
+    case "redline_contract": {
+      const orch = (backend as import("../backend/index.js").LocalBackend).orchestrator;
+      if (!orch) throw new Error("redline_contract requires local backend");
+      return orch.redline.redline(
+        args.documentText as string,
+        orch.playbookStore,
+        {
+          practiceArea: args.practiceArea as string | undefined,
+          jurisdiction: args.jurisdiction as string | undefined,
+          matterNumber: args.matterNumber as string | undefined,
+          clientId: args.clientId as string | undefined,
+          profileId: args.profileId as string | undefined,
+          documentId: args.documentId as string | undefined,
+          documentTitle: args.documentTitle as string | undefined,
           taskId: args.taskId as string | undefined,
         },
       );

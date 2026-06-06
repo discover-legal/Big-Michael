@@ -4,20 +4,20 @@
 /**
  * Playbook system — hierarchical clause-position repository.
  *
- * FOUR-TIER AUTHORITY CASCADE (mirrors Anthropic's operator/user/assistant stack):
+ * FOUR-TIER AUTHORITY CASCADE — firm → personal → matter → client:
  *
- *   firm      — firm policy: non-negotiable, always wins (system prompt / operator)
- *   client    — client requirements: override matter and personal (user turn)
- *   matter    — deal-specific context: overrides personal (latest instruction)
- *   personal  — lawyer's default style: the baseline that everything else shapes
+ *   firm      — generic market-standard defaults; widest scope, lowest authority
+ *   personal  — individual lawyer's preferred positions (layers over firm)
+ *   matter    — positions negotiated / agreed in this specific deal
+ *   client    — client's known requirements; narrowest scope, always wins
  *
- * Direction: firm overwrites client overwrites matter overwrites personal.
+ * Resolution: client > matter > personal > firm.
  *
- * The mental model: a lawyer starts with their personal defaults ("I always open
- * at 3 months"). Those defaults get adapted upward by how they were retained —
- * the client may require 6 months, the firm may cap at 4, so the effective
- * position is 4. Personal preferences are never discarded; they surface as
- * advisory notes alongside the authoritative position.
+ * The mental model: you start from the firm's generic market positions, layer your
+ * own preferred approach on top, add what you know about this deal, and finally
+ * apply what you know about this client — because client requirements are the most
+ * definitive thing you know going into any engagement with them.
+ * Personal notes always surface alongside the authoritative answer.
  *
  * WHAT IT KILLS:
  *   Contract Express ($2k+/seat) — no more questionnaire-driven document assembly
@@ -38,13 +38,15 @@ import type { Playbook, PlaybookEntry } from "../types.js";
 
 export type PlaybookScope = "firm" | "client" | "matter" | "personal";
 
-// Authority order: firm (supreme) > client > matter > personal (baseline).
-// The highest number wins when resolving conflicts.
+// Authority order: client (supreme) > matter > personal > firm (generic baseline).
+// firm = widest/most generic default; client = narrowest/most authoritative requirement.
+// The cascade reads: start from firm defaults, layer personal preferences on top,
+// layer matter-specific context on top, apply client requirements last (they win).
 const SCOPE_PRIORITY: Record<PlaybookScope, number> = {
-  personal: 0, // baseline — adapts to everything above it
-  matter:   1, // deal-specific context
-  client:   2, // client requirements
-  firm:     3, // firm policy — always wins
+  firm:     0, // generic market-standard starting point
+  personal: 1, // lawyer's preferred defaults (above firm, below deal context)
+  matter:   2, // what actually happened / was agreed in this deal
+  client:   3, // client's known requirements — always applied last, always win
 };
 
 // ─── Extended types (local to this module) ────────────────────────────────────
@@ -183,9 +185,9 @@ export class PlaybookStore {
     if (byScope.size === 0) return null;
 
     // Winner = highest-authority scope with an entry.
-    // Authority: firm (3) > client (2) > matter (1) > personal (0).
-    // Personal is always surfaced as an advisory note but never overrides firm/client/matter.
-    let winner: PlaybookScope = "personal";
+    // Authority: client (3) > matter (2) > personal (1) > firm (0).
+    // firm is the generic baseline; client requirements always win.
+    let winner: PlaybookScope = "firm";
     for (const scope of scopeFilter) {
       if (byScope.has(scope)) {
         if (SCOPE_PRIORITY[scope] > SCOPE_PRIORITY[winner]) winner = scope;
@@ -193,7 +195,7 @@ export class PlaybookStore {
     }
 
     const effectiveEntry = byScope.get(winner)!;
-    // Personal note: always surface the personal-tier position as an advisory
+    // Personal note: always surface the personal-tier position as context
     // alongside the authoritative answer, unless personal IS the winning tier.
     const personalEntry = byScope.get("personal");
     const personalNote = personalEntry && winner !== "personal"
@@ -251,10 +253,10 @@ export class PlaybookStore {
       if (r) resolved.push(r);
     }
 
-    // Cascade reads most-authoritative-first (firm wins, personal is baseline).
-    const tierLabels = [...scopeFilter].reverse().join(" → "); // firm → client → matter → personal
-    const firmWins = resolved.filter((r) => r.resolvedFrom === "firm").length;
-    const cascadeSummary = `Resolved ${resolved.length} clause types. Authority cascade [${tierLabels}]. Firm position applied in ${firmWins}/${resolved.length} clauses.`;
+    // Cascade reads base-first: firm → personal → matter → client (client wins).
+    const tierLabels = scopeFilter.join(" → ");
+    const clientWins = resolved.filter((r) => r.resolvedFrom === "client").length;
+    const cascadeSummary = `Resolved ${resolved.length} clause types. Cascade [${tierLabels}]. Client requirements applied in ${clientWins}/${resolved.length} clauses.`;
 
     return {
       clauseType: "*",
