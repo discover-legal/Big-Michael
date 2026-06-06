@@ -65,6 +65,8 @@ import { MatterHealthMonitor } from "./matters/health.js";
 import { PlaybookStore, PlaybookBuilder } from "./playbook/index.js";
 import { InvoiceValidator } from "./billing/invoice-validator.js";
 import { RedlineEngine } from "./redline/engine.js";
+import { HeadnoteEngine } from "./headnotes/engine.js";
+import { BriefingEngine } from "./briefing/index.js";
 import type {
   Task,
   WorkflowType,
@@ -150,6 +152,8 @@ export class Orchestrator {
   readonly playbookBuilder = new PlaybookBuilder();
   readonly invoiceValidator = new InvoiceValidator();
   readonly redline = new RedlineEngine();
+  readonly headnotes = new HeadnoteEngine();
+  readonly briefing = new BriefingEngine();
 
   private readonly tasks: Map<string, Task> = new Map();
   private readonly gateEmitter = new EventEmitter();

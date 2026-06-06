@@ -339,6 +339,37 @@ const TOOLS = [
       required: ["documentText"],
     },
   },
+  {
+    name: "generate_headnotes",
+    description: "Extract structured headnotes and key holdings from a court opinion. Returns numbered propositions (ratio/obiter), distinguishing factors, NOSLEGAL tags, and the core ratio decidendi. Replaces Westlaw Key Numbers, LexisNexis headnotes, and 2–4 hrs of manual law clerk annotation per opinion.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        opinionText: { type: "string", description: "Full text of the court opinion" },
+        caseName: { type: "string", description: "Case name (optional — extracted from text if omitted)" },
+        citation: { type: "string", description: "Neutral or report citation (optional)" },
+        court: { type: "string", description: "Court name (optional)" },
+        dateFiled: { type: "string", description: "ISO date the decision was filed (optional)" },
+        jurisdiction: { type: "string", description: "Jurisdiction (e.g. UK, US, AU) — optional" },
+        taskId: { type: "string", description: "Optional task ID for cost tracking" },
+      },
+      required: ["opinionText"],
+    },
+  },
+  {
+    name: "get_client_briefing",
+    description: "Generate a pre-call partner briefing for a client. Returns matter status, billing posture, open items, relationship notes, and a drafted Markdown briefing document. Replaces Clio Grow / CRM, Clio Insights client reports, and 30 min of manual partner prep.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        clientId: { type: "string", description: "Client ID (UUID) from the client roster" },
+        clientNumber: { type: "string", description: "Client number — used if clientId is not provided" },
+        briefingDate: { type: "string", description: "ISO date for the briefing (defaults to today)" },
+        industryContext: { type: "string", description: "Optional industry or regulatory context to include" },
+        taskId: { type: "string", description: "Optional task ID for cost tracking" },
+      },
+    },
+  },
 ] as const;
 
 // ─── MCP server ───────────────────────────────────────────────────────────────
@@ -1615,6 +1646,38 @@ export async function startRestApi(orchestrator: Orchestrator): Promise<void> {
     });
   });
 
+  // ── Headnote generator (Westlaw Key Numbers replacement) ─────────────────────
+
+  app.post("/headnotes/generate", async (req, reply) => {
+    const {
+      opinionText, caseName, citation, court, dateFiled, jurisdiction, taskId,
+    } = req.body as {
+      opinionText: string; caseName?: string; citation?: string; court?: string;
+      dateFiled?: string; jurisdiction?: string; taskId?: string;
+    };
+    if (!opinionText) return reply.status(400).send({ error: "opinionText required" });
+    return orchestrator.headnotes.generate(opinionText, {
+      caseName, citation, court, dateFiled, jurisdiction, taskId,
+    });
+  });
+
+  // ── Client intelligence briefing (Clio Grow / CRM replacement) ────────────
+
+  app.get("/clients/:id/briefing", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { briefingDate, industryContext, taskId } = req.query as {
+      briefingDate?: string; industryContext?: string; taskId?: string;
+    };
+    const clientRecord = orchestrator.clients.get(id) ?? orchestrator.clients.getByClientNumber(id);
+    if (!clientRecord) return reply.status(404).send({ error: "Client not found" });
+    const allTasks = orchestrator.listTasks();
+    const allEntries = await orchestrator.time.list({});
+    return orchestrator.briefing.generate(
+      clientRecord, allTasks, allEntries as import("../types.js").TimeEntry[],
+      { briefingDate, industryContext, taskId },
+    );
+  });
+
   // ── Admin settings (presentation mode, DyTopo depth, debate, DocuSeal) ──────
   // Both GET and PUT are partner-only: GET exposes the DocuSeal URL and
   // enabled state; PUT can redirect DocuSeal requests (SSRF) or weaken
@@ -2473,6 +2536,37 @@ async function handleTool(
           taskId: args.taskId as string | undefined,
         },
       );
+    }
+
+    case "generate_headnotes": {
+      const orch = (backend as import("../backend/index.js").LocalBackend).orchestrator;
+      if (!orch) throw new Error("generate_headnotes requires local backend");
+      return orch.headnotes.generate(args.opinionText as string, {
+        caseName: args.caseName as string | undefined,
+        citation: args.citation as string | undefined,
+        court: args.court as string | undefined,
+        dateFiled: args.dateFiled as string | undefined,
+        jurisdiction: args.jurisdiction as string | undefined,
+        taskId: args.taskId as string | undefined,
+      });
+    }
+
+    case "get_client_briefing": {
+      const orch = (backend as import("../backend/index.js").LocalBackend).orchestrator;
+      if (!orch) throw new Error("get_client_briefing requires local backend");
+      const clientId = args.clientId as string | undefined;
+      const clientNumber = args.clientNumber as string | undefined;
+      const clientRecord = clientId
+        ? orch.clients.get(clientId)
+        : clientNumber ? orch.clients.getByClientNumber(clientNumber) : undefined;
+      if (!clientRecord) throw new Error("Client not found — provide a valid clientId or clientNumber");
+      const allTasks = orch.listTasks();
+      const allEntries = await orch.time.list({});
+      return orch.briefing.generate(clientRecord, allTasks, allEntries as import("../types.js").TimeEntry[], {
+        briefingDate: args.briefingDate as string | undefined,
+        industryContext: args.industryContext as string | undefined,
+        taskId: args.taskId as string | undefined,
+      });
     }
 
     default:

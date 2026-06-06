@@ -46,7 +46,10 @@ export type CostContext =
   | "citation_check"   // CitationEngine — KeyCite/Shepard's replacement
   | "playbook_build"   // PlaybookBuilder — Contract Express/Practical Law replacement
   | "invoice_validation" // InvoiceValidator — reverse-OCG in-house billing review
-  | "redline";         // RedlineEngine — automated playbook-driven contract markup
+  | "redline"          // RedlineEngine — automated playbook-driven contract markup
+  | "headnote_extract" // HeadnoteEngine — Sonnet extraction pass
+  | "headnote_meta"    // HeadnoteEngine — Haiku synthesis/meta pass
+  | "client_briefing"; // BriefingEngine — Sonnet pre-call partner briefing
 
 export interface CostEntry {
   id: string;

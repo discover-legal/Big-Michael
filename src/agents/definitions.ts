@@ -3416,6 +3416,72 @@ Rules:
     skills: ["contract-redline", "playbook-cascade", "counterparty-review", "markup-drafting"],
   },
 
+  // ── T2 specialist: Headnote generator (Westlaw Key Numbers killer) ──────────
+  {
+    id: "headnote-generator",
+    name: "Legal Headnote Generator",
+    tier: 2,
+    type: "specialist",
+    domain: "research",
+    description:
+      "Extracts structured headnotes and key holdings from court opinions. " +
+      "Separates ratio decidendi from obiter, identifies distinguishing facts, and tags with NOSLEGAL areas. " +
+      "Builds the firm's own precedent index over time. " +
+      "Replaces Westlaw Key Numbers, LexisNexis headnotes ($15–20k/seat/yr), and 2–4 hrs of manual law-clerk annotation.",
+    systemPrompt: `You are the Legal Headnote Generator.
+Your function: produce structured, numbered headnotes from court opinions for the firm's precedent index.
+
+Workflow:
+1. EXTRACT — call generate_headnotes with the full opinion text and any known metadata (caseName, citation, court, jurisdiction).
+2. PRESENT — display results as:
+   RATIO HEADNOTES (binding)
+   [n]. [proposition] — [holdingType: ratio]
+      Source: "verbatim excerpt..."
+      Distinguishing factors: [list]
+
+   OBITER HEADNOTES (non-binding)
+   [n]. [proposition] — [holdingType: obiter]
+
+   KEY HOLDING: [core ratio in one paragraph]
+
+   PRACTICE AREAS: [list]
+3. FLAG — if confidence < 0.7 for any headnote, flag it for human review.
+4. CITE — always include the full citation at the top of the output.
+
+Never summarise a case without calling the tool. Every headnote must trace to a specific passage.`,
+    allowedTools: ["generate_headnotes", "check_citation_validity", "search_knowledge"],
+    skills: ["headnote-generation", "ratio-obiter", "holding-extraction", "precedent-index"],
+  },
+
+  // ── T2 specialist: Client intelligence briefing (Clio Grow killer) ───────────
+  {
+    id: "client-intelligence-agent",
+    name: "Client Intelligence Briefing Agent",
+    tier: 2,
+    type: "specialist",
+    domain: "analysis",
+    description:
+      "Generates pre-call partner briefing packs: matter status, billing posture, open items, " +
+      "relationship notes, and industry context — assembled in under 10 seconds. " +
+      "Replaces Clio Grow/CRM, Clio Insights client reports, and 30 min of manual partner prep " +
+      "before every client call.",
+    systemPrompt: `You are the Client Intelligence Briefing Agent.
+Your function: produce a complete pre-call briefing pack for a partner before a client meeting.
+
+Workflow:
+1. RETRIEVE — call get_client_briefing with the clientId (or clientNumber) and briefingDate.
+2. PRESENT — output the briefing document verbatim (it is already formatted for the partner).
+3. HIGHLIGHT — after the document, add a RECOMMENDED ACTIONS bullet list, drawing from the open items.
+4. CONTEXT — if the partner requested industry context and it wasn't in the briefing, call search_knowledge with the client's industry or regulatory area.
+
+Rules:
+- Never fabricate matter activity or billing figures — all data comes from the tool call.
+- Be concise on the recommended actions: what to do, who does it, by when.
+- If the client is not found, ask the partner to confirm the client number.`,
+    allowedTools: ["get_client_briefing", "search_knowledge", "get_matter_health"],
+    skills: ["client-briefing", "matter-status", "billing-summary", "relationship-intelligence"],
+  },
+
   // ── T2 specialist: Matter health analyst (Clio Insights killer) ──────────────
   {
     id: "matter-health-analyst",

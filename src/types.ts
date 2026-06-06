@@ -977,6 +977,76 @@ export interface InvoiceValidationResult {
   validatedAt: string;
 }
 
+// ── Headnote Generator ──────────────────────────────────────────────────────
+
+export type HoldingType = "ratio" | "obiter" | "procedural" | "statutory";
+
+export interface Headnote {
+  number: number;
+  proposition: string;
+  sourceText: string;
+  location?: string;
+  holdingType: HoldingType;
+  distinguishingFactors: string[];
+  areaOfLaw?: string;
+  confidence: number;
+}
+
+export interface HeadnoteReport {
+  id: string;
+  caseName: string;
+  citation?: string;
+  court?: string;
+  dateFiled?: string;
+  jurisdiction?: string;
+  keyHolding: string;
+  headnotes: Headnote[];
+  relatedPrinciples: string[];
+  practiceAreas: string[];
+  noslegalArea?: string;
+  totalHeadnotes: number;
+  ratioCount: number;
+  obiterCount: number;
+  generatedAt: string;
+}
+
+// ── Client Intelligence Briefing ─────────────────────────────────────────────
+
+export interface BriefingMatterSnapshot {
+  matterNumber: string;
+  description: string;
+  practiceArea?: string;
+  status: "active" | "idle" | "complete";
+  daysSinceActivity: number;
+  openBillingUsd: number;
+  totalBilledUsd: number;
+  pendingGates: number;
+  lastOutput?: string;
+}
+
+export interface BriefingBillingSnapshot {
+  last90DaysUsd: number;
+  wipUsd: number;
+  oldestWipDays: number;
+  openMatterCount: number;
+}
+
+export interface ClientBriefing {
+  id: string;
+  clientId: string;
+  clientName: string;
+  clientNumber: string;
+  generatedAt: string;
+  briefingDate: string;
+  executiveSummary: string;
+  matters: BriefingMatterSnapshot[];
+  billing: BriefingBillingSnapshot;
+  openItems: string[];
+  relationshipNotes?: string;
+  industryContext?: string;
+  document: string;
+}
+
 // ── Deadline calculator ─────────────────────────────────────────────────────
 export type DeadlineDayType = "calendar" | "business";
 
