@@ -149,7 +149,9 @@ export class DyTopoEngine {
     for (const msg of messages) intraMemory.recordMessage(msg.to, msg);
 
     // ── Step 6: Agents process — full agentic loops ─────────────────────────
-    const allFindings = (await Promise.all(
+    // allSettled, not all: one agent throwing (e.g. a transient provider error)
+    // must not discard every other agent's findings and fail the whole round.
+    const settled = await Promise.allSettled(
       activeAgents.map((agent) =>
         agent.process({
           roundGoal: goal,
@@ -170,7 +172,16 @@ export class DyTopoEngine {
           clientNumber: billingCtx?.clientNumber,
         }),
       ),
-    )).flat();
+    );
+    const allFindings = settled.flatMap((r, i) => {
+      if (r.status === "fulfilled") return r.value;
+      logger.warn("Agent failed during round — skipping its findings", {
+        agentId: activeAgents[i].definition.id,
+        round: goal.round,
+        error: (r.reason as Error)?.message,
+      });
+      return [];
+    });
 
     for (const finding of allFindings) {
       finding.round = goal.round;

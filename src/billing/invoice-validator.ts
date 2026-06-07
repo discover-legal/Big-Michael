@@ -401,12 +401,19 @@ Return a JSON array of violations. Return [] if none found.`;
         const jsonEnd = raw.lastIndexOf("]");
         if (jsonStart === -1 || jsonEnd <= jsonStart) continue;
 
-        const VALID_VIOLATION_TYPES = ["block_billing", "excessive_hours", "rate_cap", "vague_description", "duplicate", "other"];
+        // Must match the InvoiceViolationType union and the types requested in the
+        // prompt above. The previous list omitted `unauthorized_task` and
+        // `staffing_violation` (the headline semantic checks), so the post-filter
+        // silently discarded every such violation the model found.
+        const VALID_VIOLATION_TYPES = new Set<string>([
+          "block_billing", "vague_description", "rate_exceeded", "unauthorized_task",
+          "timing_violation", "staffing_violation", "excessive_hours", "other",
+        ] satisfies InvoiceViolationType[]);
         const VALID_SEVERITIES = ["hard", "soft"];
 
         const rawViolations = JSON.parse(raw.slice(jsonStart, jsonEnd + 1)) as Array<Record<string, unknown>>;
         const validViolations = rawViolations.filter((v) => {
-          if (!VALID_VIOLATION_TYPES.includes(String(v["type"] ?? ""))) return false;
+          if (!VALID_VIOLATION_TYPES.has(String(v["type"] ?? ""))) return false;
           if (!VALID_SEVERITIES.includes(String(v["severity"] ?? ""))) return false;
           if (v["suggestedReduction"] !== undefined && v["suggestedReduction"] !== null) {
             if (!Number.isFinite(v["suggestedReduction"]) || (v["suggestedReduction"] as number) < 0) return false;
