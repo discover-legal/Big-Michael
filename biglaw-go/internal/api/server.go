@@ -147,6 +147,8 @@ func New(
 
 	// ── Big Michael bots (Teams/Slack) ────────────────────────────────────
 	s.mountBots(r)
+	// ── Matter budget input (for the budget monitor) ──────────────────────
+	s.mountMatterBudget(r)
 
 	return s
 }

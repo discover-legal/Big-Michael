@@ -17,6 +17,7 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/clients"
 	"github.com/discover-legal/biglaw-go/internal/config"
 	"github.com/discover-legal/biglaw-go/internal/dockets"
+	"github.com/discover-legal/biglaw-go/internal/knowledge"
 	"github.com/discover-legal/biglaw-go/internal/lpm"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
 	"github.com/discover-legal/biglaw-go/internal/providers"
@@ -26,17 +27,32 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/types"
 )
 
-// startMonitors constructs and starts the enabled monitors, returning a stop
-// function that halts them all.
+// Monitors holds running monitor handles that other subsystems need (e.g. the
+// REST API exposes docket-watch management) plus a stop function.
+type Monitors struct {
+	Dockets *dockets.Monitor
+	stop    func()
+}
+
+// Stop halts all running monitors.
+func (m *Monitors) Stop() {
+	if m.stop != nil {
+		m.stop()
+	}
+}
+
+// startMonitors constructs and starts the enabled monitors.
 func startMonitors(
 	cfg *config.Config,
 	orch *orchestrator.Orchestrator,
 	ts *timekeeping.TimeStore,
 	cs *clients.ClientStore,
+	ks *knowledge.Store,
 	provReg *providers.Registry,
-) func() {
+) *Monitors {
 	poster := newMatterChannelPoster(cfg)
 	var stops []func()
+	var docketMon *dockets.Monitor
 
 	if cfg.Monitors.BudgetAlertsEnabled {
 		bm := budget.NewMonitor(tsAdapter{ts}, budgetClientStore{cs}, func(a types.BudgetAlert) {
@@ -55,6 +71,7 @@ func startMonitors(
 		if err := dm.Init(); err != nil {
 			slog.Warn("docket monitor init failed", "error", err)
 		}
+		dm.SetKnowledgeIngester(docketKnowledge{ks}) // new filings flow into the knowledge store
 		dm.SetAlertHandler(func(a types.DocketAlert) {
 			postAlert(poster, "docket_alert", a.MatterNumber,
 				fmt.Sprintf("New docket activity — %s", a.CaseName),
@@ -64,6 +81,7 @@ func startMonitors(
 		})
 		dm.Start(minutes(cfg.Monitors.DocketsIntervalMin))
 		stops = append(stops, dm.Stop)
+		docketMon = dm
 	}
 
 	rm := regulatory.New(provReg.MustGet(routing.ModelHaiku), routing.ModelHaiku)
@@ -79,10 +97,13 @@ func startMonitors(
 		slog.Info("regulatory pulse monitor enabled")
 	}
 
-	return func() {
-		for _, stop := range stops {
-			stop()
-		}
+	return &Monitors{
+		Dockets: docketMon,
+		stop: func() {
+			for _, stop := range stops {
+				stop()
+			}
+		},
 	}
 }
 
@@ -99,6 +120,15 @@ func postAlert(poster lpm.ChannelPoster, event, matter, subject, body string, da
 	if err := poster(lpm.Draft{MatterNumber: matter, Subject: subject, Body: body}); err != nil {
 		slog.Warn("alert channel post failed", "event", event, "matter", matter, "error", err)
 	}
+}
+
+// docketKnowledge adapts the knowledge store to the docket monitor's ingester,
+// so new court filings are ingested as documents.
+type docketKnowledge struct{ ks *knowledge.Store }
+
+func (d docketKnowledge) IngestDoc(title, content, source, docType string) error {
+	_, err := d.ks.Ingest(types.Document{Title: title, Content: content, Source: source, DocumentType: docType})
+	return err
 }
 
 func minutes(n int) time.Duration {

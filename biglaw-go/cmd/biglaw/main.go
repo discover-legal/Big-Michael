@@ -196,13 +196,14 @@ func main() {
 	}
 
 	// Firm-wide background monitors (budget alerts, dockets, regulatory pulse).
-	stopMonitors := startMonitors(cfg, orch, timeStore, clientStore, provReg)
-	defer stopMonitors()
+	monitors := startMonitors(cfg, orch, timeStore, clientStore, knowledgeStore, provReg)
+	defer monitors.Stop()
 
-	// makeAPI builds the REST server and attaches optional LPM routes.
+	// makeAPI builds the REST server and attaches optional LPM + docket routes.
 	makeAPI := func() *api.Server {
 		srv := api.New(cfg, orch, provReg, profileStore, clientStore, timeStore, knowledgeStore, agentReg, costStore)
 		srv.AttachLPM(lpmSvc)
+		srv.AttachDockets(monitors.Dockets)
 		return srv
 	}
 
