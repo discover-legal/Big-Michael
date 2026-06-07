@@ -83,8 +83,21 @@ about your own situation: please consult a lawyer. This software is not a substi
 
 Use of BigLaw does not create an attorney-client relationship of any kind — between you and
 Discover Legal, between you and any contributor to this project, or between you and any AI
-system operated through this software. No communication through or about this software is
-privileged.
+system operated through this software.
+
+> # ⚠ PRIVILEGE IS NOT GUARANTEED
+>
+> **Whether communications, outputs, or data processed through this system attract
+> legal professional privilege (attorney-client privilege, legal advice privilege,
+> litigation privilege, or equivalent) depends entirely on your jurisdiction, the
+> specific facts of your deployment, how the system is configured, who has access
+> to it, and how outputs are used.**
+>
+> **Do not assume privilege applies. It may not.**
+>
+> To structure a deployment that maximises privilege protection for your jurisdiction
+> — including network isolation, access controls, data residency, and workflow design —
+> **engage an independent forward deployed engineer before handling any privileged matter.**
 
 ### Unauthorised Practice of Law
 
