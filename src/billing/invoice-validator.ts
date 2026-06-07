@@ -93,17 +93,24 @@ export function parseLedes(text: string): InvoiceLineItem[] {
 
   if (firstLower.includes("line_item") || firstLower.includes("timekeeper") || firstLower.includes("invoice")) {
     const headers = parseCsvLine(firstLine).map((h) => h.toUpperCase().replace(/[^A-Z0-9_/]/g, "_"));
+    // Accept LEDES1998B aliases so a file produced by exportLedes1998B (which emits
+    // LINE_ITEM_NUMBER_OF_UNITS / LINE_ITEM_AM_BILLED) round-trips through the parser
+    // without silently losing units and amount.
+    const col = (...names: string[]) => {
+      for (const n of names) { const i = headers.indexOf(n); if (i !== -1) return i; }
+      return -1;
+    };
     colMap = [
-      headers.indexOf("LINE_ITEM_NUMBER"),
-      headers.indexOf("LINE_ITEM_DATE"),
-      headers.indexOf("TIMEKEEPER_NAME"),
-      headers.indexOf("TIMEKEEPER_CLASSIFICATION"),
-      headers.indexOf("LINE_ITEM_TASK_CODE"),
-      headers.indexOf("LINE_ITEM_ACTIVITY_CODE"),
-      headers.indexOf("LINE_ITEM_DESCRIPTION"),
-      headers.indexOf("LINE_ITEM_QUANTITY"),
-      headers.indexOf("LINE_ITEM_UNIT_COST"),
-      headers.indexOf("LINE_ITEM_TOTAL"),
+      col("LINE_ITEM_NUMBER"),
+      col("LINE_ITEM_DATE"),
+      col("TIMEKEEPER_NAME"),
+      col("TIMEKEEPER_CLASSIFICATION"),
+      col("LINE_ITEM_TASK_CODE"),
+      col("LINE_ITEM_ACTIVITY_CODE"),
+      col("LINE_ITEM_DESCRIPTION"),
+      col("LINE_ITEM_QUANTITY", "LINE_ITEM_NUMBER_OF_UNITS"),
+      col("LINE_ITEM_UNIT_COST"),
+      col("LINE_ITEM_TOTAL", "LINE_ITEM_AM_BILLED"),
     ];
     startIdx = 1;
   } else {
