@@ -255,6 +255,16 @@ type LPMConfig struct {
 	BackfillCursorFile string // resumable progress cursor
 }
 
+// MonitorsConfig governs the firm-wide background monitors.
+type MonitorsConfig struct {
+	BudgetAlertsEnabled   bool
+	BudgetIntervalMin     int
+	DocketsEnabled        bool
+	DocketsIntervalMin    int
+	DocketsFile           string
+	RegulatoryIntervalMin int // regulatory auto-enables only when TAVILY_API_KEY is set
+}
+
 type ConnectorsConfig struct {
 	CourtListener ConnectorConfig
 	Ironclad      ConnectorConfig
@@ -295,6 +305,7 @@ type Config struct {
 	Bots         BotsConfig
 	Playbooks    PlaybooksConfig
 	LPM          LPMConfig
+	Monitors     MonitorsConfig
 }
 
 // normalizeEnum returns v lowercased if it is in allowed, else fallback.
@@ -486,6 +497,14 @@ func Load() *Config {
 			BackfillMaxPerStep: envInt("LPM_BACKFILL_MAX_PER_STEP", 100),
 			BackfillPauseMs:    envInt("LPM_BACKFILL_PAUSE_MS", 1000),
 			BackfillCursorFile: env("LPM_BACKFILL_CURSOR_FILE", "./data/backfill-cursor.json"),
+		},
+		Monitors: MonitorsConfig{
+			BudgetAlertsEnabled:   envBool("MONITOR_BUDGET_ALERTS", true),
+			BudgetIntervalMin:     envInt("MONITOR_BUDGET_INTERVAL_MIN", 60),
+			DocketsEnabled:        envBool("MONITOR_DOCKETS", true),
+			DocketsIntervalMin:    envInt("MONITOR_DOCKET_INTERVAL_MIN", 30),
+			DocketsFile:           env("DOCKETS_FILE", "./data/dockets.json"),
+			RegulatoryIntervalMin: envInt("MONITOR_REGULATORY_INTERVAL_MIN", 360),
 		},
 	}
 	return c

@@ -44,11 +44,11 @@ func NewOllamaProvider(cfg *config.Config) *OllamaProvider {
 
 // openAIChatRequest matches the OpenAI/Ollama chat completions format.
 type openAIChatRequest struct {
-	Model    string             `json:"model"`
-	Messages []openAIMessage    `json:"messages"`
-	Tools    []openAITool       `json:"tools,omitempty"`
-	MaxTokens int               `json:"max_tokens,omitempty"`
-	Stream   bool               `json:"stream"`
+	Model     string          `json:"model"`
+	Messages  []openAIMessage `json:"messages"`
+	Tools     []openAITool    `json:"tools,omitempty"`
+	MaxTokens int             `json:"max_tokens,omitempty"`
+	Stream    bool            `json:"stream"`
 }
 
 type openAIMessage struct {
@@ -57,8 +57,8 @@ type openAIMessage struct {
 }
 
 type openAITool struct {
-	Type     string          `json:"type"`
-	Function openAIFunction  `json:"function"`
+	Type     string         `json:"type"`
+	Function openAIFunction `json:"function"`
 }
 
 type openAIFunction struct {

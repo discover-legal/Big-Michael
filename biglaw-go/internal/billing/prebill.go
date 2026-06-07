@@ -30,35 +30,35 @@ const (
 
 // PreBillEntry is a single line item in a pre-bill.
 type PreBillEntry struct {
-	EntryID           string   `json:"entryId"`
-	Description       string   `json:"description"`
-	BillingUnits      int      `json:"billingUnits"`
-	BillingRate       *float64 `json:"billingRate,omitempty"`
-	BillingAmountUsd  *float64 `json:"billingAmountUsd,omitempty"`
-	UTBMSTaskCode     string   `json:"utbmsTaskCode,omitempty"`
-	UTBMSActivityCode string   `json:"utbmsActivityCode,omitempty"`
-	ProfileName       string   `json:"profileName,omitempty"`
-	AgentName         string   `json:"agentName,omitempty"`
-	StartedAt         string   `json:"startedAt"`
-	EndedAt           string   `json:"endedAt,omitempty"`
-	OcgSuggestionCount int     `json:"ocgSuggestionCount"`
+	EntryID            string   `json:"entryId"`
+	Description        string   `json:"description"`
+	BillingUnits       int      `json:"billingUnits"`
+	BillingRate        *float64 `json:"billingRate,omitempty"`
+	BillingAmountUsd   *float64 `json:"billingAmountUsd,omitempty"`
+	UTBMSTaskCode      string   `json:"utbmsTaskCode,omitempty"`
+	UTBMSActivityCode  string   `json:"utbmsActivityCode,omitempty"`
+	ProfileName        string   `json:"profileName,omitempty"`
+	AgentName          string   `json:"agentName,omitempty"`
+	StartedAt          string   `json:"startedAt"`
+	EndedAt            string   `json:"endedAt,omitempty"`
+	OcgSuggestionCount int      `json:"ocgSuggestionCount"`
 }
 
 // PreBill is a draft invoice grouping time entries for a matter.
 type PreBill struct {
-	ID                 string        `json:"id"`
-	MatterNumber       string        `json:"matterNumber"`
-	ClientNumber       string        `json:"clientNumber,omitempty"`
-	Status             PreBillStatus `json:"status"`
-	CreatedByProfileID string        `json:"createdByProfileId"`
-	CreatedAt          string        `json:"createdAt"`
-	ReviewedAt         string        `json:"reviewedAt,omitempty"`
-	ApprovedAt         string        `json:"approvedAt,omitempty"`
-	InvoicedAt         string        `json:"invoicedAt,omitempty"`
+	ID                 string         `json:"id"`
+	MatterNumber       string         `json:"matterNumber"`
+	ClientNumber       string         `json:"clientNumber,omitempty"`
+	Status             PreBillStatus  `json:"status"`
+	CreatedByProfileID string         `json:"createdByProfileId"`
+	CreatedAt          string         `json:"createdAt"`
+	ReviewedAt         string         `json:"reviewedAt,omitempty"`
+	ApprovedAt         string         `json:"approvedAt,omitempty"`
+	InvoicedAt         string         `json:"invoicedAt,omitempty"`
 	Entries            []PreBillEntry `json:"entries"`
-	TotalBillingUnits  int           `json:"totalBillingUnits"`
-	TotalAmountUsd     float64       `json:"totalAmountUsd"`
-	Notes              string        `json:"notes,omitempty"`
+	TotalBillingUnits  int            `json:"totalBillingUnits"`
+	TotalAmountUsd     float64        `json:"totalAmountUsd"`
+	Notes              string         `json:"notes,omitempty"`
 }
 
 // PreBillStore persists pre-bills to a JSON file.

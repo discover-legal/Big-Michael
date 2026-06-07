@@ -23,29 +23,29 @@ import (
 
 // PluginAuth describes how to authenticate the plugin's MCP server.
 type PluginAuth struct {
-	Type          string `json:"type"` // "api-key" | "none"
-	APIKeyEnvVar  string `json:"apiKeyEnvVar,omitempty"`
+	Type           string `json:"type"` // "api-key" | "none"
+	APIKeyEnvVar   string `json:"apiKeyEnvVar,omitempty"`
 	EndpointEnvVar string `json:"endpointEnvVar,omitempty"`
 }
 
 // PluginToolDef is a tool provided by an external plugin.
 type PluginToolDef struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	InputSchema map[string]interface{} `json:"inputSchema,omitempty"`
-	RemoteName  string                 `json:"remoteName,omitempty"`
-	RequiresAuth bool                  `json:"requiresAuth"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	InputSchema  map[string]interface{} `json:"inputSchema,omitempty"`
+	RemoteName   string                 `json:"remoteName,omitempty"`
+	RequiresAuth bool                   `json:"requiresAuth"`
 }
 
 // PluginAgentDef is an agent contributed by a plugin.
 type PluginAgentDef struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Tier         int      `json:"tier"`
-	Domain       string   `json:"domain"`
-	Description  string   `json:"description"`
-	SystemPrompt string   `json:"systemPrompt"`
-	AllowedTools []string `json:"allowedTools"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Tier          int      `json:"tier"`
+	Domain        string   `json:"domain"`
+	Description   string   `json:"description"`
+	SystemPrompt  string   `json:"systemPrompt"`
+	AllowedTools  []string `json:"allowedTools"`
 	Jurisdictions []string `json:"jurisdictions,omitempty"`
 }
 
@@ -72,10 +72,10 @@ type LegalPlugin struct {
 
 // ResolvedPlugin is a validated plugin with runtime API key and endpoint.
 type ResolvedPlugin struct {
-	Plugin    LegalPlugin
-	APIKey    string
-	Endpoint  string
-	Enabled   bool
+	Plugin   LegalPlugin
+	APIKey   string
+	Endpoint string
+	Enabled  bool
 }
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
@@ -263,14 +263,14 @@ func (r *Registry) TaskTemplates() []types.TaskTemplate {
 
 // LavernAgent is the JSON format of a Lavern agent config.
 type LavernAgent struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Role         string   `json:"role"` // "orchestrator" | "specialist" | "tool-only"
-	Specialties  []string `json:"specialties"`
-	SystemPrompt string   `json:"systemPrompt"`
-	AllowedTools []string `json:"allowedTools"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Role          string   `json:"role"` // "orchestrator" | "specialist" | "tool-only"
+	Specialties   []string `json:"specialties"`
+	SystemPrompt  string   `json:"systemPrompt"`
+	AllowedTools  []string `json:"allowedTools"`
 	Jurisdictions []string `json:"jurisdictions,omitempty"`
-	BillingRate  *float64 `json:"billingRate,omitempty"`
+	BillingRate   *float64 `json:"billingRate,omitempty"`
 }
 
 // LavernWorkflow is the JSON format of a Lavern workflow config.

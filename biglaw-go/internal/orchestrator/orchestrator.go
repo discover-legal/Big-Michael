@@ -61,21 +61,21 @@ type Orchestrator struct {
 	tasks     map[string]*types.Task
 	gateChans map[string]chan struct{} // taskID → signal channel for gate resolution
 
-	cfg        *config.Config
-	provReg    *providers.Registry
-	costs      *cost.Store
-	embedC     *embeddings.Client
-	engine     *dytopo.Engine
-	protocols  *protocols.Runner
-	registry   *agents.Registry
-	memStore   *memory.InterRoundStore
-	knowledge  *knowledge.Store
-	templates  *templates.Store
-	settings   *settings.SettingsStore
-	profiles   *auth.ProfileStore
-	clients    *clients.ClientStore
-	time       *timekeeping.TimeStore
-	learning   *learning.Engine
+	cfg       *config.Config
+	provReg   *providers.Registry
+	costs     *cost.Store
+	embedC    *embeddings.Client
+	engine    *dytopo.Engine
+	protocols *protocols.Runner
+	registry  *agents.Registry
+	memStore  *memory.InterRoundStore
+	knowledge *knowledge.Store
+	templates *templates.Store
+	settings  *settings.SettingsStore
+	profiles  *auth.ProfileStore
+	clients   *clients.ClientStore
+	time      *timekeeping.TimeStore
+	learning  *learning.Engine
 
 	// rootAgent is used for round goal generation and synthesis.
 	rootAgentDef types.AgentDefinition
@@ -88,7 +88,7 @@ type ProgressEvent struct {
 	Data   interface{}
 }
 
-var progressSubs   []chan ProgressEvent
+var progressSubs []chan ProgressEvent
 var progressSubsMu sync.Mutex
 
 func SubscribeProgress() chan ProgressEvent {
@@ -213,12 +213,12 @@ func (o *Orchestrator) Init(allAgents []types.AgentDefinition) error {
 // ─── Task management ──────────────────────────────────────────────────────────
 
 type SubmitParams struct {
-	Description       string
-	WorkflowType      types.WorkflowType
-	DocumentIDs       []string
-	ClientNumber      string
-	MatterNumber      string
-	Jurisdiction      string
+	Description        string
+	WorkflowType       types.WorkflowType
+	DocumentIDs        []string
+	ClientNumber       string
+	MatterNumber       string
+	Jurisdiction       string
 	CreatedByProfileID string
 }
 
@@ -541,9 +541,9 @@ func (o *Orchestrator) runPhase(task *types.Task, phase types.TaskPhase) error {
 	var billingCtx *dytopo.AgentBillingCtx
 	if o.cfg.AgentBilling.Enabled && primaryProfileID != "" {
 		billingCtx = &dytopo.AgentBillingCtx{
-			ResponsibleLawyerID:   primaryProfileID,
-			MatterNumber:          task.MatterNumber,
-			ClientNumber:          task.ClientNumber,
+			ResponsibleLawyerID: primaryProfileID,
+			MatterNumber:        task.MatterNumber,
+			ClientNumber:        task.ClientNumber,
 		}
 		if p := o.profiles.Get(primaryProfileID); p != nil {
 			billingCtx.ResponsibleLawyerName = p.Name

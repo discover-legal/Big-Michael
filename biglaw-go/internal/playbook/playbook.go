@@ -38,24 +38,24 @@ var scopePriority = map[types.PlaybookScope]int{
 
 // ResolvedClause is the winner of a cascade resolution.
 type ResolvedClause struct {
-	ClauseType       string              `json:"clauseType"`
-	PracticeArea     string              `json:"practiceArea"`
-	EffectiveEntry   types.PlaybookEntry `json:"effectiveEntry"`
-	ResolvedFrom     types.PlaybookScope `json:"resolvedFrom"`
-	AvailableTiers   []types.PlaybookScope `json:"availableTiers"`
-	PersonalNote     string              `json:"personalNote,omitempty"`
+	ClauseType     string                `json:"clauseType"`
+	PracticeArea   string                `json:"practiceArea"`
+	EffectiveEntry types.PlaybookEntry   `json:"effectiveEntry"`
+	ResolvedFrom   types.PlaybookScope   `json:"resolvedFrom"`
+	AvailableTiers []types.PlaybookScope `json:"availableTiers"`
+	PersonalNote   string                `json:"personalNote,omitempty"`
 }
 
 // PlaybookQueryResult is the full output of resolveAll.
 type PlaybookQueryResult struct {
-	ClauseType      string           `json:"clauseType"`
-	PracticeArea    string           `json:"practiceArea,omitempty"`
-	MatterNumber    string           `json:"matterNumber,omitempty"`
-	ClientID        string           `json:"clientId,omitempty"`
-	ProfileID       string           `json:"profileId,omitempty"`
-	Resolved        []ResolvedClause `json:"resolved"`
-	CascadeSummary  string           `json:"cascadeSummary"`
-	QueriedAt       string           `json:"queriedAt"`
+	ClauseType     string           `json:"clauseType"`
+	PracticeArea   string           `json:"practiceArea,omitempty"`
+	MatterNumber   string           `json:"matterNumber,omitempty"`
+	ClientID       string           `json:"clientId,omitempty"`
+	ProfileID      string           `json:"profileId,omitempty"`
+	Resolved       []ResolvedClause `json:"resolved"`
+	CascadeSummary string           `json:"cascadeSummary"`
+	QueriedAt      string           `json:"queriedAt"`
 }
 
 // ResolveOpts parameterises a cascade resolution.
@@ -411,19 +411,19 @@ func (b *Builder) Build(store *Store, kSearch func(query string, topK int) []typ
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	pb := types.Playbook{
-		ID:               uuid.New().String(),
-		Scope:            opts.Scope,
-		OwnerID:          opts.OwnerID,
-		OwnerName:        opts.OwnerName,
-		Name:             opts.Name,
-		Description:      opts.Description,
-		PracticeArea:     opts.PracticeArea,
-		Jurisdiction:     opts.Jurisdiction,
-		ClauseTypes:      ct,
-		Entries:          entries,
-		DocumentCount:    docCount,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:                uuid.New().String(),
+		Scope:             opts.Scope,
+		OwnerID:           opts.OwnerID,
+		OwnerName:         opts.OwnerName,
+		Name:              opts.Name,
+		Description:       opts.Description,
+		PracticeArea:      opts.PracticeArea,
+		Jurisdiction:      opts.Jurisdiction,
+		ClauseTypes:       ct,
+		Entries:           entries,
+		DocumentCount:     docCount,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 		GeneratedByTaskID: opts.TaskID,
 	}
 	store.Upsert(pb)

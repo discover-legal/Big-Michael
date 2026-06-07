@@ -25,9 +25,9 @@ type AdminSettings struct {
 // SettingsStore is a thread-safe store for AdminSettings that persists to a
 // JSON file on disk using an atomic write (write-to-tmp then rename).
 type SettingsStore struct {
-	mu       sync.RWMutex
-	current  AdminSettings
-	path     string
+	mu      sync.RWMutex
+	current AdminSettings
+	path    string
 }
 
 // NewSettingsStore creates a SettingsStore that will persist to path.

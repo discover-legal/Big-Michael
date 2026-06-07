@@ -23,20 +23,20 @@ import (
 
 // AgentContext carries round context into each agent's processing loop.
 type AgentContext struct {
-	RoundGoal            types.RoundGoal
-	IncomingMessages     []types.AgentMessage
-	MemoryEntries        []types.MemoryEntry
-	TaskDescription      string
-	TaskID               string
-	ToolRegistry         ToolRegistry
-	KnowledgeStore       KnowledgeStore
-	MemoryStore          MemoryStore
-	OwnerID              string
-	AssignedLawyerTone   *types.ToneProfile
-	ResponsibleLawyerID  string
+	RoundGoal             types.RoundGoal
+	IncomingMessages      []types.AgentMessage
+	MemoryEntries         []types.MemoryEntry
+	TaskDescription       string
+	TaskID                string
+	ToolRegistry          ToolRegistry
+	KnowledgeStore        KnowledgeStore
+	MemoryStore           MemoryStore
+	OwnerID               string
+	AssignedLawyerTone    *types.ToneProfile
+	ResponsibleLawyerID   string
 	ResponsibleLawyerName string
-	MatterNumber         string
-	ClientNumber         string
+	MatterNumber          string
+	ClientNumber          string
 }
 
 // ToolRegistry is the interface agents use to discover and execute tools.
@@ -58,11 +58,11 @@ type MemoryStore interface {
 
 // ToolContext is forwarded from the agent into each tool call.
 type ToolContext struct {
-	KnowledgeStore       KnowledgeStore
-	MemoryStore          MemoryStore
-	TaskID               string
-	OwnerID              string
-	ResponsibleLawyerID  string
+	KnowledgeStore      KnowledgeStore
+	MemoryStore         MemoryStore
+	TaskID              string
+	OwnerID             string
+	ResponsibleLawyerID string
 }
 
 // Agent wraps an AgentDefinition and runs the agentic loop.
@@ -322,19 +322,19 @@ func (a *Agent) recordCost(resp *providers.ChatResponse, modelID string, ctx cos
 	}
 
 	a.costs.Record(cost.RecordRequest{
-		Model:         bare,
-		Provider:      provider,
-		InputTokens:   resp.Usage.InputTokens,
-		OutputTokens:  resp.Usage.OutputTokens,
+		Model:            bare,
+		Provider:         provider,
+		InputTokens:      resp.Usage.InputTokens,
+		OutputTokens:     resp.Usage.OutputTokens,
 		CacheWriteTokens: resp.Usage.CacheWriteTokens,
 		CacheReadTokens:  resp.Usage.CacheReadTokens,
-		CostUSD:       costUSD,
-		EstimatedWh:   wh,
-		EstimatedWatts: watts,
-		DurationMs:    resp.DurationMs,
-		Context:       ctx,
-		TaskID:        taskID,
-		AgentID:       a.Def.ID,
+		CostUSD:          costUSD,
+		EstimatedWh:      wh,
+		EstimatedWatts:   watts,
+		DurationMs:       resp.DurationMs,
+		Context:          ctx,
+		TaskID:           taskID,
+		AgentID:          a.Def.ID,
 	})
 }
 

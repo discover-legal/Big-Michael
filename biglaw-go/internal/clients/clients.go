@@ -252,6 +252,33 @@ func (s *ClientStore) CheckConflict(newClientName string) types.ConflictCheckRes
 	return types.ConflictCheckResult{HasConflict: false}
 }
 
+// SetMatterBudgetAlerts records which budget thresholds have fired for a matter,
+// mutating the live record under lock and persisting. Returns false if the matter
+// is not found. This is the correct path for budget-alert dedup state (List
+// returns copies, so callers must not mutate those).
+func (s *ClientStore) SetMatterBudgetAlerts(matterNumber string, triggered []float64) error {
+	s.mu.Lock()
+	found := false
+	for i := range s.clients {
+		for j := range s.clients[i].Matters {
+			if s.clients[i].Matters[j].MatterNumber == matterNumber {
+				s.clients[i].Matters[j].BudgetAlertsTriggered = triggered
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+	}
+	s.mu.Unlock()
+	if !found {
+		return fmt.Errorf("matter %s not found", matterNumber)
+	}
+	s.persist()
+	return nil
+}
+
 // ─── internal helpers ─────────────────────────────────────────────────────────
 
 // persist writes the client list atomically: write to <path>.tmp then rename.

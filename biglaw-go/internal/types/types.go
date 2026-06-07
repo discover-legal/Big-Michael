@@ -39,20 +39,20 @@ const (
 )
 
 type AgentDefinition struct {
-	ID           string                 `json:"id"`
-	Name         string                 `json:"name"`
-	Tier         AgentTier              `json:"tier"`
-	Type         AgentType              `json:"type"`
-	Domain       AgentDomain            `json:"domain"`
-	Description  string                 `json:"description"`
-	SystemPrompt string                 `json:"systemPrompt"`
-	AllowedTools []string               `json:"allowedTools"`
-	Skills       []string               `json:"skills"`
-	Jurisdictions []string              `json:"jurisdictions,omitempty"`
-	BillingRate  *float64               `json:"billingRate,omitempty"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	ID            string                 `json:"id"`
+	Name          string                 `json:"name"`
+	Tier          AgentTier              `json:"tier"`
+	Type          AgentType              `json:"type"`
+	Domain        AgentDomain            `json:"domain"`
+	Description   string                 `json:"description"`
+	SystemPrompt  string                 `json:"systemPrompt"`
+	AllowedTools  []string               `json:"allowedTools"`
+	Skills        []string               `json:"skills"`
+	Jurisdictions []string               `json:"jurisdictions,omitempty"`
+	BillingRate   *float64               `json:"billingRate,omitempty"`
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
 	// Runtime field for Q-learning performance score
-	SuccessScore float64 `json:"successScore,omitempty"`
+	SuccessScore float64   `json:"successScore,omitempty"`
 	Embedding    []float32 `json:"-"`
 }
 
@@ -121,10 +121,10 @@ type RoundState struct {
 // ─── Memory ──────────────────────────────────────────────────────────────────
 
 type IntraRoundMemory struct {
-	RoundID          string                       `json:"roundId"`
-	ReceivedMessages map[string][]AgentMessage    `json:"receivedMessages"`
-	AgentFindings    map[string][]Finding         `json:"agentFindings"`
-	SharedContext    []string                     `json:"sharedContext"`
+	RoundID          string                    `json:"roundId"`
+	ReceivedMessages map[string][]AgentMessage `json:"receivedMessages"`
+	AgentFindings    map[string][]Finding      `json:"agentFindings"`
+	SharedContext    []string                  `json:"sharedContext"`
 }
 
 type MemoryEntry struct {
@@ -142,10 +142,10 @@ type MemoryEntry struct {
 // ─── Protocol types ───────────────────────────────────────────────────────────
 
 type Citation struct {
-	Source              string `json:"source"`
-	Quote               string `json:"quote"`
-	Page                *int   `json:"page,omitempty"`
-	MechanicallyVerified bool  `json:"mechanicallyVerified"`
+	Source               string `json:"source"`
+	Quote                string `json:"quote"`
+	Page                 *int   `json:"page,omitempty"`
+	MechanicallyVerified bool   `json:"mechanicallyVerified"`
 }
 
 type Challenge struct {
@@ -188,13 +188,13 @@ type Finding struct {
 // ─── Human gates ─────────────────────────────────────────────────────────────
 
 type GateRequest struct {
-	ID           string    `json:"id"`
-	TaskID       string    `json:"taskId"`
-	FindingID    string    `json:"findingId"`
-	Finding      Finding   `json:"finding"`
-	Status       string    `json:"status"`
-	ReviewerNote string    `json:"reviewerNote,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID           string     `json:"id"`
+	TaskID       string     `json:"taskId"`
+	FindingID    string     `json:"findingId"`
+	Finding      Finding    `json:"finding"`
+	Status       string     `json:"status"`
+	ReviewerNote string     `json:"reviewerNote,omitempty"`
+	CreatedAt    time.Time  `json:"createdAt"`
 	ReviewedAt   *time.Time `json:"reviewedAt,omitempty"`
 }
 
@@ -238,31 +238,31 @@ type TaskTable struct {
 }
 
 type Task struct {
-	ID                  string        `json:"id"`
-	Description         string        `json:"description"`
-	Jurisdiction        string        `json:"jurisdiction,omitempty"`
-	ClientNumber        string        `json:"clientNumber,omitempty"`
-	MatterNumber        string        `json:"matterNumber,omitempty"`
-	AssignedLawyerIDs   []string      `json:"assignedLawyerIds,omitempty"`
-	DocumentIDs         []string      `json:"documentIds"`
-	CreatedByProfileID  string        `json:"createdByProfileId,omitempty"`
-	WorkflowType        WorkflowType  `json:"workflowType"`
-	Status              TaskStatus    `json:"status"`
-	CurrentPhase        TaskPhase     `json:"currentPhase"`
-	CurrentRound        int           `json:"currentRound"`
-	MaxRounds           int           `json:"maxRounds"`
-	ActiveAgentIDs      []string      `json:"activeAgentIds"`
-	Rounds              []RoundState  `json:"rounds"`
-	Findings            []Finding     `json:"findings"`
-	PendingGates        []GateRequest `json:"pendingGates"`
-	Output              string        `json:"output,omitempty"`
-	Error               string        `json:"error,omitempty"`
-	CreatedAt           time.Time     `json:"createdAt"`
-	UpdatedAt           time.Time     `json:"updatedAt"`
-	CompletedAt         *time.Time    `json:"completedAt,omitempty"`
-	Table               *TaskTable    `json:"table,omitempty"`
-	NosLegal            *NosLegalTags `json:"noslegal,omitempty"`
-	ActiveTimeEntryID   string        `json:"activeTimeEntryId,omitempty"`
+	ID                 string        `json:"id"`
+	Description        string        `json:"description"`
+	Jurisdiction       string        `json:"jurisdiction,omitempty"`
+	ClientNumber       string        `json:"clientNumber,omitempty"`
+	MatterNumber       string        `json:"matterNumber,omitempty"`
+	AssignedLawyerIDs  []string      `json:"assignedLawyerIds,omitempty"`
+	DocumentIDs        []string      `json:"documentIds"`
+	CreatedByProfileID string        `json:"createdByProfileId,omitempty"`
+	WorkflowType       WorkflowType  `json:"workflowType"`
+	Status             TaskStatus    `json:"status"`
+	CurrentPhase       TaskPhase     `json:"currentPhase"`
+	CurrentRound       int           `json:"currentRound"`
+	MaxRounds          int           `json:"maxRounds"`
+	ActiveAgentIDs     []string      `json:"activeAgentIds"`
+	Rounds             []RoundState  `json:"rounds"`
+	Findings           []Finding     `json:"findings"`
+	PendingGates       []GateRequest `json:"pendingGates"`
+	Output             string        `json:"output,omitempty"`
+	Error              string        `json:"error,omitempty"`
+	CreatedAt          time.Time     `json:"createdAt"`
+	UpdatedAt          time.Time     `json:"updatedAt"`
+	CompletedAt        *time.Time    `json:"completedAt,omitempty"`
+	Table              *TaskTable    `json:"table,omitempty"`
+	NosLegal           *NosLegalTags `json:"noslegal,omitempty"`
+	ActiveTimeEntryID  string        `json:"activeTimeEntryId,omitempty"`
 }
 
 // ─── Time tracking ───────────────────────────────────────────────────────────
@@ -276,26 +276,26 @@ const (
 )
 
 type TimeEntry struct {
-	ID                string        `json:"id"`
-	ProfileID         string        `json:"profileId,omitempty"`
-	ProfileName       string        `json:"profileName,omitempty"`
-	AgentID           string        `json:"agentId,omitempty"`
-	AgentName         string        `json:"agentName,omitempty"`
-	TaskID            string        `json:"taskId"`
-	MatterNumber      string        `json:"matterNumber,omitempty"`
-	ClientNumber      string        `json:"clientNumber,omitempty"`
-	Description       string        `json:"description"`
-	Event             TimeEventType `json:"event"`
-	StartedAt         time.Time     `json:"startedAt"`
-	EndedAt           *time.Time    `json:"endedAt,omitempty"`
-	DurationMs        int64         `json:"durationMs"`
-	BillingUnits      int           `json:"billingUnits"`
-	BillingRate       *float64      `json:"billingRate,omitempty"`
-	BillingAmountUsd  *float64      `json:"billingAmountUsd,omitempty"`
+	ID                string          `json:"id"`
+	ProfileID         string          `json:"profileId,omitempty"`
+	ProfileName       string          `json:"profileName,omitempty"`
+	AgentID           string          `json:"agentId,omitempty"`
+	AgentName         string          `json:"agentName,omitempty"`
+	TaskID            string          `json:"taskId"`
+	MatterNumber      string          `json:"matterNumber,omitempty"`
+	ClientNumber      string          `json:"clientNumber,omitempty"`
+	Description       string          `json:"description"`
+	Event             TimeEventType   `json:"event"`
+	StartedAt         time.Time       `json:"startedAt"`
+	EndedAt           *time.Time      `json:"endedAt,omitempty"`
+	DurationMs        int64           `json:"durationMs"`
+	BillingUnits      int             `json:"billingUnits"`
+	BillingRate       *float64        `json:"billingRate,omitempty"`
+	BillingAmountUsd  *float64        `json:"billingAmountUsd,omitempty"`
 	ClioSyncedAt      string          `json:"clioSyncedAt,omitempty"`
 	UTBMSTaskCode     string          `json:"utbmsTaskCode,omitempty"`
 	UTBMSActivityCode string          `json:"utbmsActivityCode,omitempty"`
-	OcgSuggestions   []OcgSuggestion `json:"ocgSuggestions,omitempty"`
+	OcgSuggestions    []OcgSuggestion `json:"ocgSuggestions,omitempty"`
 }
 
 // ─── Lawyer profiles ──────────────────────────────────────────────────────────
@@ -328,19 +328,19 @@ type ToneProfile struct {
 }
 
 type LawyerProfile struct {
-	ID                string      `json:"id"`
-	Name              string      `json:"name"`
-	Email             string      `json:"email"`
-	Role              LawyerRole  `json:"role"`
-	Mode              UserMode    `json:"mode,omitempty"`
-	Title             string      `json:"title,omitempty"`
-	Color             string      `json:"color,omitempty"`
-	OAuthSubject      string      `json:"oauthSubject,omitempty"`
-	PracticeAreas     []string    `json:"practiceAreas,omitempty"`
-	Bio               string      `json:"bio,omitempty"`
-	LinkedInProfileURL string     `json:"linkedinProfileUrl,omitempty"`
-	ToneProfile       *ToneProfile `json:"toneProfile,omitempty"`
-	CreatedAt         time.Time   `json:"createdAt"`
+	ID                 string       `json:"id"`
+	Name               string       `json:"name"`
+	Email              string       `json:"email"`
+	Role               LawyerRole   `json:"role"`
+	Mode               UserMode     `json:"mode,omitempty"`
+	Title              string       `json:"title,omitempty"`
+	Color              string       `json:"color,omitempty"`
+	OAuthSubject       string       `json:"oauthSubject,omitempty"`
+	PracticeAreas      []string     `json:"practiceAreas,omitempty"`
+	Bio                string       `json:"bio,omitempty"`
+	LinkedInProfileURL string       `json:"linkedinProfileUrl,omitempty"`
+	ToneProfile        *ToneProfile `json:"toneProfile,omitempty"`
+	CreatedAt          time.Time    `json:"createdAt"`
 }
 
 type SessionUser struct {
@@ -354,13 +354,13 @@ type SessionUser struct {
 // ─── Clients ─────────────────────────────────────────────────────────────────
 
 type ClientMatter struct {
-	MatterNumber            string    `json:"matterNumber"`
-	Description             string    `json:"description"`
-	PracticeArea            string    `json:"practiceArea,omitempty"`
-	OpenedAt                time.Time `json:"openedAt"`
-	BudgetUsd               *float64  `json:"budgetUsd,omitempty"`
-	BudgetAlertThresholds   []float64 `json:"budgetAlertThresholds,omitempty"`
-	BudgetAlertsTriggered   []float64 `json:"budgetAlertsTriggered,omitempty"`
+	MatterNumber          string    `json:"matterNumber"`
+	Description           string    `json:"description"`
+	PracticeArea          string    `json:"practiceArea,omitempty"`
+	OpenedAt              time.Time `json:"openedAt"`
+	BudgetUsd             *float64  `json:"budgetUsd,omitempty"`
+	BudgetAlertThresholds []float64 `json:"budgetAlertThresholds,omitempty"`
+	BudgetAlertsTriggered []float64 `json:"budgetAlertsTriggered,omitempty"`
 }
 
 type Client struct {
@@ -375,10 +375,10 @@ type Client struct {
 }
 
 type ConflictCheckResult struct {
-	HasConflict            bool   `json:"hasConflict"`
-	ConflictingClientID    string `json:"conflictingClientId,omitempty"`
-	ConflictingClientName  string `json:"conflictingClientName,omitempty"`
-	MatchedAdversary       string `json:"matchedAdversary,omitempty"`
+	HasConflict           bool   `json:"hasConflict"`
+	ConflictingClientID   string `json:"conflictingClientId,omitempty"`
+	ConflictingClientName string `json:"conflictingClientName,omitempty"`
+	MatchedAdversary      string `json:"matchedAdversary,omitempty"`
 }
 
 // ConflictReport is a single inferred conflict edge from the graph.
@@ -560,62 +560,62 @@ type PlaybookEntry struct {
 }
 
 type Playbook struct {
-	ID               string         `json:"id"`
-	Scope            PlaybookScope  `json:"scope"`
-	OwnerID          string         `json:"ownerId,omitempty"`
-	OwnerName        string         `json:"ownerName,omitempty"`
-	Name             string         `json:"name"`
-	Description      string         `json:"description,omitempty"`
-	PracticeArea     string         `json:"practiceArea"`
-	Jurisdiction     string         `json:"jurisdiction,omitempty"`
-	ClauseTypes      []string       `json:"clauseTypes"`
-	Entries          []PlaybookEntry `json:"entries"`
-	DocumentCount    int            `json:"documentCount"`
-	CreatedAt        string         `json:"createdAt"`
-	UpdatedAt        string         `json:"updatedAt"`
-	GeneratedByTaskID string        `json:"generatedByTaskId,omitempty"`
+	ID                string          `json:"id"`
+	Scope             PlaybookScope   `json:"scope"`
+	OwnerID           string          `json:"ownerId,omitempty"`
+	OwnerName         string          `json:"ownerName,omitempty"`
+	Name              string          `json:"name"`
+	Description       string          `json:"description,omitempty"`
+	PracticeArea      string          `json:"practiceArea"`
+	Jurisdiction      string          `json:"jurisdiction,omitempty"`
+	ClauseTypes       []string        `json:"clauseTypes"`
+	Entries           []PlaybookEntry `json:"entries"`
+	DocumentCount     int             `json:"documentCount"`
+	CreatedAt         string          `json:"createdAt"`
+	UpdatedAt         string          `json:"updatedAt"`
+	GeneratedByTaskID string          `json:"generatedByTaskId,omitempty"`
 }
 
 // ─── Invoice validation ───────────────────────────────────────────────────────
 
 type InvoiceLineItem struct {
-	LineID            string   `json:"lineId"`
-	Date              string   `json:"date,omitempty"`
-	TimekeeperName    string   `json:"timekeeperName,omitempty"`
-	TimekeeperClass   string   `json:"timekeeperClass,omitempty"`
-	TaskCode          string   `json:"taskCode,omitempty"`
-	ActivityCode      string   `json:"activityCode,omitempty"`
-	Description       string   `json:"description"`
-	Hours             *float64 `json:"hours,omitempty"`
-	Rate              *float64 `json:"rate,omitempty"`
-	Amount            *float64 `json:"amount,omitempty"`
+	LineID          string   `json:"lineId"`
+	Date            string   `json:"date,omitempty"`
+	TimekeeperName  string   `json:"timekeeperName,omitempty"`
+	TimekeeperClass string   `json:"timekeeperClass,omitempty"`
+	TaskCode        string   `json:"taskCode,omitempty"`
+	ActivityCode    string   `json:"activityCode,omitempty"`
+	Description     string   `json:"description"`
+	Hours           *float64 `json:"hours,omitempty"`
+	Rate            *float64 `json:"rate,omitempty"`
+	Amount          *float64 `json:"amount,omitempty"`
 }
 
 type InvoiceViolation struct {
-	LineID            string   `json:"lineId"`
-	RuleID            string   `json:"ruleId,omitempty"`
-	RuleText          string   `json:"ruleText,omitempty"`
-	Type              string   `json:"type"`
-	Severity          string   `json:"severity"`
-	Message           string   `json:"message"`
-	SuggestedAction   string   `json:"suggestedAction"`
+	LineID             string   `json:"lineId"`
+	RuleID             string   `json:"ruleId,omitempty"`
+	RuleText           string   `json:"ruleText,omitempty"`
+	Type               string   `json:"type"`
+	Severity           string   `json:"severity"`
+	Message            string   `json:"message"`
+	SuggestedAction    string   `json:"suggestedAction"`
 	SuggestedReduction *float64 `json:"suggestedReduction,omitempty"`
 }
 
 type InvoiceValidationResult struct {
-	ID                     string             `json:"id"`
-	ClientID               string             `json:"clientId,omitempty"`
-	SubmittedByFirm        string             `json:"submittedByFirm,omitempty"`
-	MatterNumber           string             `json:"matterNumber,omitempty"`
-	TotalOriginalAmount    float64            `json:"totalOriginalAmount"`
-	TotalSuggestedReduction float64           `json:"totalSuggestedReduction"`
-	TotalApprovedAmount    float64            `json:"totalApprovedAmount"`
-	LineCount              int                `json:"lineCount"`
-	ViolationCount         int                `json:"violationCount"`
-	HardViolationCount     int                `json:"hardViolationCount"`
-	Violations             []InvoiceViolation `json:"violations"`
-	DisputeLetter          string             `json:"disputeLetter,omitempty"`
-	ValidatedAt            string             `json:"validatedAt"`
+	ID                      string             `json:"id"`
+	ClientID                string             `json:"clientId,omitempty"`
+	SubmittedByFirm         string             `json:"submittedByFirm,omitempty"`
+	MatterNumber            string             `json:"matterNumber,omitempty"`
+	TotalOriginalAmount     float64            `json:"totalOriginalAmount"`
+	TotalSuggestedReduction float64            `json:"totalSuggestedReduction"`
+	TotalApprovedAmount     float64            `json:"totalApprovedAmount"`
+	LineCount               int                `json:"lineCount"`
+	ViolationCount          int                `json:"violationCount"`
+	HardViolationCount      int                `json:"hardViolationCount"`
+	Violations              []InvoiceViolation `json:"violations"`
+	DisputeLetter           string             `json:"disputeLetter,omitempty"`
+	ValidatedAt             string             `json:"validatedAt"`
 }
 
 // ─── Headnotes ────────────────────────────────────────────────────────────────
@@ -632,21 +632,21 @@ type Headnote struct {
 }
 
 type HeadnoteReport struct {
-	ID               string     `json:"id"`
-	CaseName         string     `json:"caseName"`
-	Citation         string     `json:"citation,omitempty"`
-	Court            string     `json:"court,omitempty"`
-	DateFiled        string     `json:"dateFiled,omitempty"`
-	Jurisdiction     string     `json:"jurisdiction,omitempty"`
-	KeyHolding       string     `json:"keyHolding"`
-	Headnotes        []Headnote `json:"headnotes"`
-	RelatedPrinciples []string  `json:"relatedPrinciples"`
-	PracticeAreas    []string   `json:"practiceAreas"`
-	NosLegalArea     string     `json:"noslegalArea,omitempty"`
-	TotalHeadnotes   int        `json:"totalHeadnotes"`
-	RatioCount       int        `json:"ratioCount"`
-	ObiterCount      int        `json:"obiterCount"`
-	GeneratedAt      string     `json:"generatedAt"`
+	ID                string     `json:"id"`
+	CaseName          string     `json:"caseName"`
+	Citation          string     `json:"citation,omitempty"`
+	Court             string     `json:"court,omitempty"`
+	DateFiled         string     `json:"dateFiled,omitempty"`
+	Jurisdiction      string     `json:"jurisdiction,omitempty"`
+	KeyHolding        string     `json:"keyHolding"`
+	Headnotes         []Headnote `json:"headnotes"`
+	RelatedPrinciples []string   `json:"relatedPrinciples"`
+	PracticeAreas     []string   `json:"practiceAreas"`
+	NosLegalArea      string     `json:"noslegalArea,omitempty"`
+	TotalHeadnotes    int        `json:"totalHeadnotes"`
+	RatioCount        int        `json:"ratioCount"`
+	ObiterCount       int        `json:"obiterCount"`
+	GeneratedAt       string     `json:"generatedAt"`
 }
 
 // ─── OCG (Outside Counsel Guidelines) ────────────────────────────────────────
@@ -813,31 +813,31 @@ type BriefingBillingSnapshot struct {
 }
 
 type ClientBriefing struct {
-	ID               string                  `json:"id"`
-	ClientID         string                  `json:"clientId"`
-	ClientName       string                  `json:"clientName"`
-	ClientNumber     string                  `json:"clientNumber"`
-	GeneratedAt      string                  `json:"generatedAt"`
-	BriefingDate     string                  `json:"briefingDate"`
-	ExecutiveSummary string                  `json:"executiveSummary"`
-	Matters          []BriefingMatterSnapshot `json:"matters"`
-	Billing          BriefingBillingSnapshot  `json:"billing"`
-	OpenItems        []string                 `json:"openItems"`
-	RelationshipNotes string                  `json:"relationshipNotes,omitempty"`
-	IndustryContext  string                   `json:"industryContext,omitempty"`
-	Document         string                   `json:"document"`
+	ID                string                   `json:"id"`
+	ClientID          string                   `json:"clientId"`
+	ClientName        string                   `json:"clientName"`
+	ClientNumber      string                   `json:"clientNumber"`
+	GeneratedAt       string                   `json:"generatedAt"`
+	BriefingDate      string                   `json:"briefingDate"`
+	ExecutiveSummary  string                   `json:"executiveSummary"`
+	Matters           []BriefingMatterSnapshot `json:"matters"`
+	Billing           BriefingBillingSnapshot  `json:"billing"`
+	OpenItems         []string                 `json:"openItems"`
+	RelationshipNotes string                   `json:"relationshipNotes,omitempty"`
+	IndustryContext   string                   `json:"industryContext,omitempty"`
+	Document          string                   `json:"document"`
 }
 
 // ─── Budget ───────────────────────────────────────────────────────────────────
 
 type BudgetAlert struct {
-	MatterNumber  string  `json:"matterNumber"`
-	ClientNumber  string  `json:"clientNumber"`
-	BudgetUsd     float64 `json:"budgetUsd"`
-	BurnUsd       float64 `json:"burnUsd"`
-	BurnPct       float64 `json:"burnPct"`
-	Threshold     float64 `json:"threshold"`
-	TriggeredAt   string  `json:"triggeredAt"`
+	MatterNumber string  `json:"matterNumber"`
+	ClientNumber string  `json:"clientNumber"`
+	BudgetUsd    float64 `json:"budgetUsd"`
+	BurnUsd      float64 `json:"burnUsd"`
+	BurnPct      float64 `json:"burnPct"`
+	Threshold    float64 `json:"threshold"`
+	TriggeredAt  string  `json:"triggeredAt"`
 }
 
 type BudgetBurn struct {
@@ -848,19 +848,19 @@ type BudgetBurn struct {
 }
 
 type BudgetPrediction struct {
-	MatterNumber            string  `json:"matterNumber"`
-	PracticeArea            string  `json:"practiceArea"`
-	SpentUsd                float64 `json:"spentUsd"`
-	SpentBillingUnits       int     `json:"spentBillingUnits"`
-	EstimatedTotalUsd       float64 `json:"estimatedTotalUsd"`
-	EstimatedRemainingUsd   float64 `json:"estimatedRemainingUsd"`
-	CompletionPct           float64 `json:"completionPct"`
-	Confidence              string  `json:"confidence"`
-	ComparableMatterCount   int     `json:"comparableMatterCount"`
-	MedianFinalCost         float64 `json:"medianFinalCost"`
-	P25FinalCost            float64 `json:"p25FinalCost"`
-	P75FinalCost            float64 `json:"p75FinalCost"`
-	BasedOn                 string  `json:"basedOn"`
+	MatterNumber          string  `json:"matterNumber"`
+	PracticeArea          string  `json:"practiceArea"`
+	SpentUsd              float64 `json:"spentUsd"`
+	SpentBillingUnits     int     `json:"spentBillingUnits"`
+	EstimatedTotalUsd     float64 `json:"estimatedTotalUsd"`
+	EstimatedRemainingUsd float64 `json:"estimatedRemainingUsd"`
+	CompletionPct         float64 `json:"completionPct"`
+	Confidence            string  `json:"confidence"`
+	ComparableMatterCount int     `json:"comparableMatterCount"`
+	MedianFinalCost       float64 `json:"medianFinalCost"`
+	P25FinalCost          float64 `json:"p25FinalCost"`
+	P75FinalCost          float64 `json:"p75FinalCost"`
+	BasedOn               string  `json:"basedOn"`
 }
 
 // ─── Status reports ───────────────────────────────────────────────────────────
@@ -885,7 +885,7 @@ type StatusReport struct {
 
 type LPMWorkstream struct {
 	Name     string `json:"name"`
-	Status   string `json:"status"`             // e.g. "on track", "blocked", "at risk"
+	Status   string `json:"status"` // e.g. "on track", "blocked", "at risk"
 	Owner    string `json:"owner,omitempty"`
 	NextStep string `json:"nextStep,omitempty"`
 	DueDate  string `json:"dueDate,omitempty"`
@@ -956,10 +956,10 @@ type DeadlineRule struct {
 type HolidayCalendar string
 
 const (
-	HolidaysUSFederal       HolidayCalendar = "us_federal"
-	HolidaysUKBank          HolidayCalendar = "uk_bank"
-	HolidaysEUInstitutions  HolidayCalendar = "eu_institutions"
-	HolidaysNone            HolidayCalendar = "none"
+	HolidaysUSFederal      HolidayCalendar = "us_federal"
+	HolidaysUKBank         HolidayCalendar = "uk_bank"
+	HolidaysEUInstitutions HolidayCalendar = "eu_institutions"
+	HolidaysNone           HolidayCalendar = "none"
 )
 
 type JurisdictionRules struct {

@@ -233,8 +233,8 @@ Framework:
 4. Assess comment deadline and whether to engage.
 5. If commenting: draft the key argument points for each issue.
 Output: COMMENT RECOMMENDED / MONITOR ONLY / NO ACTION, with supporting analysis.`,
-		AllowedTools: regulatoryOpsTools,
-		Skills:       []string{"nprm", "regulatory-comment", "administrative-law"},
+		AllowedTools:  regulatoryOpsTools,
+		Skills:        []string{"nprm", "regulatory-comment", "administrative-law"},
 		Jurisdictions: []string{"US"},
 	},
 }

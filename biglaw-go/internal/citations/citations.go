@@ -40,13 +40,13 @@ var clBase = func() string {
 // ─── CourtListener types ──────────────────────────────────────────────────────
 
 type clSearchHit struct {
-	ID          *int    `json:"id"`
-	ClusterID   *int    `json:"cluster_id"`
-	CaseName    string  `json:"case_name"`
+	ID          *int     `json:"id"`
+	ClusterID   *int     `json:"cluster_id"`
+	CaseName    string   `json:"case_name"`
 	Citation    []string `json:"citation"`
-	Court       string  `json:"court"`
-	DateFiled   string  `json:"date_filed"`
-	AbsoluteURL string  `json:"absolute_url"`
+	Court       string   `json:"court"`
+	DateFiled   string   `json:"date_filed"`
+	AbsoluteURL string   `json:"absolute_url"`
 }
 
 type clSearchResp struct {

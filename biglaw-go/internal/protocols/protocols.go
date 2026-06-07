@@ -328,16 +328,16 @@ func (r *Runner) callModel(system, user string, maxTokens int, model, taskID str
 		provider = "local"
 	}
 	r.costs.Record(cost.RecordRequest{
-		Model:         bare,
-		Provider:      provider,
-		InputTokens:   resp.Usage.InputTokens,
-		OutputTokens:  resp.Usage.OutputTokens,
-		CostUSD:       costUSD,
-		EstimatedWh:   wh,
+		Model:          bare,
+		Provider:       provider,
+		InputTokens:    resp.Usage.InputTokens,
+		OutputTokens:   resp.Usage.OutputTokens,
+		CostUSD:        costUSD,
+		EstimatedWh:    wh,
 		EstimatedWatts: watts,
-		DurationMs:    resp.DurationMs,
-		Context:       ctx,
-		TaskID:        taskID,
+		DurationMs:     resp.DurationMs,
+		Context:        ctx,
+		TaskID:         taskID,
 	})
 
 	for _, b := range resp.Content {

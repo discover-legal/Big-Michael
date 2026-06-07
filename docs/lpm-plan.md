@@ -129,10 +129,31 @@ windows so it can grind for days on cheap hardware without disrupting the daily
 reports), and idempotent (dedup by message ID). Runs in its own goroutine, never
 blocking the report worker.
 
+## Fully wired (follow-up)
+
+Per "don't leave things unwired", the following — previously dormant in the base
+Go port — are now wired:
+
+- **Budget** is real, not stubbed: a `budget.Monitor` over the time store + client
+  roster supplies live burn to the matter-health budget dimension and the report's
+  `BudgetBurnPct` delta. The budget **threshold-alert** path was also fixed (it had
+  a latent mutate-through-copies bug) by adding `ClientStore.SetMatterBudgetAlerts`
+  and routing dedup state through it; `budget.Monitor` gained `Start/Stop`.
+- **Inbound Big Michael bot stack**: Teams/Slack webhook receivers (HMAC-verified),
+  matter↔channel link endpoints (partner-gated), task-completion notifier, and the
+  `@BigMichael report`/`portfolio` commands.
+- **Channel posting**: the drafter's `channel` mode and the daily-report BLUF post
+  to a matter's linked Teams/Slack channel; the BLUF post passes the guard.
+- **Three monitors** run on the box: budget alerts, docket polling (CourtListener),
+  regulatory pulse (Tavily; auto-enabled only when keyed).
+- **send_gate pending-drafts**: parked drafts are queryable and approved/cancelled
+  by ID (`GET /lpm/drafts/pending`, `POST /lpm/drafts/:id/{approve,cancel}`).
+
 ## Status
 
-All four phases plus the cross-cutting guard/drafter are implemented, build clean
-(`go build ./...`), pass `go vet`, and are fully unit-tested — including under the
-race detector (`go test -race ./internal/lpm/`). Everything is gated behind
-`LPM_ENABLED=false` (and per-feature flags) by default, so it is inert until
-switched on.
+All four phases plus the cross-cutting guard/drafter, budget, the inbound bot
+stack, the monitors, and the pending-drafts workflow are implemented, build clean
+(`go build ./...`), pass `go vet`, and are unit-tested — including under the race
+detector (`go test -race ./...`). LPM is gated behind `LPM_ENABLED=false` and
+per-feature flags; the bot stack and monitors activate only when their providers
+are configured.

@@ -461,10 +461,10 @@ func (s *Store) checkSemantically(entry types.TimeEntry, rules []types.OcgRule) 
 		batch := rules[i:end]
 
 		type entryData struct {
-			Description  string `json:"description"`
+			Description   string `json:"description"`
 			DurationHours string `json:"durationHours"`
-			Event        string `json:"event"`
-			BillingUnits int    `json:"billingUnits"`
+			Event         string `json:"event"`
+			BillingUnits  int    `json:"billingUnits"`
 		}
 		type ruleItem struct {
 			ID       string                `json:"id"`
@@ -474,10 +474,10 @@ func (s *Store) checkSemantically(entry types.TimeEntry, rules []types.OcgRule) 
 		}
 
 		ed := entryData{
-			Description:  entry.Description,
+			Description:   entry.Description,
 			DurationHours: fmt.Sprintf("%.2f", float64(entry.DurationMs)/3_600_000.0),
-			Event:        string(entry.Event),
-			BillingUnits: entry.BillingUnits,
+			Event:         string(entry.Event),
+			BillingUnits:  entry.BillingUnits,
 		}
 		edJSON, _ := json.Marshal(ed)
 

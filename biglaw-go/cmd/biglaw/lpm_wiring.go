@@ -30,8 +30,6 @@ func (a tsAdapter) ListAll() []types.TimeEntry {
 }
 
 // budgetClientStore adapts the client roster to the budget ClientStore interface.
-// LPM only reads budget burn (GetBurn), so Persist is a no-op — the threshold
-// alerting path (CheckMatter, which mutates + persists) is not driven from here.
 type budgetClientStore struct{ cs *clients.ClientStore }
 
 func (b budgetClientStore) List() []*types.Client {
@@ -44,7 +42,9 @@ func (b budgetClientStore) List() []*types.Client {
 	return out
 }
 
-func (b budgetClientStore) Persist() error { return nil }
+func (b budgetClientStore) SetMatterBudgetAlerts(matterNumber string, triggered []float64) error {
+	return b.cs.SetMatterBudgetAlerts(matterNumber, triggered)
+}
 
 // lpmDataProvider implements lpm.DataProvider over the orchestrator, time store
 // and client roster.

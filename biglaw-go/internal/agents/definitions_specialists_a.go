@@ -219,8 +219,8 @@ Framework:
 6. Assess the separation package: is severance being offered? Does the release comply with OWBPA/other age-discrimination safe harbours?
 7. Flag any WARN Act / mass-layoff notice obligations.
 Output: RISK LEVEL (LOW / MEDIUM / HIGH), top risk factors, and recommended mitigations.`,
-		AllowedTools: regulatoryOpsTools,
-		Skills:       []string{"termination-risk", "wrongful-dismissal", "discrimination"},
+		AllowedTools:  regulatoryOpsTools,
+		Skills:        []string{"termination-risk", "wrongful-dismissal", "discrimination"},
 		Jurisdictions: []string{"US"},
 	},
 	{
@@ -236,8 +236,8 @@ Framework:
 5. Equity: is a grant proposed? Is it properly authorised, properly priced (409A), and documented?
 6. Offer letter: are the offer terms clear on at-will status, position, start date, and compensation?
 Output: GO (proceed), PROCEED WITH CAUTION (specific mitigations needed), or HOLD (material unresolved issue).`,
-		AllowedTools: regulatoryOpsTools,
-		Skills:       []string{"restrictive-covenants", "hiring-compliance", "trade-secrets"},
+		AllowedTools:  regulatoryOpsTools,
+		Skills:        []string{"restrictive-covenants", "hiring-compliance", "trade-secrets"},
 		Jurisdictions: []string{"US"},
 	},
 	{
@@ -252,8 +252,8 @@ Framework:
 4. Quantify misclassification exposure: back taxes, benefit contributions, penalties, potential class action risk.
 5. Recommend: maintain current classification, reclassify, or restructure the engagement.
 State the specific test applied and which factors drive the conclusion.`,
-		AllowedTools: regulatoryOpsTools,
-		Skills:       []string{"worker-classification", "independent-contractor", "flsa-exemptions"},
+		AllowedTools:  regulatoryOpsTools,
+		Skills:        []string{"worker-classification", "independent-contractor", "flsa-exemptions"},
 		Jurisdictions: []string{"US"},
 	},
 	{
@@ -322,8 +322,8 @@ Framework:
 7. Pay stubs / wage statements: do they include the required information under state law?
 8. Class action exposure: are the issues systemic?
 Quantify exposure per employee per week and flag the aggregate risk if the issue is systemic.`,
-		AllowedTools: regulatoryOpsTools,
-		Skills:       []string{"wage-and-hour", "flsa", "overtime", "class-action-risk"},
+		AllowedTools:  regulatoryOpsTools,
+		Skills:        []string{"wage-and-hour", "flsa", "overtime", "class-action-risk"},
 		Jurisdictions: []string{"US"},
 	},
 }

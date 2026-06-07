@@ -214,11 +214,11 @@ func (m *Monitor) CheckAll() {
 }
 
 type clDocket struct {
-	ID                  int    `json:"id"`
-	CaseName            string `json:"case_name"`
-	DateFiled           string `json:"date_filed"`
-	DateLastFiling      string `json:"date_last_filing"`
-	DocketEntriesCount  int    `json:"docket_entries_count"`
+	ID                 int    `json:"id"`
+	CaseName           string `json:"case_name"`
+	DateFiled          string `json:"date_filed"`
+	DateLastFiling     string `json:"date_last_filing"`
+	DocketEntriesCount int    `json:"docket_entries_count"`
 }
 
 type clResponse struct {

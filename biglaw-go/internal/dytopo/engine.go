@@ -34,17 +34,17 @@ type AgentBillingCtx struct {
 }
 
 type Engine struct {
-	registry    *agents.Registry
-	memory      *memory.InterRoundStore
-	memAdapter  *memory.Adapter
-	knowledge   agents.KnowledgeStore
-	pinned      []types.AgentDefinition
-	cfg         *config.Config
-	provReg     *providers.Registry
-	costs       *cost.Store
-	embedC      *embeddings.Client
-	tools       agents.ToolRegistry
-	learning    *learning.Engine
+	registry   *agents.Registry
+	memory     *memory.InterRoundStore
+	memAdapter *memory.Adapter
+	knowledge  agents.KnowledgeStore
+	pinned     []types.AgentDefinition
+	cfg        *config.Config
+	provReg    *providers.Registry
+	costs      *cost.Store
+	embedC     *embeddings.Client
+	tools      agents.ToolRegistry
+	learning   *learning.Engine
 }
 
 type Options struct {
@@ -127,10 +127,10 @@ func (e *Engine) RunRound(task *types.Task, goal types.RoundGoal, lawyerTone *ty
 		i, ag := i, ag
 		g1.Go(func() error {
 			ctx := agents.AgentContext{
-				RoundGoal:        goal,
-				MemoryEntries:    agentMemories[ag.Def.ID],
-				TaskDescription:  task.Description,
-				TaskID:           task.ID,
+				RoundGoal:       goal,
+				MemoryEntries:   agentMemories[ag.Def.ID],
+				TaskDescription: task.Description,
+				TaskID:          task.ID,
 			}
 			need, offer, err := ag.GenerateNeedOffer(ctx)
 			if err != nil {
@@ -169,22 +169,22 @@ func (e *Engine) RunRound(task *types.Task, goal types.RoundGoal, lawyerTone *ty
 		i, ag := i, ag
 		g2.Go(func() error {
 			ctx := agents.AgentContext{
-				RoundGoal:             goal,
-				IncomingMessages:      intra.GetMessagesFor(ag.Def.ID),
-				MemoryEntries:         agentMemories[ag.Def.ID],
-				TaskDescription:       task.Description,
-				TaskID:                task.ID,
-				ToolRegistry:          e.tools,
-				KnowledgeStore:        e.knowledge,
-				MemoryStore:           e.memAdapter,
-				OwnerID:               task.CreatedByProfileID,
-				AssignedLawyerTone:    lawyerTone,
+				RoundGoal:          goal,
+				IncomingMessages:   intra.GetMessagesFor(ag.Def.ID),
+				MemoryEntries:      agentMemories[ag.Def.ID],
+				TaskDescription:    task.Description,
+				TaskID:             task.ID,
+				ToolRegistry:       e.tools,
+				KnowledgeStore:     e.knowledge,
+				MemoryStore:        e.memAdapter,
+				OwnerID:            task.CreatedByProfileID,
+				AssignedLawyerTone: lawyerTone,
 			}
 			if billing != nil {
-				ctx.ResponsibleLawyerID   = billing.ResponsibleLawyerID
+				ctx.ResponsibleLawyerID = billing.ResponsibleLawyerID
 				ctx.ResponsibleLawyerName = billing.ResponsibleLawyerName
-				ctx.MatterNumber          = billing.MatterNumber
-				ctx.ClientNumber          = billing.ClientNumber
+				ctx.MatterNumber = billing.MatterNumber
+				ctx.ClientNumber = billing.ClientNumber
 			}
 			findings, err := ag.Process(ctx)
 			if err != nil {
@@ -425,7 +425,7 @@ func (e *Engine) persistRoundMemory(task *types.Task, goal types.RoundGoal, find
 				MaxTokens: 300,
 				System:    "You are a legal analysis synthesizer. Produce a concise inter-round memory digest.",
 				Messages: []providers.Message{{
-					Role: "user",
+					Role:    "user",
 					Content: fmt.Sprintf("Round %d (%s) findings:\n%s\n\nSummarise the key legal conclusions in 2-3 sentences.", goal.Round, goal.Phase, bullets),
 				}},
 			})
