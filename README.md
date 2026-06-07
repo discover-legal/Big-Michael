@@ -115,21 +115,43 @@ of supervision (reviewing outputs before they leave the firm).
 
 **BigLaw processes whatever data you give it.** If you feed it client communications, privileged
 documents, personally identifiable information, health records, financial data, or anything else
-that is sensitive or regulated, that data will be:
+that is sensitive or regulated, that data will flow through your configured model provider and
+may be stored locally. Where that data goes depends entirely on how you have deployed the system.
 
-- Sent to the Anthropic API (subject to Anthropic's data processing terms)
-- Potentially stored in the local vector database (which persists to disk)
-- Potentially logged to the audit log
-- Potentially included in prompts that are cached by the API provider
+**BigLaw supports multiple inference backends — the data handling implications differ for each:**
 
-**You are responsible for ensuring that your use of this software complies with your
-confidentiality obligations to clients, your firm's data handling policies, applicable
-data protection law (GDPR, CCPA, HIPAA, and equivalents), and any bar association ethics
-rules governing the use of cloud-based legal technology.**
+- **Anthropic API (default)** — data is sent to Anthropic's servers subject to their data
+  processing terms and usage policies. Review these before using with client data.
+- **OpenAI / Azure OpenAI** — data is sent to OpenAI or Microsoft's servers subject to their
+  respective terms. Azure OpenAI offers enterprise data handling commitments that the standard
+  OpenAI API does not.
+- **Ollama / LM Studio / local inference** (`OLLAMA_ENABLED=true` or `LOCAL_INFERENCE_URL`) —
+  data never leaves your infrastructure. For air-gapped or maximally confidential deployments,
+  local inference is the only option that gives you complete data control.
 
-Before deploying BigLaw with real client data, you must conduct a vendor assessment of
-Anthropic's data processing terms, determine whether a Data Processing Agreement is required,
-and implement appropriate access controls to prevent unauthorised access to stored matter data.
+**Regardless of backend, data may also be:**
+- Stored in the local vector database (persists to disk at `./data/`)
+- Written to the audit log (JSONL, also on disk)
+- Included in prompts that are cached by a cloud API provider
+
+**Regulatory obligations depend on your jurisdiction and the nature of the data:**
+
+- **HIPAA (US)** — if you process protected health information, you need a Business Associate
+  Agreement (BAA) with your model provider. Anthropic offers BAAs on certain enterprise tiers
+  only. OpenAI offers BAAs on ChatGPT Enterprise and Azure OpenAI. Standard API tiers typically
+  do not include BAA coverage. If you cannot get a BAA, use local inference.
+- **GDPR (EU/EEA)** — processing personal data of EU residents requires a lawful basis and,
+  for cloud providers, appropriate Standard Contractual Clauses or equivalent transfer mechanisms.
+  Data residency matters. Check where your provider processes and stores data.
+- **CCPA / US state privacy laws** — obligations vary by state and the nature of the data.
+- **Bar association ethics rules** — most jurisdictions now have guidance on cloud-based legal
+  technology. Many require a reasonable investigation of the provider's security and privacy
+  practices before using the service with client data.
+
+**The bottom line: your data handling obligations depend on your jurisdiction, your client base,
+the sensitivity of the data, and which inference backend you use. There is no universal answer.
+Engage qualified legal counsel and an independent FDE to map your specific obligations before
+deploying with real client data.**
 
 ### Deployment Liability
 
