@@ -381,6 +381,18 @@ type ConflictCheckResult struct {
 	MatchedAdversary       string `json:"matchedAdversary,omitempty"`
 }
 
+// ConflictReport is a single inferred conflict edge from the graph.
+type ConflictReport struct {
+	ClientAID     string `json:"clientAId"`
+	ClientAName   string `json:"clientAName"`
+	ClientBID     string `json:"clientBId"`
+	ClientBName   string `json:"clientBName"`
+	MatterANumber string `json:"matterANumber"`
+	MatterBNumber string `json:"matterBNumber"`
+	ConflictPath  string `json:"conflictPath"`
+	DetectedAt    string `json:"detectedAt"`
+}
+
 // ─── Documents ───────────────────────────────────────────────────────────────
 
 type Document struct {
