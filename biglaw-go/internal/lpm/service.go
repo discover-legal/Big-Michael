@@ -108,9 +108,40 @@ func (s *Service) knownMatters() []string {
 	return out
 }
 
+// guard builds a confidentiality guard from the configured allowed domains and
+// the live matter roster (so cross-matter detection reflects current matters).
+func (s *Service) guard() *Guard {
+	return NewGuard(GuardConfig{AllowedDomains: s.allowedDomains, KnownMatterNumbers: s.knownMatters()})
+}
+
 func (s *Service) drafter() *Drafter {
-	g := NewGuard(GuardConfig{AllowedDomains: s.allowedDomains, KnownMatterNumbers: s.knownMatters()})
-	return NewDrafter(s.draftMode, g, s.transport, s.channelPoster)
+	return NewDrafter(s.draftMode, s.guard(), s.transport, s.channelPoster)
+}
+
+// postReportToChannel posts a report's BLUF to the matter channel when
+// LPM_CHANNEL_POST is enabled and a poster is configured. The note passes the
+// confidentiality guard's leakage scan first (fire-and-forget, fail-safe).
+func (s *Service) postReportToChannel(r *types.MatterStatusReport) {
+	if !s.cfg.ChannelPost || s.channelPoster == nil {
+		return
+	}
+	content := r.BLUF
+	if content == "" {
+		content = r.Summary
+	}
+	g := s.guard()
+	dec := g.Check(r.MatterNumber, nil, content)
+	g.Audit("lpm-report-notify", r.MatterNumber, "channel_post", dec)
+	if !dec.Allowed {
+		slog.Warn("LPM report channel post blocked by guard", "matter", r.MatterNumber, "reasons", dec.Reasons)
+		return
+	}
+	subject := fmt.Sprintf("Daily status — %s (%s, %.0f/100)", r.MatterNumber, r.HealthSignal, r.HealthScore)
+	go func() {
+		if err := s.channelPoster(Draft{MatterNumber: r.MatterNumber, Subject: subject, Body: content}); err != nil {
+			slog.Warn("LPM report channel post failed", "matter", r.MatterNumber, "error", err)
+		}
+	}()
 }
 
 // ProcessDraft applies the configured email-write-mode policy to a draft.
@@ -329,6 +360,7 @@ func (s *Service) GenerateForMatter(ref MatterRef, date string) (*types.MatterSt
 	if s.notify != nil {
 		s.notify(ref.MatterNumber, report, docxPath)
 	}
+	s.postReportToChannel(report)
 	return report, nil
 }
 

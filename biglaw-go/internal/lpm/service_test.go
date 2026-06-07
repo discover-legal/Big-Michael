@@ -94,6 +94,44 @@ func TestServiceNotifierInvoked(t *testing.T) {
 	}
 }
 
+func TestReportChannelPostGuardBlocksLeak(t *testing.T) {
+	prov := &fakeProvider{replies: []string{`{"bluf":"SSN 123-45-6789 in the note","summary":"s"}`}}
+	svc, _ := newTestService(t, prov)
+	svc.cfg.ChannelPost = true
+	got := make(chan Draft, 1)
+	svc.WithDrafting("off", nil, nil, func(d Draft) error { got <- d; return nil })
+
+	if _, err := svc.GenerateForMatter(MatterRef{MatterNumber: "M-001"}, "2026-06-07"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-got:
+		t.Error("a BLUF containing PII must not be posted to the channel")
+	case <-time.After(200 * time.Millisecond):
+		// good — guard blocked the post
+	}
+}
+
+func TestReportChannelPostCleanPosts(t *testing.T) {
+	prov := &fakeProvider{replies: []string{`{"bluf":"All on track this week.","summary":"s"}`}}
+	svc, _ := newTestService(t, prov)
+	svc.cfg.ChannelPost = true
+	got := make(chan Draft, 1)
+	svc.WithDrafting("off", nil, nil, func(d Draft) error { got <- d; return nil })
+
+	if _, err := svc.GenerateForMatter(MatterRef{MatterNumber: "M-001"}, "2026-06-07"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case d := <-got:
+		if d.MatterNumber != "M-001" {
+			t.Errorf("posted wrong matter: %s", d.MatterNumber)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("a clean BLUF should be posted to the channel")
+	}
+}
+
 func TestEnqueueDailyEnqueuesPerMatter(t *testing.T) {
 	prov := &fakeProvider{replies: []string{`{"bluf":"b","summary":"s"}`}}
 	svc, _ := newTestService(t, prov)

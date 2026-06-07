@@ -10,13 +10,11 @@ package main
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/discover-legal/biglaw-go/internal/bots"
 	"github.com/discover-legal/biglaw-go/internal/config"
 	"github.com/discover-legal/biglaw-go/internal/lpm"
-	"github.com/discover-legal/biglaw-go/internal/types"
 )
 
 // newMatterChannelPoster returns a ChannelPoster that posts to a matter's linked
@@ -67,29 +65,5 @@ func newMatterChannelPoster(cfg *config.Config) lpm.ChannelPoster {
 			return firstErr
 		}
 		return fmt.Errorf("no channel linked to matter %s", d.MatterNumber)
-	}
-}
-
-// newReportNotifier posts a short daily-status note (BLUF) to the matter channel
-// when LPM_CHANNEL_POST is enabled and a chat platform is configured. It is
-// fire-and-forget so it never slows report generation.
-func newReportNotifier(cfg *config.Config, poster lpm.ChannelPoster) lpm.Notifier {
-	if !cfg.LPM.ChannelPost || poster == nil {
-		return nil
-	}
-	return func(matter string, r *types.MatterStatusReport, _ string) {
-		body := r.BLUF
-		if body == "" {
-			body = r.Summary
-		}
-		go func() {
-			if err := poster(lpm.Draft{
-				MatterNumber: matter,
-				Subject:      fmt.Sprintf("Daily status — %s (%s, %.0f/100)", matter, r.HealthSignal, r.HealthScore),
-				Body:         body,
-			}); err != nil {
-				slog.Warn("LPM report channel post failed", "matter", matter, "error", err)
-			}
-		}()
 	}
 }

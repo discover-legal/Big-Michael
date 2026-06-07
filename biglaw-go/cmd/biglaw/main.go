@@ -144,7 +144,7 @@ func main() {
 			corpus := lpm.NewCorpus(cfg.LPM.CorpusFile)
 			data := newLPMDataProvider(orch, timeStore, clientStore)
 			channelPoster := newMatterChannelPoster(cfg)
-			lpmSvc = lpm.NewService(cfg.LPM, gen, corpus, data, lpmQueue, newReportNotifier(cfg, channelPoster))
+			lpmSvc = lpm.NewService(cfg.LPM, gen, corpus, data, lpmQueue, nil)
 
 			// Phase 2: email intake + matter routing when a mail provider is set.
 			if cfg.Email.Graph.Enabled || cfg.Email.Gmail.Enabled {
