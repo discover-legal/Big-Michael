@@ -141,7 +141,9 @@ Go port — are now wired:
   and routing dedup state through it; `budget.Monitor` gained `Start/Stop`.
 - **Inbound Big Michael bot stack**: Teams/Slack webhook receivers (HMAC-verified),
   matter↔channel link endpoints (partner-gated), task-completion notifier, and the
-  `@BigMichael report`/`portfolio` commands.
+  `@BigMichael` commands — `report`, `portfolio`, `budget [matter] [amount?]`
+  (show burn / set budget), `watch`/`unwatch`/`dockets` (court-docket management),
+  alongside the existing status/briefing/search/task/run.
 - **Channel posting**: the drafter's `channel` mode and the daily-report BLUF post
   to a matter's linked Teams/Slack channel; the BLUF post passes the guard.
 - **Three monitors** run on the box: budget alerts, docket polling (CourtListener),

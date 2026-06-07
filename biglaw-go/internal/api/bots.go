@@ -8,8 +8,11 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -186,6 +189,64 @@ func (f *botFacade) LPMPortfolio() (string, error) {
 		return "", err
 	}
 	return lpm.RenderPortfolioMarkdown(br), nil
+}
+
+// ─── Budget + docket commands ───────────────────────────────────────────────
+
+func (f *botFacade) BudgetStatus(matterNumber string) (string, error) {
+	burn := f.s.budget.GetBurn(matterNumber)
+	if burn == nil {
+		return fmt.Sprintf("No budget set for matter **%s**. Set one with `@BigMichael budget %s [amount]`.", matterNumber, matterNumber), nil
+	}
+	return fmt.Sprintf("**Budget — %s**\n%.0f%% burned: $%.0f of $%.0f ($%.0f remaining).",
+		matterNumber, burn.BurnPct*100, burn.BurnUsd, burn.BudgetUsd, burn.Remaining), nil
+}
+
+func (f *botFacade) SetMatterBudget(matterNumber, amount string) (string, error) {
+	amt, err := strconv.ParseFloat(strings.NewReplacer(",", "", "$", "", "_", "").Replace(strings.TrimSpace(amount)), 64)
+	if err != nil || amt <= 0 {
+		return "", fmt.Errorf("invalid amount %q", amount)
+	}
+	if err := f.s.clients.SetMatterBudget(matterNumber, &amt, nil); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Budget for **%s** set to $%.0f.", matterNumber, amt), nil
+}
+
+func (f *botFacade) WatchDocket(matterNumber, docketNumber, court string) (string, error) {
+	if f.s.dockets == nil {
+		return "Docket monitoring is disabled on this server.", nil
+	}
+	w, err := f.s.dockets.Watch(matterNumber, docketNumber, court, "")
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Now watching docket **%s** (%s) for matter **%s**.", w.DocketNumber, w.Court, matterNumber), nil
+}
+
+func (f *botFacade) UnwatchDocket(matterNumber string) (string, error) {
+	if f.s.dockets == nil {
+		return "Docket monitoring is disabled on this server.", nil
+	}
+	if !f.s.dockets.Unwatch(matterNumber) {
+		return fmt.Sprintf("No docket was being watched for matter **%s**.", matterNumber), nil
+	}
+	return fmt.Sprintf("Stopped watching the docket for matter **%s**.", matterNumber), nil
+}
+
+func (f *botFacade) ListDockets() (string, error) {
+	if f.s.dockets == nil {
+		return "Docket monitoring is disabled on this server.", nil
+	}
+	watched := f.s.dockets.List()
+	if len(watched) == 0 {
+		return "No dockets are being watched.", nil
+	}
+	lines := []string{"**Watched dockets:**"}
+	for _, w := range watched {
+		lines = append(lines, fmt.Sprintf("• %s — %s (%s)", w.MatterNumber, w.DocketNumber, w.Court))
+	}
+	return strings.Join(lines, "\n"), nil
 }
 
 // ─── Small adapters ─────────────────────────────────────────────────────────

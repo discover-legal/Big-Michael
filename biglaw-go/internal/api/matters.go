@@ -11,8 +11,35 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/discover-legal/biglaw-go/internal/clients"
 	"github.com/discover-legal/biglaw-go/internal/dockets"
+	"github.com/discover-legal/biglaw-go/internal/timekeeping"
+	"github.com/discover-legal/biglaw-go/internal/types"
 )
+
+// apiBudgetTime adapts the time store to the budget TimeStore interface.
+type apiBudgetTime struct{ ts *timekeeping.TimeStore }
+
+func (a apiBudgetTime) List(matter string) []types.TimeEntry {
+	return a.ts.List(timekeeping.TimeFilter{MatterNumber: matter})
+}
+func (a apiBudgetTime) ListAll() []types.TimeEntry { return a.ts.List(timekeeping.TimeFilter{}) }
+
+// apiBudgetClients adapts the client roster to the budget ClientStore interface.
+type apiBudgetClients struct{ cs *clients.ClientStore }
+
+func (a apiBudgetClients) List() []*types.Client {
+	src := a.cs.List()
+	out := make([]*types.Client, len(src))
+	for i := range src {
+		c := src[i]
+		out[i] = &c
+	}
+	return out
+}
+func (a apiBudgetClients) SetMatterBudgetAlerts(matterNumber string, triggered []float64) error {
+	return a.cs.SetMatterBudgetAlerts(matterNumber, triggered)
+}
 
 // mountMatterBudget registers the matter-budget endpoint. Called from New().
 func (s *Server) mountMatterBudget(r *gin.Engine) {
@@ -43,6 +70,7 @@ func (s *Server) AttachDockets(dm *dockets.Monitor) {
 	if dm == nil {
 		return
 	}
+	s.dockets = dm // expose to the bot facade (watch/unwatch/dockets commands)
 	g := s.router.Group("/dockets")
 	g.Use(func(c *gin.Context) {
 		if !requirePartner(c) {

@@ -20,9 +20,11 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/agents"
 	"github.com/discover-legal/biglaw-go/internal/audit"
 	"github.com/discover-legal/biglaw-go/internal/auth"
+	"github.com/discover-legal/biglaw-go/internal/budget"
 	"github.com/discover-legal/biglaw-go/internal/clients"
 	"github.com/discover-legal/biglaw-go/internal/config"
 	"github.com/discover-legal/biglaw-go/internal/cost"
+	"github.com/discover-legal/biglaw-go/internal/dockets"
 	"github.com/discover-legal/biglaw-go/internal/knowledge"
 	"github.com/discover-legal/biglaw-go/internal/lpm"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
@@ -44,7 +46,9 @@ type Server struct {
 	knowledge *knowledge.Store
 	registry  *agents.Registry
 	costs     *cost.Store
-	lpm       *lpm.Service // set by AttachLPM; nil when LPM is disabled
+	budget    *budget.Monitor  // read-only burn for bot commands
+	dockets   *dockets.Monitor // set by AttachDockets; nil when disabled
+	lpm       *lpm.Service     // set by AttachLPM; nil when LPM is disabled
 	router    *gin.Engine
 }
 
@@ -72,6 +76,7 @@ func New(
 		registry:  registry,
 		costs:     costStore,
 	}
+	s.budget = budget.NewMonitor(apiBudgetTime{timeStore}, apiBudgetClients{clientStore}, nil)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
