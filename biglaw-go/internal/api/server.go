@@ -24,7 +24,9 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/config"
 	"github.com/discover-legal/biglaw-go/internal/cost"
 	"github.com/discover-legal/biglaw-go/internal/knowledge"
+	"github.com/discover-legal/biglaw-go/internal/lpm"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
+	"github.com/discover-legal/biglaw-go/internal/providers"
 	"github.com/discover-legal/biglaw-go/internal/timekeeping"
 	"github.com/discover-legal/biglaw-go/internal/types"
 )
@@ -35,12 +37,14 @@ const ctxUserKey = "user"
 type Server struct {
 	cfg       *config.Config
 	orch      *orchestrator.Orchestrator
+	provReg   *providers.Registry
 	profiles  *auth.ProfileStore
 	clients   *clients.ClientStore
 	time      *timekeeping.TimeStore
 	knowledge *knowledge.Store
 	registry  *agents.Registry
 	costs     *cost.Store
+	lpm       *lpm.Service // set by AttachLPM; nil when LPM is disabled
 	router    *gin.Engine
 }
 
@@ -49,6 +53,7 @@ type Server struct {
 func New(
 	cfg *config.Config,
 	orch *orchestrator.Orchestrator,
+	provReg *providers.Registry,
 	profiles *auth.ProfileStore,
 	clientStore *clients.ClientStore,
 	timeStore *timekeeping.TimeStore,
@@ -59,6 +64,7 @@ func New(
 	s := &Server{
 		cfg:       cfg,
 		orch:      orch,
+		provReg:   provReg,
 		profiles:  profiles,
 		clients:   clientStore,
 		time:      timeStore,
@@ -138,6 +144,10 @@ func New(
 	r.GET("/audit/stream", s.handleAuditStream)
 
 	s.router = r
+
+	// ── Big Michael bots (Teams/Slack) ────────────────────────────────────
+	s.mountBots(r)
+
 	return s
 }
 

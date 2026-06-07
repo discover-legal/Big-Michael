@@ -19,6 +19,7 @@ func (s *Server) AttachLPM(svc *lpm.Service) {
 	if svc == nil {
 		return
 	}
+	s.lpm = svc // expose to the bot facade (report/portfolio commands)
 	g := s.router.Group("/lpm")
 	// LPM is a partner / LPM-lead tool: it surfaces cross-matter status and can
 	// compose outbound mail. Gate the whole group behind the partner check.

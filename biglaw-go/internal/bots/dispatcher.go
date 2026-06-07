@@ -44,6 +44,11 @@ type OrchestratorFacade interface {
 	Knowledge() KnowledgeSearcher
 	Briefing() BriefingGenerator
 	ListTimeEntries() []types.TimeEntry
+	// LPM commands return ready-to-post Markdown (or an error/availability
+	// message); kept as strings so the dispatcher stays decoupled from the LPM
+	// package.
+	LPMReport(matterNumber string) (string, error)
+	LPMPortfolio() (string, error)
 }
 
 // ─── Message / response types ─────────────────────────────────────────────────
@@ -202,6 +207,22 @@ func Dispatch(msg BotMessage, orch OrchestratorFacade) BotResponse {
 			},
 		}
 
+	case "report":
+		mn := strings.TrimSpace(args)
+		if mn == "" {
+			return BotResponse{Immediate: "Usage: `@BigMichael report [matter-number]`"}
+		}
+		return BotResponse{
+			Immediate: fmt.Sprintf("Generating status report for **%s**…", mn),
+			AsyncWork: func() (string, error) { return orch.LPMReport(mn) },
+		}
+
+	case "portfolio":
+		return BotResponse{
+			Immediate: "Assembling the portfolio briefing…",
+			AsyncWork: func() (string, error) { return orch.LPMPortfolio() },
+		}
+
 	case "run":
 		templateID := strings.TrimSpace(args)
 		if templateID == "" {
@@ -243,6 +264,8 @@ const helpText = `**Big Michael** — multi-agent legal AI
 | Command | Description |
 |---------|-------------|
 | ` + "`status [matter]`" + ` | Matter health score + active tasks |
+| ` + "`report [matter]`" + ` | Daily LPM status report for a matter |
+| ` + "`portfolio`" + ` | 0600 BLUF portfolio briefing across active matters |
 | ` + "`briefing [client]`" + ` | Client intelligence briefing (all sources) |
 | ` + "`search [query]`" + ` | Semantic search across the knowledge store |
 | ` + "`task [description]`" + ` | Submit a new roundtable AI task |

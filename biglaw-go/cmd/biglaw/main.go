@@ -190,7 +190,7 @@ func main() {
 
 	// makeAPI builds the REST server and attaches optional LPM routes.
 	makeAPI := func() *api.Server {
-		srv := api.New(cfg, orch, profileStore, clientStore, timeStore, knowledgeStore, agentReg, costStore)
+		srv := api.New(cfg, orch, provReg, profileStore, clientStore, timeStore, knowledgeStore, agentReg, costStore)
 		srv.AttachLPM(lpmSvc)
 		return srv
 	}
