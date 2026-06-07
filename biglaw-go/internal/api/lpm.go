@@ -20,6 +20,13 @@ func (s *Server) AttachLPM(svc *lpm.Service) {
 		return
 	}
 	g := s.router.Group("/lpm")
+	// LPM is a partner / LPM-lead tool: it surfaces cross-matter status and can
+	// compose outbound mail. Gate the whole group behind the partner check.
+	g.Use(func(c *gin.Context) {
+		if !requirePartner(c) {
+			c.Abort()
+		}
+	})
 
 	// Generate a status report for a matter on demand.
 	g.POST("/reports/generate", func(c *gin.Context) {
