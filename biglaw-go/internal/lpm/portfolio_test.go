@@ -47,12 +47,16 @@ func TestPortfolioGenerateSortsWorstFirstAndCounts(t *testing.T) {
 	if br.Red != 1 || br.Green != 1 {
 		t.Errorf("signal counts wrong: red=%d green=%d", br.Red, br.Green)
 	}
-	// Worst (M-002, score 35) first; the matter with no report (M-003, score 0) sorts ahead of all.
-	if br.Matters[0].MatterNumber != "M-003" {
-		t.Errorf("matter with no report (score 0) should sort first, got %s", br.Matters[0].MatterNumber)
+	// Worst reported matter first (M-002, red 35), then M-001 (green 80); the
+	// matter with no report yet (M-003) sorts last, not first.
+	if br.Matters[0].MatterNumber != "M-002" {
+		t.Errorf("worst reported matter should sort first, got %s", br.Matters[0].MatterNumber)
 	}
-	if br.Matters[1].MatterNumber != "M-002" {
-		t.Errorf("red matter should precede green, got %s", br.Matters[1].MatterNumber)
+	if br.Matters[1].MatterNumber != "M-001" {
+		t.Errorf("green reported matter should precede the unreported one, got %s", br.Matters[1].MatterNumber)
+	}
+	if br.Matters[2].MatterNumber != "M-003" {
+		t.Errorf("matter with no report should sort last, got %s", br.Matters[2].MatterNumber)
 	}
 	// Top risk surfaced for M-002.
 	for _, m := range br.Matters {

@@ -11,6 +11,7 @@ package lpm
 import (
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/discover-legal/biglaw-go/internal/email"
@@ -51,6 +52,7 @@ type Intake struct {
 	daysBack int
 	maxBatch int
 	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 // IntakeConfig configures an Intake.
@@ -124,8 +126,8 @@ func (i *Intake) Start() {
 	slog.Info("LPM email intake started", "interval", i.interval, "query", redactQuery(i.query))
 }
 
-// Stop halts the polling loop.
-func (i *Intake) Stop() { close(i.stop) }
+// Stop halts the polling loop (idempotent).
+func (i *Intake) Stop() { i.stopOnce.Do(func() { close(i.stop) }) }
 
 func (i *Intake) runOnce() {
 	routed, err := i.PollOnce()

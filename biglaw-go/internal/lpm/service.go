@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/discover-legal/biglaw-go/internal/config"
@@ -52,6 +53,7 @@ type Service struct {
 
 	sched     *Scheduler
 	stop      chan struct{}
+	stopOnce  sync.Once
 	pollEvery time.Duration
 
 	// Optional Phase 2 email intake; nil disables routing-aware deltas.
@@ -165,18 +167,20 @@ func (s *Service) Start() {
 		"intake", s.intake != nil)
 }
 
-// Stop halts the scheduler and worker.
+// Stop halts the scheduler and worker (idempotent).
 func (s *Service) Stop() {
-	if s.sched != nil {
-		s.sched.Stop()
-	}
-	if s.intake != nil {
-		s.intake.Stop()
-	}
-	if s.backfill != nil {
-		s.backfill.Stop()
-	}
-	close(s.stop)
+	s.stopOnce.Do(func() {
+		if s.sched != nil {
+			s.sched.Stop()
+		}
+		if s.intake != nil {
+			s.intake.Stop()
+		}
+		if s.backfill != nil {
+			s.backfill.Stop()
+		}
+		close(s.stop)
+	})
 }
 
 // enqueueDaily is the scheduler callback: enqueue one status-report job per

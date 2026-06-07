@@ -56,14 +56,12 @@ func para(runs string, before, after int) string {
 
 // Heading adds a bold heading. level 1→16pt, 2→13pt, 3→12pt.
 func (d *docxBuilder) Heading(level int, text string) {
-	sz := 32
+	sz := 24 // level 3 / default (12pt)
 	switch level {
 	case 1:
 		sz = 32
 	case 2:
 		sz = 26
-	default:
-		sz = 24
 	}
 	d.body.WriteString(para(run(text, true, sz), 200, 80))
 }

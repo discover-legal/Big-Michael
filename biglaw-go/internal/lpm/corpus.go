@@ -133,6 +133,24 @@ func (c *Corpus) Latest(matter string) (*types.MatterStatusReport, error) {
 	return &r, nil
 }
 
+// LatestByMatter returns the most recent report for every matter in a single
+// pass over the corpus — used by the portfolio briefer to avoid an O(matters ×
+// file) re-scan.
+func (c *Corpus) LatestByMatter() (map[string]types.MatterStatusReport, error) {
+	all, err := c.All()
+	if err != nil {
+		return nil, err
+	}
+	latest := make(map[string]types.MatterStatusReport, len(all))
+	for _, r := range all {
+		cur, ok := latest[r.MatterNumber]
+		if !ok || r.Date > cur.Date || (r.Date == cur.Date && r.GeneratedAt > cur.GeneratedAt) {
+			latest[r.MatterNumber] = r
+		}
+	}
+	return latest, nil
+}
+
 // Get returns the report with the given ID, or nil if not found.
 func (c *Corpus) Get(id string) (*types.MatterStatusReport, error) {
 	all, err := c.All()

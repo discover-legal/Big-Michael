@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,6 +23,18 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/providers"
 	"github.com/discover-legal/biglaw-go/internal/types"
 )
+
+var dateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+// safeDate returns s only if it is a well-formed YYYY-MM-DD date, else today
+// (UTC). Dates flow into filesystem paths for rendered artifacts, so this guards
+// against path traversal from a caller-supplied date.
+func safeDate(s string) string {
+	if dateRE.MatchString(s) {
+		return s
+	}
+	return time.Now().UTC().Format("2006-01-02")
+}
 
 // Generator produces structured daily status reports for a matter.
 type Generator struct {
@@ -57,10 +70,7 @@ type GenOpts struct {
 
 // Generate computes deltas, synthesises the narrative, and returns a report.
 func (g *Generator) Generate(in ReportInput, opts GenOpts) (*types.MatterStatusReport, error) {
-	date := in.Date
-	if date == "" {
-		date = time.Now().UTC().Format("2006-01-02")
-	}
+	date := safeDate(in.Date)
 
 	// ── Cutoff: deltas are measured since the previous report, else trailing 24h.
 	cutoff := time.Now().Add(-24 * time.Hour)
@@ -132,9 +142,10 @@ func (g *Generator) Generate(in ReportInput, opts GenOpts) (*types.MatterStatusR
 
 func computeDeltas(in ReportInput, cutoff time.Time) types.LPMDeltas {
 	d := types.LPMDeltas{
-		Since:         cutoff.UTC().Format(time.RFC3339),
-		EmailsRouted:  in.EmailsRouted,
-		BudgetBurnPct: in.Health.Dimensions.BudgetHealth, // dimension proxy until budget wired
+		Since:        cutoff.UTC().Format(time.RFC3339),
+		EmailsRouted: in.EmailsRouted,
+		// BudgetBurnPct is intentionally left zero until a real budget burn is
+		// wired in (a later phase) — better empty than a misleading proxy.
 	}
 	for _, t := range in.Tasks {
 		if t.CreatedAt.After(cutoff) {
@@ -170,8 +181,8 @@ func buildFactSheet(in ReportInput, d types.LPMDeltas) string {
 	}
 	fmt.Fprintf(&b, "HEALTH: %.0f/100 (%s, trend %s)\n", in.Health.Score, orDash(string(in.Health.Signal)), orDash(string(in.Health.Trend)))
 	fmt.Fprintf(&b, "SINCE: %s\n", d.Since)
-	fmt.Fprintf(&b, "DELTAS: %d new tasks, %d closed, %d new findings, %d emails routed; %.1fh logged ($%.2f), budget health %.0f%%\n",
-		d.NewTasks, d.ClosedTasks, d.NewFindings, d.EmailsRouted, d.HoursLogged, d.BilledUsd, d.BudgetBurnPct*100)
+	fmt.Fprintf(&b, "DELTAS: %d new tasks, %d closed, %d new findings, %d emails routed; %.1fh logged ($%.2f)\n",
+		d.NewTasks, d.ClosedTasks, d.NewFindings, d.EmailsRouted, d.HoursLogged, d.BilledUsd)
 
 	if len(in.Health.RiskFactors) > 0 {
 		b.WriteString("RISK FACTORS:\n")

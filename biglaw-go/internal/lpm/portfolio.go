@@ -58,25 +58,27 @@ func NewPortfolioBriefer(provider providers.Provider, model string) *PortfolioBr
 // Generate builds the briefing for the given matters as of date, reading each
 // matter's most recent report from the corpus.
 func (b *PortfolioBriefer) Generate(matters []MatterRef, corpus *Corpus, date string) (*PortfolioBriefing, error) {
-	if date == "" {
-		date = time.Now().UTC().Format("2006-01-02")
-	}
+	date = safeDate(date) // guards filesystem paths against caller-supplied dates
 	br := &PortfolioBriefing{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Date:        date,
 		MatterCount: len(matters),
 	}
 
+	// One pass over the corpus for every matter's latest report.
+	latest, err := corpus.LatestByMatter()
+	if err != nil {
+		return nil, err
+	}
+
 	for _, m := range matters {
-		line := PortfolioMatterLine{MatterNumber: m.MatterNumber, ClientNumber: m.ClientNumber}
-		if rep, _ := corpus.Latest(m.MatterNumber); rep != nil {
+		line := PortfolioMatterLine{MatterNumber: m.MatterNumber, ClientNumber: m.ClientNumber, HealthSignal: "unknown"}
+		if rep, ok := latest[m.MatterNumber]; ok {
 			line.HealthScore = rep.HealthScore
 			line.HealthSignal = rep.HealthSignal
 			line.BLUF = rep.BLUF
 			line.LastReportDate = rep.Date
 			line.TopRisk = topRisk(rep.Risks)
-		} else {
-			line.HealthSignal = "unknown"
 		}
 		switch line.HealthSignal {
 		case "green":
@@ -89,8 +91,13 @@ func (b *PortfolioBriefer) Generate(matters []MatterRef, corpus *Corpus, date st
 		br.Matters = append(br.Matters, line)
 	}
 
-	// Worst health first so the partner sees the fires at the top.
+	// Worst health first among matters with a report; matters without a report
+	// yet sort to the bottom (an absent report is not evidence of a fire).
 	sort.SliceStable(br.Matters, func(i, j int) bool {
+		ai, aj := br.Matters[i].LastReportDate != "", br.Matters[j].LastReportDate != ""
+		if ai != aj {
+			return ai // reported matters before unreported
+		}
 		return br.Matters[i].HealthScore < br.Matters[j].HealthScore
 	})
 
