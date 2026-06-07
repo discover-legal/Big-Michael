@@ -151,9 +151,21 @@ export class DyTopoEngine {
     // ── Step 6: Agents process — full agentic loops ─────────────────────────
     // allSettled, not all: one agent throwing (e.g. a transient provider error)
     // must not discard every other agent's findings and fail the whole round.
+    // Per-agent wall-clock cap so one hung agent can't stall the whole round.
+    const withTimeout = <T>(p: Promise<T>, agentId: string): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<T>((_, rej) =>
+          setTimeout(
+            () => rej(new Error(`Agent ${agentId} exceeded round timeout`)),
+            Config.agents.roundTimeoutMs,
+          ).unref?.(),
+        ),
+      ]);
+
     const settled = await Promise.allSettled(
       activeAgents.map((agent) =>
-        agent.process({
+        withTimeout(agent.process({
           roundGoal: goal,
           incomingMessages: intraMemory.getMessagesFor(agent.definition.id),
           memoryEntries: agentMemories.get(agent.definition.id) ?? [],
@@ -170,7 +182,7 @@ export class DyTopoEngine {
           responsibleLawyerName: billingCtx?.responsibleLawyerName,
           matterNumber: billingCtx?.matterNumber,
           clientNumber: billingCtx?.clientNumber,
-        }),
+        }), agent.definition.id),
       ),
     );
     const allFindings = settled.flatMap((r, i) => {
