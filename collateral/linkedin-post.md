@@ -1,5 +1,34 @@
 # BigLaw — LinkedIn launch collateral
 
+> Post scope is tracked in `/CHANGELOG.md` — everything above the most recent
+> `📣 POST` marker there is the next post's material.
+
+---
+
+## Go port changelog post
+
+**BigLaw changelog — everything since the rebrand post:**
+
+→ The whole platform is ported to Go. Orchestrator, DyTopo engine, all 131 agents, billing, OCG, budgets, deadlines, dockets, regulatory watch, playbooks, redlining, headnotes, precedents — one static binary that runs on a Raspberry Pi with 4 GB of RAM.
+
+→ Benchmarked against the TypeScript original (same routes, same data, 50 connections): 1.25× on tiny JSON, 3.8× on a 33 KB payload, **6.9× on the 850 KB agent registry** — 864 vs 125 req/s, p50 latency 389 ms → 53 ms. The Go side ran inside a Docker VM; Node ran native.
+
+→ The conflict-of-interest graph moved to a TypeDB sidecar speaking over a Unix domain socket — no TCP, no accidental network exposure.
+
+→ The web UI grew from a single console into a nine-workspace workbench: matters, document library, clients, billing & pre-bills, budgets & deadlines, a watchtower for docket and regulatory alerts, a drafting studio, analytics, and admin.
+
+→ Remy — the client-advocate agent from the CNTXT hackathon project — is now wired in. Her advocacy brief travels with the matter, and when a finding hits human review, the gate shows her note: does this align with what the client actually said they wanted? Toggleable firm-wide and per-lawyer, because not everyone wants hints at every step.
+
+→ Audit got split: a personal activity rail for every user, a filterable firm-wide browser for partners.
+
+The short version: BigLaw now runs end-to-end on hardware that costs less than a billable hour, measurably faster than before, with the client's own voice reaching the review loop. Benchmark methodology and repro steps are in the repo (`docs/benchmarks-go-vs-ts.md`) — run it yourself.
+
+AGPL-3.0, as always. Link in comments.
+
+#LegalAI #LegalTech #OpenSource #Golang #BigLaw
+
+**Carousel:** go-port-00-benchmark-chart → go-port-07-remy-audit-trail → go-port-04-budgets-deadlines → go-port-03-billing → go-port-09-remy-portal
+
 ---
 
 ## Cost chart post — AIDA · ABC · Do Likewise
