@@ -54,12 +54,19 @@ type DocuSealPublic struct {
 	APIKeySet bool   `json:"apiKeySet"`
 }
 
+// ClientVoiceSettings governs the Remy/CNTXT client-advocate integration.
+type ClientVoiceSettings struct {
+	GateNotes           bool `json:"gateNotes"`
+	MatterNotifications bool `json:"matterNotifications"`
+}
+
 // PublicSettings is the GET /settings (and PUT /settings) response.
 type PublicSettings struct {
-	Presentation Presentation   `json:"presentation"`
-	DyTopo       DyTopo         `json:"dytopo"`
-	Debate       Debate         `json:"debate"`
-	DocuSeal     DocuSealPublic `json:"docuseal"`
+	Presentation Presentation        `json:"presentation"`
+	DyTopo       DyTopo              `json:"dytopo"`
+	Debate       Debate              `json:"debate"`
+	DocuSeal     DocuSealPublic      `json:"docuseal"`
+	ClientVoice  ClientVoiceSettings `json:"clientVoice"`
 }
 
 // persisted is the on-disk file shape: full settings including the API key.
@@ -72,6 +79,7 @@ type persisted struct {
 		URL     string `json:"url"`
 		APIKey  string `json:"apiKey"`
 	} `json:"docuseal"`
+	ClientVoice ClientVoiceSettings `json:"clientVoice"`
 }
 
 // Patch is a deep-partial update; nil fields are left unchanged. Numeric
@@ -97,6 +105,10 @@ type Patch struct {
 		URL     *string `json:"url"`
 		APIKey  *string `json:"apiKey"`
 	} `json:"docuseal"`
+	ClientVoice *struct {
+		GateNotes           *bool `json:"gateNotes"`
+		MatterNotifications *bool `json:"matterNotifications"`
+	} `json:"clientVoice"`
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -181,6 +193,10 @@ func (s *SettingsStore) public() PublicSettings {
 			URL:       c.DocuSeal.URL,
 			APIKeySet: c.DocuSeal.APIKey != "",
 		},
+		ClientVoice: ClientVoiceSettings{
+			GateNotes:           c.ClientVoice.GateNotes,
+			MatterNotifications: c.ClientVoice.MatterNotifications,
+		},
 	}
 }
 
@@ -247,6 +263,14 @@ func (s *SettingsStore) apply(p Patch, validateURL bool) {
 			c.DocuSeal.APIKey = strings.TrimSpace(*v)
 		}
 	}
+	if p.ClientVoice != nil {
+		if v := p.ClientVoice.GateNotes; v != nil {
+			c.ClientVoice.GateNotes = *v
+		}
+		if v := p.ClientVoice.MatterNotifications; v != nil {
+			c.ClientVoice.MatterNotifications = *v
+		}
+	}
 }
 
 // persist writes the full current settings (including the API key) to disk
@@ -269,6 +293,10 @@ func (s *SettingsStore) persist() error {
 	p.DocuSeal.Enabled = c.DocuSeal.Enabled
 	p.DocuSeal.URL = c.DocuSeal.URL
 	p.DocuSeal.APIKey = c.DocuSeal.APIKey
+	p.ClientVoice = ClientVoiceSettings{
+		GateNotes:           c.ClientVoice.GateNotes,
+		MatterNotifications: c.ClientVoice.MatterNotifications,
+	}
 
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {

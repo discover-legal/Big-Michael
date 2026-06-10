@@ -56,6 +56,8 @@ export interface GateRequest {
   finding: Finding;
   status: "pending" | "approved" | "rejected";
   reviewerNote?: string;
+  /** Remy's client-advocate read on this finding (from the CNTXT advocacy brief). */
+  clientVoiceNote?: string;
   createdAt: string;
   reviewedAt?: string;
 }
@@ -285,6 +287,7 @@ export interface AppSettings {
   dytopo: { maxRounds: number; maxAgentsPerRound: number; similarityThreshold: number };
   debate: { verificationPasses: number; gateConfidenceThreshold: number; adversarialEnabled: boolean; citationRequired: boolean };
   docuseal: { enabled: boolean; url: string; apiKeySet: boolean };
+  clientVoice: { gateNotes: boolean; matterNotifications: boolean };
 }
 
 export interface AgentSummary {

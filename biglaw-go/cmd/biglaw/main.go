@@ -27,6 +27,7 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/audit"
 	"github.com/discover-legal/biglaw-go/internal/auth"
 	"github.com/discover-legal/biglaw-go/internal/clients"
+	"github.com/discover-legal/biglaw-go/internal/clientvoice"
 	"github.com/discover-legal/biglaw-go/internal/config"
 	"github.com/discover-legal/biglaw-go/internal/cost"
 	"github.com/discover-legal/biglaw-go/internal/embeddings"
@@ -146,6 +147,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "orchestrator init: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Client-voice store (Remy / CNTXT advocacy briefs + matter notifications).
+	clientVoiceStore := clientvoice.New(cfg.Persistence.ClientVoiceFile)
+	if err := clientVoiceStore.Init(); err != nil {
+		fmt.Fprintf(os.Stderr, "client voice init: %v\n", err)
+	}
+	orch.SetClientVoiceStore(clientVoiceStore)
 
 	mode := os.Getenv("BIG_MICHAEL_MODE")
 	if mode == "" {

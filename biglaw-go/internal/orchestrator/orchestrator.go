@@ -28,6 +28,7 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/knowledge"
 	"github.com/discover-legal/biglaw-go/internal/learning"
 	"github.com/discover-legal/biglaw-go/internal/memory"
+	"github.com/discover-legal/biglaw-go/internal/clientvoice"
 	"github.com/discover-legal/biglaw-go/internal/protocols"
 	"github.com/discover-legal/biglaw-go/internal/providers"
 	"github.com/discover-legal/biglaw-go/internal/routing"
@@ -78,6 +79,9 @@ type Orchestrator struct {
 	time      *timekeeping.TimeStore
 	learning  *learning.Engine
 	tools     agents.ToolRegistry
+	// clientVoice is optional (set via SetClientVoiceStore): the per-matter
+	// advocacy brief pushed by the client-facing agent (Remy / CNTXT).
+	clientVoice *clientvoice.Store
 
 	// rootAgent is used for round goal generation and synthesis.
 	rootAgentDef types.AgentDefinition
@@ -306,6 +310,17 @@ func (o *Orchestrator) SubmitTask(params SubmitParams) (*types.Task, error) {
 // Settings exposes the admin settings store (backing GET/PUT /settings).
 func (o *Orchestrator) Settings() *settings.SettingsStore {
 	return o.settings
+}
+
+// SetClientVoiceStore attaches the client-voice store. Optional: without it
+// gates simply carry no client-voice note.
+func (o *Orchestrator) SetClientVoiceStore(cv *clientvoice.Store) {
+	o.clientVoice = cv
+}
+
+// ClientVoice exposes the client-voice store (may be nil).
+func (o *Orchestrator) ClientVoice() *clientvoice.Store {
+	return o.clientVoice
 }
 
 // Providers exposes the model provider registry for API-layer engines
@@ -685,12 +700,90 @@ func (o *Orchestrator) runPhase(task *types.Task, phase types.TaskPhase) error {
 	task.Findings = append(task.Findings, debated...)
 
 	gates := o.protocols.IdentifyGates(task.ID, debated)
+	o.annotateGatesWithClientVoice(task, gates)
 	task.PendingGates = append(task.PendingGates, gates...)
 
 	task.UpdatedAt = time.Now()
 	emitProgress(task.ID, "round", map[string]interface{}{"round": task.CurrentRound, "phase": phase, "findings": len(debated), "gates": len(gates)})
 	audit.Default.Write(audit.WriteRequest{Event: "phase.complete", ActorID: audit.ActorSystem, TaskID: task.ID, Data: map[string]interface{}{"phase": phase, "findings": len(debated), "gates": len(gates)}})
 	return nil
+}
+
+// annotateGatesWithClientVoice attaches Remy's client-advocacy read to each
+// gate when the matter has an advocacy brief. With a provider available the
+// note is a Haiku assessment of the finding against the client's stated
+// goals; if the model call fails the brief itself is attached verbatim so
+// the reviewer still sees the client's voice.
+func (o *Orchestrator) annotateGatesWithClientVoice(task *types.Task, gates []types.GateRequest) {
+	// Admin-toggleable: some lawyers don't want client-voice hints at gates.
+	if !o.cfg.ClientVoice.GateNotes {
+		return
+	}
+	if o.clientVoice == nil || task.MatterNumber == "" || len(gates) == 0 {
+		return
+	}
+	voice := o.clientVoice.Voice(task.MatterNumber)
+	if voice == nil || len(voice.Entries) == 0 {
+		return
+	}
+	lines := make([]string, 0, len(voice.Entries))
+	for _, e := range voice.Entries {
+		lines = append(lines, fmt.Sprintf("- [%s] %s", e.Category, e.Note))
+	}
+	brief := strings.Join(lines, "\n")
+
+	for i := range gates {
+		note := o.assessClientVoice(task, brief, gates[i].Finding)
+		if note == "" {
+			note = "Client's stated position (via Remy, the client advocate):\n" + brief
+		}
+		gates[i].ClientVoiceNote = note
+	}
+}
+
+// assessClientVoice asks Haiku, speaking as the client's advocate, whether a
+// gated finding aligns with or cuts against the client's stated goals.
+// Returns "" on any failure — the caller falls back to the verbatim brief.
+func (o *Orchestrator) assessClientVoice(task *types.Task, brief string, f types.Finding) string {
+	tier := types.TierTool
+	model := routing.SelectModel(o.cfg, routing.SelectParams{
+		Tier:     &tier,
+		TaskType: routing.TaskVerification,
+	})
+	prov, err := o.provReg.Get(model)
+	if err != nil {
+		return ""
+	}
+	prompt := fmt.Sprintf(`THE CLIENT'S STATED POSITION (captured during intake, in their own words):
+%s
+
+A FINDING ON THEIR MATTER IS AWAITING HUMAN REVIEW:
+%s
+
+In 2-3 sentences, tell the reviewing lawyer how this finding sits with what
+the client actually wants: flag any conflict with their goals, concerns,
+constraints, or preferences, or confirm alignment. Be concrete and cite the
+client's own words where useful. Do not restate the finding.`, brief, f.Content)
+
+	resp, err := prov.Chat(providers.ChatParams{
+		Model:     routing.ResolveModelID(model),
+		MaxTokens: 250,
+		System: "You are Remy, the client's advocate. You do not work for the firm — " +
+			"you speak for the client. Your notes help the reviewing lawyer serve " +
+			"the client's actual interests.",
+		Messages:    []providers.Message{{Role: "user", Content: prompt}},
+		CacheSystem: true,
+	})
+	if err != nil {
+		return ""
+	}
+	o.recordCost(resp, routing.ResolveModelID(model), cost.ContextClientVoice, task.ID)
+	for _, b := range resp.Content {
+		if b.Type == providers.BlockText {
+			return strings.TrimSpace(b.Text)
+		}
+	}
+	return ""
 }
 
 func (o *Orchestrator) generateRoundGoal(task *types.Task, phase types.TaskPhase) (types.RoundGoal, error) {

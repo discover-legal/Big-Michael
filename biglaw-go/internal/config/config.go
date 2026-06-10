@@ -124,6 +124,17 @@ type DocuSealConfig struct {
 	Enabled bool
 }
 
+// ClientVoiceConfig governs the Remy/CNTXT client-advocate integration.
+// Both knobs are admin-panel tunable (settings store overlay).
+type ClientVoiceConfig struct {
+	// GateNotes: attach Remy's client-advocacy read to human gates.
+	GateNotes bool
+	// MatterNotifications: fan client-side messages out to linked
+	// Teams/Slack channels. When off, notifications are still stored and
+	// audited — they just don't ping anyone.
+	MatterNotifications bool
+}
+
 type LocalConfig struct {
 	OllamaURL             string
 	OllamaEnabled         bool
@@ -154,9 +165,10 @@ type PersistenceConfig struct {
 	LearningFile string
 	OcgFile      string
 	JobsFile     string
-	PreBillsFile  string
-	CostFile      string
-	PlaybooksFile string
+	PreBillsFile    string
+	CostFile        string
+	PlaybooksFile   string
+	ClientVoiceFile string
 }
 
 type QueueConfig struct {
@@ -259,6 +271,7 @@ type Config struct {
 	Debate        DebateConfig
 	Presentation  PresentationConfig
 	DocuSeal      DocuSealConfig
+	ClientVoice   ClientVoiceConfig
 	Local         LocalConfig
 	PDF           PDFConfig
 	Persistence   PersistenceConfig
@@ -327,6 +340,10 @@ func Load() *Config {
 			// admin panel can toggle it and set url/key at runtime.
 			Enabled: envBool("DOCUSEAL_ENABLED", os.Getenv("DOCUSEAL_API_KEY") != ""),
 		},
+		ClientVoice: ClientVoiceConfig{
+			GateNotes:           envBool("CLIENT_VOICE_GATE_NOTES", true),
+			MatterNotifications: envBool("CLIENT_VOICE_NOTIFICATIONS", true),
+		},
 		Local: LocalConfig{
 			OllamaURL:           env("OLLAMA_URL", "http://localhost:11434"),
 			OllamaEnabled:       envBool("OLLAMA_ENABLED", false),
@@ -357,6 +374,7 @@ func Load() *Config {
 			PreBillsFile:  env("PREBILLS_FILE", "./data/prebills.json"),
 			CostFile:      env("COST_LOG_FILE", "./data/costs.jsonl"),
 			PlaybooksFile: env("PLAYBOOKS_FILE", "./data/playbooks.json"),
+			ClientVoiceFile: env("CLIENT_VOICE_FILE", "./data/clientvoice.json"),
 		},
 		Queue: QueueConfig{
 			Concurrency:    envInt("QUEUE_CONCURRENCY", 3),

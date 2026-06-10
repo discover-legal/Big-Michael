@@ -163,6 +163,7 @@ func New(
 	s.registerOpsRoutes(r)      // dockets, regulatory, reports, jobs, plugins, memory
 	s.registerEnginesRoutes(r)  // playbooks, redline, headnotes, precedents, citations, briefing
 	s.registerContentRoutes(r)  // document library/upload, table.csv, profile cost, tone
+	s.registerRemyRoutes(r)     // client-voice briefs + matter notifications (Remy/CNTXT)
 
 	s.router = r
 	return s
@@ -1120,9 +1121,7 @@ func (s *Server) handleCostSummary(c *gin.Context) {
 func (s *Server) handleAudit(c *gin.Context) {
 	u := getUser(c)
 
-	taskID := c.Query("taskId")
-	limitStr := c.DefaultQuery("limit", "200")
-	limit, err := strconv.Atoi(limitStr)
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "200"))
 	if err != nil || limit < 1 {
 		limit = 200
 	}
@@ -1130,25 +1129,18 @@ func (s *Server) handleAudit(c *gin.Context) {
 		limit = 1000
 	}
 
-	// Non-partners may only query audit entries for tasks they can see.
-	// We apply a simple taskID restriction: if not partner and no taskID provided,
-	// return only entries that would be visible (via task access). For simplicity,
-	// non-partners must supply a taskId.
-	if !auth.IsPartner(u) && taskID == "" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "taskId query parameter required for non-partner access"})
-		return
+	f := audit.Filter{
+		TaskID:  c.Query("taskId"),
+		ActorID: c.Query("actorId"),
+		Event:   c.Query("event"),
+		Limit:   limit,
+	}
+	// Lawyers see only their own actions; partners may browse anyone's.
+	if !auth.IsPartner(u) {
+		f.ActorID = u.ProfileID
 	}
 
-	if !auth.IsPartner(u) && taskID != "" {
-		// Verify the caller can see this task.
-		task := s.orch.GetTask(taskID)
-		if task == nil || (!auth.CanViewTask(u, task.AssignedLawyerIDs) && task.CreatedByProfileID != u.ProfileID) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
-			return
-		}
-	}
-
-	entries := audit.Default.ReadRecent(taskID, limit)
+	entries := audit.Default.ReadFiltered(f)
 	if entries == nil {
 		entries = []audit.AuditEntry{}
 	}
@@ -1159,18 +1151,11 @@ func (s *Server) handleAudit(c *gin.Context) {
 func (s *Server) handleAuditStream(c *gin.Context) {
 	u := getUser(c)
 	taskID := c.Query("taskId")
+	actorID := c.Query("actorId")
 
-	if !auth.IsPartner(u) && taskID == "" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "taskId query parameter required for non-partner access"})
-		return
-	}
-
-	if !auth.IsPartner(u) && taskID != "" {
-		task := s.orch.GetTask(taskID)
-		if task == nil || (!auth.CanViewTask(u, task.AssignedLawyerIDs) && task.CreatedByProfileID != u.ProfileID) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
-			return
-		}
+	// Lawyers stream only their own actions; partners may follow anyone's.
+	if !auth.IsPartner(u) {
+		actorID = u.ProfileID
 	}
 
 	c.Header("Content-Type", "text/event-stream")
@@ -1201,6 +1186,9 @@ func (s *Server) handleAuditStream(c *gin.Context) {
 				return
 			}
 			if taskID != "" && entry.TaskID != taskID {
+				continue
+			}
+			if actorID != "" && entry.ActorID != actorID {
 				continue
 			}
 			writeSSE(entry)

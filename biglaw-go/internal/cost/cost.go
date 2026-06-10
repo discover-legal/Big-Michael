@@ -28,6 +28,7 @@ const (
 	ContextToneAnalysis  CostContext = "tone_analysis"
 	ContextClassification CostContext = "classification"
 	ContextEntrySummarize CostContext = "entry_summarize"
+	ContextClientVoice    CostContext = "client_voice"
 )
 
 type CostEntry struct {

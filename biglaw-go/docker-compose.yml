@@ -48,6 +48,7 @@ services:
       LEARNING_FILE: /app/data/.qtable.json
       OCG_FILE: /app/data/.ocg.json
       JOBS_FILE: /app/data/.jobs.json
+      AUDIT_LOG_FILE: /app/data/audit.jsonl
       DEADLINES_RULES_DIR: /app/deadlines/rules
     ports:
       - "3102:3101"

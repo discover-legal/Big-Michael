@@ -194,8 +194,43 @@ type GateRequest struct {
 	Finding      Finding   `json:"finding"`
 	Status       string    `json:"status"`
 	ReviewerNote string    `json:"reviewerNote,omitempty"`
+	// ClientVoiceNote is Remy's read on this finding against the client's
+	// stated goals/concerns (from the CNTXT advocacy brief). Shown to the
+	// human reviewer alongside the finding.
+	ClientVoiceNote string    `json:"clientVoiceNote,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	ReviewedAt   *time.Time `json:"reviewedAt,omitempty"`
+}
+
+// ─── Client voice (Remy / CNTXT advocacy) ─────────────────────────────────────
+
+// ClientVoiceEntry is one advocacy observation captured by the client-facing
+// agent: a goal, concern, constraint, or preference in the client's words.
+type ClientVoiceEntry struct {
+	Category string `json:"category"` // goal | concern | constraint | preference
+	Note     string `json:"note"`
+	At       string `json:"at,omitempty"`
+}
+
+// ClientVoice is the per-matter advocacy brief pushed by the client-facing
+// agent (Remy). It travels with the matter and is surfaced at human gates.
+type ClientVoice struct {
+	MatterNumber string             `json:"matterNumber"`
+	ClientID     string             `json:"clientId,omitempty"`
+	Source       string             `json:"source"` // e.g. "remy"
+	Entries      []ClientVoiceEntry `json:"entries"`
+	UpdatedAt    time.Time          `json:"updatedAt"`
+}
+
+// MatterNotification is a message posted to a matter by an external agent
+// or integration (Remy, CNTXT, bots). Fanned out to linked Teams/Slack
+// channels when configured; always stored and audited.
+type MatterNotification struct {
+	ID           string    `json:"id"`
+	MatterNumber string    `json:"matterNumber"`
+	Source       string    `json:"source"`
+	Message      string    `json:"message"`
+	At           time.Time `json:"at"`
 }
 
 // ─── Task management ─────────────────────────────────────────────────────────

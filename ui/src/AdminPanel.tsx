@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { api } from "./api";
-import type { AppSettings, Job, JobStatus, LawyerProfile, QueueStats, UserMode } from "./types";
+import type { AppSettings, AuditEntry, Job, JobStatus, LawyerProfile, QueueStats, UserMode } from "./types";
 import { PRACTICE_AREAS, MODE_LABEL } from "./types";
 import { ToneImportModal } from "./ToneImportModal";
 import { ErrorState } from "./Library";
 import { timeAgo } from "./primitives";
+import { tone, auditSummary } from "./AuditRail";
 
 export function AdminPanel({ notify, isPartner, profiles, onProfilesChange, me }: {
   notify: (m: string) => void;
@@ -15,7 +16,7 @@ export function AdminPanel({ notify, isPartner, profiles, onProfilesChange, me }
   const [s, setS] = useState<AppSettings | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"users" | "settings" | "jobs">(isPartner ? "users" : "settings");
+  const [tab, setTab] = useState<"users" | "settings" | "jobs" | "audit">(isPartner ? "users" : "settings");
   const [np, setNp] = useState({ name: "", email: "", role: "lawyer", title: "", practiceAreas: [] as string[], bio: "" });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPatch, setEditPatch] = useState<Partial<LawyerProfile>>({});
@@ -36,6 +37,7 @@ export function AdminPanel({ notify, isPartner, profiles, onProfilesChange, me }
         dytopo: s.dytopo,
         debate: s.debate,
         docuseal: { enabled: s.docuseal.enabled, url: s.docuseal.url, ...(apiKey ? { apiKey } : {}) },
+        clientVoice: s.clientVoice,
       });
       setS(next); setApiKey("");
       notify("Settings saved — applied live");
@@ -100,6 +102,11 @@ export function AdminPanel({ notify, isPartner, profiles, onProfilesChange, me }
           {isPartner && (
             <button className={`tab ${tab === "jobs" ? "active" : ""}`} onClick={() => setTab("jobs")}>
               Jobs {tab === "jobs" && <motion.span layoutId="adm-ul" className="tab-underline" />}
+            </button>
+          )}
+          {isPartner && (
+            <button className={`tab ${tab === "audit" ? "active" : ""}`} onClick={() => setTab("audit")}>
+              Audit {tab === "audit" && <motion.span layoutId="adm-ul" className="tab-underline" />}
             </button>
           )}
         </div>
@@ -307,6 +314,25 @@ export function AdminPanel({ notify, isPartner, profiles, onProfilesChange, me }
               <label className="check"><input type="checkbox" checked={s.debate.citationRequired} onChange={(e) => patch("debate", "citationRequired", e.target.checked)} /> Require citations (CitationGate)</label>
             </div>
 
+            {/* ── Remy · client voice ─────────────────────────────────────── */}
+            <div className="admin-section">
+              <div className="admin-section-title">Remy · client voice</div>
+              <label className="check">
+                <input type="checkbox" checked={s.clientVoice?.gateNotes ?? true}
+                  onChange={(e) => patch("clientVoice", "gateNotes", e.target.checked)} />
+                Attach Remy&apos;s client-advocacy notes to review gates
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={s.clientVoice?.matterNotifications ?? true}
+                  onChange={(e) => patch("clientVoice", "matterNotifications", e.target.checked)} />
+                Fan client-side notifications out to linked Teams/Slack channels
+              </label>
+              <p style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 6 }}>
+                Firm-wide switches. Notifications are always stored and audited — these only control alerts and gate hints.
+                Each lawyer can also hide Remy&apos;s notes for themselves from the gate card.
+              </p>
+            </div>
+
             {/* ── DocuSeal ────────────────────────────────────────────────── */}
             <div className="admin-section">
               <div className="admin-section-title">DocuSeal · e-signature</div>
@@ -331,6 +357,12 @@ export function AdminPanel({ notify, isPartner, profiles, onProfilesChange, me }
         {tab === "jobs" && isPartner && (
           <div className="panel-body">
             <JobsPanel notify={notify} />
+          </div>
+        )}
+
+        {tab === "audit" && isPartner && (
+          <div className="panel-body">
+            <AuditBrowserPanel profiles={profiles} />
           </div>
         )}
       </div>
@@ -435,6 +467,105 @@ function JobsPanel({ notify }: { notify: (m: string) => void }) {
                         </button>
                       )}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Audit browser ────────────────────────────────────────────────────────────
+// Partner-only firm-wide audit log: browsable and filterable. (Each user's
+// personal feed lives in the right-hand activity rail.)
+
+function fullTs(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function AuditBrowserPanel({ profiles }: { profiles: LawyerProfile[] }) {
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [event, setEvent] = useState("");
+  const [actorId, setActorId] = useState("");
+  const [taskId, setTaskId] = useState("");
+  const [limit, setLimit] = useState(200);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    api.recentAudit(limit, {
+      event: event.trim() || undefined,
+      actorId: actorId || undefined,
+      taskId: taskId.trim() || undefined,
+    })
+      .then((list) => setEntries([...list].reverse())) // server is oldest-first
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setLoading(false));
+  }, [event, actorId, taskId, limit]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const profileName = (id: string) =>
+    profiles.find((p) => p.id === id)?.name ?? id;
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+        <div className="field" style={{ minWidth: 180 }}>
+          <label>Event prefix</label>
+          <input value={event} placeholder="e.g. task. / gate. / settings." onChange={(e) => setEvent(e.target.value)} />
+        </div>
+        <div className="field" style={{ minWidth: 170 }}>
+          <label>Actor</label>
+          <select value={actorId} onChange={(e) => setActorId(e.target.value)}>
+            <option value="">All actors</option>
+            <option value="system">system</option>
+            <option value="anonymous">anonymous</option>
+            {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ minWidth: 160 }}>
+          <label>Task ID</label>
+          <input value={taskId} placeholder="filter by task" onChange={(e) => setTaskId(e.target.value)} />
+        </div>
+        <div className="field" style={{ width: 90 }}>
+          <label>Limit</label>
+          <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+            {[100, 200, 500, 1000].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        <button className="btn ghost sm" style={{ marginBottom: 6 }} onClick={load}>↻ Refresh</button>
+      </div>
+
+      {loading && <div className="placeholder">Loading audit log…</div>}
+      {error && <ErrorState message={error} onRetry={load} />}
+      {!loading && !error && entries.length === 0 && (
+        <div className="placeholder">No audit entries match these filters.</div>
+      )}
+      {!loading && !error && entries.length > 0 && (
+        <div className="grid-wrap">
+          <div className="grid-scroll">
+            <table className="grid">
+              <thead>
+                <tr><th>Time</th><th>Event</th><th>Actor</th><th>Task</th><th>Details</th></tr>
+              </thead>
+              <tbody>
+                {entries.map((e) => (
+                  <tr key={e.id}>
+                    <td style={{ whiteSpace: "nowrap", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-dim)" }}>{fullTs(e.ts)}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <span style={{ color: tone(e.event), fontFamily: "var(--font-mono)", fontSize: 12 }}>{e.event}</span>
+                    </td>
+                    <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{e.actorId ? profileName(e.actorId) : "—"}</td>
+                    <td style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>{e.taskId ? e.taskId.slice(0, 8) : "—"}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-dim)", maxWidth: 380, wordBreak: "break-word" }}>{auditSummary(e) || "—"}</td>
                   </tr>
                 ))}
               </tbody>
