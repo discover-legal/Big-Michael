@@ -86,7 +86,13 @@ interface SyncBody {
 app.post<{ Body: SyncBody }>("/sync", async (req, reply) => {
   if (!(await ensureConnected())) return reply.status(503).send({ error: "TypeDB not connected" });
   try {
-    await graph.syncFromClients(req.body.clients, req.body.matters);
+    // The Go core marshals empty slices as null — normalise at the boundary.
+    const clients = (req.body.clients ?? []).map((c) => ({
+      ...c,
+      adversaries: c.adversaries ?? [],
+      matters: c.matters ?? [],
+    }));
+    await graph.syncFromClients(clients, req.body.matters ?? []);
     return { ok: true };
   } catch (err) {
     return reply.status(500).send({ error: (err as Error).message });

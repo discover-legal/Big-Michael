@@ -303,6 +303,32 @@ func (o *Orchestrator) SubmitTask(params SubmitParams) (*types.Task, error) {
 	return task, nil
 }
 
+// Settings exposes the admin settings store (backing GET/PUT /settings).
+func (o *Orchestrator) Settings() *settings.SettingsStore {
+	return o.settings
+}
+
+// Providers exposes the model provider registry for API-layer engines
+// (redline, headnotes, precedents, reports) that make their own model calls.
+func (o *Orchestrator) Providers() *providers.Registry {
+	return o.provReg
+}
+
+// Costs exposes the cost store for API-layer engines.
+func (o *Orchestrator) Costs() *cost.Store {
+	return o.costs
+}
+
+// MemoryStore exposes the inter-round memory store (backing POST /memory/query).
+func (o *Orchestrator) MemoryStore() *memory.InterRoundStore {
+	return o.memStore
+}
+
+// Templates exposes the template store.
+func (o *Orchestrator) Templates() *templates.Store {
+	return o.templates
+}
+
 func (o *Orchestrator) GetTask(id string) *types.Task {
 	o.mu.RLock()
 	defer o.mu.RUnlock()

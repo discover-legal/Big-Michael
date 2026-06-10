@@ -126,6 +126,75 @@ func (s *TimeStore) UpdateDescription(id, desc string) {
 	s.persist()
 }
 
+// SetSuggestions replaces the OCG suggestions on an entry and stamps
+// OcgCheckedAt. A missing ID is a no-op (mirrors the TS store).
+func (s *TimeStore) SetSuggestions(entryID string, suggestions []types.OcgSuggestion) {
+	s.mu.Lock()
+	for i := range s.entries {
+		if s.entries[i].ID == entryID {
+			s.entries[i].OcgSuggestions = suggestions
+			s.entries[i].OcgCheckedAt = time.Now().UTC().Format(time.RFC3339)
+			break
+		}
+	}
+	s.mu.Unlock()
+	s.persist()
+}
+
+// AcceptSuggestion rewrites the entry description from the suggestion and
+// marks it accepted. Returns the updated entry, or nil if entry or
+// suggestion is not found.
+func (s *TimeStore) AcceptSuggestion(entryID, ruleID string) *types.TimeEntry {
+	s.mu.Lock()
+	var updated *types.TimeEntry
+	for i := range s.entries {
+		if s.entries[i].ID != entryID {
+			continue
+		}
+		for j := range s.entries[i].OcgSuggestions {
+			if s.entries[i].OcgSuggestions[j].RuleID == ruleID {
+				s.entries[i].Description = s.entries[i].OcgSuggestions[j].SuggestedDescription
+				s.entries[i].OcgSuggestions[j].Status = "accepted"
+				cp := s.entries[i]
+				updated = &cp
+				break
+			}
+		}
+		break
+	}
+	s.mu.Unlock()
+	if updated != nil {
+		s.persist()
+	}
+	return updated
+}
+
+// DismissSuggestion marks a suggestion dismissed without changing the
+// description. Returns the updated entry, or nil if not found.
+func (s *TimeStore) DismissSuggestion(entryID, ruleID string) *types.TimeEntry {
+	s.mu.Lock()
+	var updated *types.TimeEntry
+	for i := range s.entries {
+		if s.entries[i].ID != entryID {
+			continue
+		}
+		for j := range s.entries[i].OcgSuggestions {
+			if s.entries[i].OcgSuggestions[j].RuleID == ruleID {
+				s.entries[i].OcgSuggestions[j].Status = "dismissed"
+				cp := s.entries[i]
+				updated = &cp
+				break
+			}
+		}
+		break
+	}
+	s.mu.Unlock()
+	if updated != nil {
+		s.persist()
+	}
+	return updated
+}
+
 // List returns a filtered snapshot of entries. All filter fields are optional;
 // a zero value means "no constraint on this field".
 func (s *TimeStore) List(filter TimeFilter) []types.TimeEntry {

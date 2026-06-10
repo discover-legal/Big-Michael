@@ -29,6 +29,7 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/graph"
 	"github.com/discover-legal/biglaw-go/internal/knowledge"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
+	"github.com/discover-legal/biglaw-go/internal/settings"
 	"github.com/discover-legal/biglaw-go/internal/timekeeping"
 	"github.com/discover-legal/biglaw-go/internal/types"
 )
@@ -47,6 +48,7 @@ type Server struct {
 	costs     *cost.Store
 	graph     *graph.Client
 	router    *gin.Engine
+	started   time.Time
 }
 
 // New creates a Server, registers all routes, and returns it.
@@ -71,6 +73,7 @@ func New(
 		registry:  registry,
 		costs:     costStore,
 		graph:     graph.New(),
+		started:   time.Now(),
 	}
 
 	// Push the current roster into the TypeDB conflict graph if the sidecar
@@ -85,6 +88,10 @@ func New(
 	// ── Health ────────────────────────────────────────────────────────────
 	r.GET("/health", s.handleHealth)
 	r.GET("/me", s.handleMe)
+
+	// ── Admin settings ────────────────────────────────────────────────────
+	r.GET("/settings", s.handleGetSettings)
+	r.PUT("/settings", s.handleUpdateSettings)
 
 	// ── Tasks ─────────────────────────────────────────────────────────────
 	tasks := r.Group("/tasks")
@@ -149,6 +156,13 @@ func New(
 	// ── Audit ─────────────────────────────────────────────────────────────
 	r.GET("/audit", s.handleAudit)
 	r.GET("/audit/stream", s.handleAuditStream)
+
+	// ── Domain route groups (one file each under internal/api/) ──────────
+	s.registerBillingRoutes(r)  // pre-bills, invoices, OCG, time exports
+	s.registerMattersRoutes(r)  // budgets, deadlines, matter health, analytics
+	s.registerOpsRoutes(r)      // dockets, regulatory, reports, jobs, plugins, memory
+	s.registerEnginesRoutes(r)  // playbooks, redline, headnotes, precedents, citations, briefing
+	s.registerContentRoutes(r)  // document library/upload, table.csv, profile cost, tone
 
 	s.router = r
 	return s
@@ -230,16 +244,96 @@ func requirePartner(c *gin.Context) bool {
 
 // ─── Health / Me ──────────────────────────────────────────────────────────────
 
+// handleHealth mirrors the TS backend's /health contract — the UI reads
+// version, uptime, and the per-status task counts.
 func (s *Server) handleHealth(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	var running, awaitingGate, complete int
+	all := s.orch.ListTasks()
+	for _, t := range all {
+		switch t.Status {
+		case types.TaskStatusRunning:
+			running++
+		case types.TaskStatusAwaitingGate:
+			awaitingGate++
+		case types.TaskStatusComplete:
+			complete++
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "ok",
+		"ok":      true,
+		"version": "0.1.0",
+		"uptime":  int(time.Since(s.started).Seconds()),
+		"tasks": gin.H{
+			"total":         len(all),
+			"running":       running,
+			"awaiting_gate": awaitingGate,
+			"complete":      complete,
+		},
+	})
 }
 
 func (s *Server) handleMe(c *gin.Context) {
 	u := getUser(c)
+	mode := types.ModeLite
+	if u != nil && u.Mode != "" {
+		mode = u.Mode
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"user":        u,
 		"authEnabled": s.cfg.Auth.Enabled,
+		// Mode metadata the UI needs to theme itself and gate features.
+		"mode":         mode,
+		"modeColor":    types.ModeColors[mode],
+		"capabilities": types.ModeCapabilitySet[mode],
 	})
+}
+
+// ─── Admin settings ───────────────────────────────────────────────────────────
+// Both GET and PUT are partner-only: GET exposes the DocuSeal URL and enabled
+// state; PUT can redirect DocuSeal requests (SSRF) or weaken debate/gate
+// settings.
+
+func (s *Server) handleGetSettings(c *gin.Context) {
+	if !requirePartner(c) {
+		return
+	}
+	c.JSON(http.StatusOK, s.orch.Settings().Get())
+}
+
+func (s *Server) handleUpdateSettings(c *gin.Context) {
+	if !requirePartner(c) {
+		return
+	}
+	var patch settings.Patch
+	if err := c.ShouldBindJSON(&patch); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+	updated, err := s.orch.Settings().Update(patch)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	fields := []string{}
+	if patch.Presentation != nil {
+		fields = append(fields, "presentation")
+	}
+	if patch.DyTopo != nil {
+		fields = append(fields, "dytopo")
+	}
+	if patch.Debate != nil {
+		fields = append(fields, "debate")
+	}
+	if patch.DocuSeal != nil {
+		fields = append(fields, "docuseal")
+	}
+	audit.Default.Write(audit.WriteRequest{
+		Event:   "settings.updated",
+		ActorID: getUser(c).ProfileID,
+		Data:    map[string]interface{}{"fields": fields},
+	})
+	c.JSON(http.StatusOK, updated)
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────
@@ -329,7 +423,7 @@ func (s *Server) handleDeleteTask(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": true})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 type assignBody struct {
@@ -494,7 +588,7 @@ func (s *Server) handleApproveGate(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"approved": true})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 type rejectGateBody struct {
@@ -520,7 +614,7 @@ func (s *Server) handleRejectGate(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"rejected": true})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // ─── Task cost ────────────────────────────────────────────────────────────────
@@ -539,6 +633,11 @@ func (s *Server) handleTaskCost(c *gin.Context) {
 	}
 
 	entries := s.costs.ForTask(taskID)
+	if entries == nil {
+		// Summarise(nil) aggregates the whole store — an empty task must
+		// report zeros, not firm-wide totals.
+		entries = []cost.CostEntry{}
+	}
 	summary := s.costs.Summarise(entries)
 	c.JSON(http.StatusOK, gin.H{
 		"taskId":  taskID,
@@ -755,7 +854,7 @@ func (s *Server) handleDeleteProfile(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": true})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // ─── Clients ──────────────────────────────────────────────────────────────────
@@ -830,7 +929,7 @@ func (s *Server) handleDeleteClient(c *gin.Context) {
 		return
 	}
 	go s.syncGraph()
-	c.JSON(http.StatusOK, gin.H{"deleted": true})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 type addMatterBody struct {
@@ -880,7 +979,7 @@ func (s *Server) handleRemoveMatter(c *gin.Context) {
 		return
 	}
 	go s.syncGraph()
-	c.JSON(http.StatusOK, gin.H{"deleted": true})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 type checkConflictBody struct {
@@ -929,8 +1028,17 @@ func (s *Server) handleClientGraphConflicts(c *gin.Context) {
 
 // syncGraph pushes the full client/matter roster to the TypeDB sidecar.
 // Best-effort: failure is logged, the substring conflict check still works.
+// The sidecar creates its socket asynchronously at container start, so the
+// initial ping retries with backoff instead of giving up on the first miss.
 func (s *Server) syncGraph() {
-	if err := s.graph.Ping(); err != nil {
+	var err error
+	for attempt, wait := 0, time.Second; attempt < 6; attempt, wait = attempt+1, wait*2 {
+		if err = s.graph.Ping(); err == nil {
+			break
+		}
+		time.Sleep(wait)
+	}
+	if err != nil {
 		slog.Warn("conflict graph: sidecar unreachable, graph conflicts disabled", "err", err)
 		return
 	}

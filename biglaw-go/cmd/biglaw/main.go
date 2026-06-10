@@ -112,7 +112,7 @@ func main() {
 	}
 
 	// Build settings, profiles, clients, time stores.
-	settingsStore := settings.NewSettingsStore(cfg.Persistence.SettingsFile)
+	settingsStore := settings.NewSettingsStore(cfg, cfg.Persistence.SettingsFile)
 	profileStore := auth.NewProfileStore(cfg)
 	clientStore := clients.NewClientStore()
 	timeStore := timekeeping.NewTimeStore()

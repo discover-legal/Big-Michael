@@ -39,6 +39,16 @@ services:
       BIG_MICHAEL_MODE: backend
       RUVECTOR_DATA_DIR: /app/data
       TYPEDB_SOCKET: /run/biglaw/typedb.sock
+      # State files live inside the data volume so they survive rebuilds.
+      SETTINGS_FILE: /app/data/.settings.json
+      TASKS_FILE: /app/data/.tasks.json
+      PROFILES_FILE: /app/data/.profiles.json
+      CLIENTS_FILE: /app/data/.clients.json
+      TIME_FILE: /app/data/.time-entries.json
+      LEARNING_FILE: /app/data/.qtable.json
+      OCG_FILE: /app/data/.ocg.json
+      JOBS_FILE: /app/data/.jobs.json
+      DEADLINES_RULES_DIR: /app/deadlines/rules
     ports:
       - "3102:3101"
     volumes:

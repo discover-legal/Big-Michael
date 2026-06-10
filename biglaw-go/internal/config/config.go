@@ -110,6 +110,20 @@ type DebateConfig struct {
 	GateConfidenceThreshold float64
 }
 
+// PresentationConfig holds UI/presentation preferences, tunable from the
+// admin panel (persisted via the settings store).
+type PresentationConfig struct {
+	Mode     string // "lawyer" = full legal terminology; "plain" = plain-language framing
+	FirmName string
+}
+
+// DocuSealConfig — open-source e-signature (https://www.docuseal.com).
+type DocuSealConfig struct {
+	APIKey  string
+	URL     string
+	Enabled bool
+}
+
 type LocalConfig struct {
 	OllamaURL             string
 	OllamaEnabled         bool
@@ -243,6 +257,8 @@ type Config struct {
 	Agents        AgentsConfig
 	DyTopo        DyTopoConfig
 	Debate        DebateConfig
+	Presentation  PresentationConfig
+	DocuSeal      DocuSealConfig
 	Local         LocalConfig
 	PDF           PDFConfig
 	Persistence   PersistenceConfig
@@ -299,6 +315,17 @@ func Load() *Config {
 			AdversarialEnabled:      envBool("DEBATE_ADVERSARIAL_ENABLED", true),
 			VerificationPasses:      envInt("DEBATE_VERIFICATION_PASSES", 10),
 			GateConfidenceThreshold: envFloat("DEBATE_GATE_CONFIDENCE_THRESHOLD", 0.80),
+		},
+		Presentation: PresentationConfig{
+			Mode:     env("UI_MODE", "lawyer"),
+			FirmName: env("FIRM_NAME", ""),
+		},
+		DocuSeal: DocuSealConfig{
+			APIKey: env("DOCUSEAL_API_KEY", ""),
+			URL:    env("DOCUSEAL_URL", "http://localhost:3000"),
+			// E-signature defaults to on when an API key is present; the
+			// admin panel can toggle it and set url/key at runtime.
+			Enabled: envBool("DOCUSEAL_ENABLED", os.Getenv("DOCUSEAL_API_KEY") != ""),
 		},
 		Local: LocalConfig{
 			OllamaURL:           env("OLLAMA_URL", "http://localhost:11434"),

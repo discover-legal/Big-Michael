@@ -296,6 +296,7 @@ type TimeEntry struct {
 	UTBMSTaskCode     string          `json:"utbmsTaskCode,omitempty"`
 	UTBMSActivityCode string          `json:"utbmsActivityCode,omitempty"`
 	OcgSuggestions   []OcgSuggestion `json:"ocgSuggestions,omitempty"`
+	OcgCheckedAt     string          `json:"ocgCheckedAt,omitempty"`
 }
 
 // ─── Lawyer profiles ──────────────────────────────────────────────────────────
@@ -314,6 +315,46 @@ const (
 	ModeFullFlavour UserMode = "full_flavour"
 	ModeLite        UserMode = "lite"
 )
+
+// ModeColors is the hex accent colour for each mode (UI theming).
+// Mirrors MODE_COLORS in src/types.ts.
+var ModeColors = map[UserMode]string{
+	ModeAdmin:       "#1A1A1A", // near-black (UI overrides to gold for visibility)
+	ModeFullFlavour: "#C8102E", // scarlet
+	ModeLite:        "#C4940F", // amber-gold
+}
+
+// ModeCapabilities carries feature flags with the session so the UI can
+// conditionally render. Mirrors ModeCapabilities in src/types.ts.
+type ModeCapabilities struct {
+	ManageUsers     bool `json:"manageUsers"`
+	SeeAllMatters   bool `json:"seeAllMatters"`
+	AssignMatters   bool `json:"assignMatters"`
+	ClientRoster    bool `json:"clientRoster"`
+	TimeTracking    bool `json:"timeTracking"`
+	MatterAnalytics bool `json:"matterAnalytics"`
+	FullConnectors  bool `json:"fullConnectors"`
+	AdminSettings   bool `json:"adminSettings"`
+}
+
+// ModeCapabilitySet mirrors MODE_CAPABILITIES in src/types.ts.
+var ModeCapabilitySet = map[UserMode]ModeCapabilities{
+	ModeAdmin: {
+		ManageUsers: true, SeeAllMatters: true, AssignMatters: true,
+		ClientRoster: true, TimeTracking: true, MatterAnalytics: true,
+		FullConnectors: true, AdminSettings: true,
+	},
+	ModeFullFlavour: {
+		ManageUsers: false, SeeAllMatters: false, AssignMatters: false,
+		ClientRoster: true, TimeTracking: true, MatterAnalytics: false,
+		FullConnectors: true, AdminSettings: false,
+	},
+	ModeLite: {
+		ManageUsers: false, SeeAllMatters: false, AssignMatters: false,
+		ClientRoster: false, TimeTracking: false, MatterAnalytics: false,
+		FullConnectors: false, AdminSettings: false,
+	},
+}
 
 type ToneProfile struct {
 	GeneratedAt       string   `json:"generatedAt"`
