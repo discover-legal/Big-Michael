@@ -234,7 +234,7 @@ export default function App() {
         </div>
       </main>
 
-      <AuditRail open={auditOpen} onToggle={() => setAuditOpen((o) => !o)} />
+      <AuditRail open={auditOpen} onToggle={() => setAuditOpen((o) => !o)} profileId={me?.user?.profileId} />
 
       <AnimatePresence>
         {submitOpen && <SubmitModal onClose={() => setSubmitOpen(false)} onCreated={onCreated} notify={notify} />}

@@ -16,6 +16,7 @@ type SettingsPatch = {
   dytopo?: Partial<AppSettings["dytopo"]>;
   debate?: Partial<AppSettings["debate"]>;
   docuseal?: Partial<{ enabled: boolean; url: string; apiKey: string }>;
+  clientVoice?: Partial<AppSettings["clientVoice"]>;
 };
 
 async function json<T>(res: Response): Promise<T> {
@@ -102,7 +103,13 @@ export const api = {
   searchDocuments: (query: string) =>
     fetch(`/documents/search?query=${encodeURIComponent(query)}`).then(json<SearchResult[]>),
 
-  recentAudit: (limit = 60) => fetch(`/audit?limit=${limit}`).then(json<AuditEntry[]>),
+  recentAudit: (limit = 60, opts?: { actorId?: string; event?: string; taskId?: string }) => {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (opts?.actorId) q.set("actorId", opts.actorId);
+    if (opts?.event) q.set("event", opts.event);
+    if (opts?.taskId) q.set("taskId", opts.taskId);
+    return fetch(`/audit?${q.toString()}`).then(json<AuditEntry[]>);
+  },
 
   toneImport: (profileId: string, file: File) => {
     const fd = new FormData();
@@ -294,8 +301,15 @@ export function streamAlerts<T>(
  * Subscribe to the global live audit stream. The server replays recent
  * entries on connect, then pushes new ones as they happen.
  */
-export function streamAudit(onEntry: (entry: AuditEntry) => void): () => void {
-  const es = new EventSource("/audit/stream");
+export function streamAudit(
+  onEntry: (entry: AuditEntry) => void,
+  opts?: { actorId?: string; taskId?: string },
+): () => void {
+  const q = new URLSearchParams();
+  if (opts?.actorId) q.set("actorId", opts.actorId);
+  if (opts?.taskId) q.set("taskId", opts.taskId);
+  const qs = q.toString();
+  const es = new EventSource(`/audit/stream${qs ? `?${qs}` : ""}`);
   es.onmessage = (e) => {
     try { onEntry(JSON.parse(e.data) as AuditEntry); } catch { /* ignore */ }
   };

@@ -146,6 +146,45 @@ func (l *Logger) Write(req WriteRequest) {
 	}
 }
 
+// Filter selects audit entries; zero values mean no constraint on that field.
+type Filter struct {
+	TaskID  string
+	ActorID string
+	Event   string // prefix match, e.g. "task." matches task.submitted
+	Limit   int
+}
+
+// ReadFiltered returns the most recent entries matching the filter,
+// oldest-first (same ordering as ReadRecent).
+func (l *Logger) ReadFiltered(f Filter) []AuditEntry {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 500
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	filtered := make([]AuditEntry, 0, 64)
+	for _, e := range l.buffer {
+		if f.TaskID != "" && e.TaskID != f.TaskID {
+			continue
+		}
+		if f.ActorID != "" && e.ActorID != f.ActorID {
+			continue
+		}
+		if f.Event != "" && !strings.HasPrefix(e.Event, f.Event) {
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+	if len(filtered) > limit {
+		filtered = filtered[len(filtered)-limit:]
+	}
+	out := make([]AuditEntry, len(filtered))
+	copy(out, filtered)
+	return out
+}
+
 func (l *Logger) ReadRecent(taskID string, limit int) []AuditEntry {
 	if limit <= 0 {
 		limit = 500
