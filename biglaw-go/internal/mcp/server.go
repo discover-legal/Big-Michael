@@ -17,10 +17,12 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/discover-legal/biglaw-go/internal/adapters"
 	"github.com/discover-legal/biglaw-go/internal/agents"
 	"github.com/discover-legal/biglaw-go/internal/audit"
 	"github.com/discover-legal/biglaw-go/internal/knowledge"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
+	"github.com/discover-legal/biglaw-go/internal/timekeeping"
 	"github.com/discover-legal/biglaw-go/internal/types"
 )
 
@@ -29,6 +31,8 @@ type MCPServer struct {
 	orch      *orchestrator.Orchestrator
 	knowledge *knowledge.Store
 	registry  *agents.Registry
+	plugins   *adapters.Registry
+	time      *timekeeping.TimeStore
 	srv       *server.MCPServer
 }
 
@@ -37,11 +41,15 @@ func New(
 	orch *orchestrator.Orchestrator,
 	knowledgeStore *knowledge.Store,
 	registry *agents.Registry,
+	plugins *adapters.Registry,
+	timeStore *timekeeping.TimeStore,
 ) *MCPServer {
 	s := &MCPServer{
 		orch:      orch,
 		knowledge: knowledgeStore,
 		registry:  registry,
+		plugins:   plugins,
+		time:      timeStore,
 	}
 
 	s.srv = server.NewMCPServer(
@@ -272,6 +280,37 @@ func (s *MCPServer) registerTools() {
 			),
 		),
 		s.handleGetAudit,
+	)
+
+	// 14. list_plugins
+	s.srv.AddTool(
+		mcplib.NewTool("list_plugins",
+			mcplib.WithDescription("List all loaded external plugins (JSON drop-in adapters), including counts of their contributed tools, agents, and workflow templates."),
+		),
+		s.handleListPlugins,
+	)
+
+	// 15. get_time_entries
+	s.srv.AddTool(
+		mcplib.NewTool("get_time_entries",
+			mcplib.WithDescription("Retrieve billable time entries. MCP runs with full (partner) access. Supports filtering by profileId, taskId, matterNumber, and an ISO date range."),
+			mcplib.WithString("profileId",
+				mcplib.Description("If set, filter entries to this lawyer profile ID."),
+			),
+			mcplib.WithString("taskId",
+				mcplib.Description("If set, filter entries to this task ID."),
+			),
+			mcplib.WithString("matterNumber",
+				mcplib.Description("If set, filter entries to this matter number."),
+			),
+			mcplib.WithString("from",
+				mcplib.Description("ISO date string — only entries started at or after this time."),
+			),
+			mcplib.WithString("to",
+				mcplib.Description("ISO date string — only entries started at or before this time."),
+			),
+		),
+		s.handleGetTimeEntries,
 	)
 }
 
@@ -596,7 +635,82 @@ func (s *MCPServer) handleGetAudit(_ context.Context, req mcplib.CallToolRequest
 	return jsonResult(entries)
 }
 
+func (s *MCPServer) handleListPlugins(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	// Summary shape mirrors GET /plugins (ops.go) and the TS pluginRegistry
+	// list(): descriptor fields + counts, never API keys or endpoints.
+	type pluginSummary struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Version     string `json:"version,omitempty"`
+		Description string `json:"description,omitempty"`
+		Source      string `json:"source"`
+		Enabled     bool   `json:"enabled"`
+		Tools       int    `json:"tools"`
+		Agents      int    `json:"agents"`
+		Workflows   int    `json:"workflows"`
+	}
+
+	summaries := []pluginSummary{}
+	if s.plugins != nil {
+		for _, p := range s.plugins.List() {
+			summaries = append(summaries, pluginSummary{
+				ID:          p.Plugin.ID,
+				Name:        p.Plugin.Name,
+				Version:     p.Plugin.Version,
+				Description: p.Plugin.Description,
+				Source:      "json", // the Go port loads JSON adapters only
+				Enabled:     p.Enabled,
+				Tools:       len(p.Plugin.Tools),
+				Agents:      len(p.Plugin.Agents),
+				Workflows:   len(p.Plugin.Workflows),
+			})
+		}
+	}
+
+	return jsonResult(summaries)
+}
+
+func (s *MCPServer) handleGetTimeEntries(_ context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	args := req.Params.Arguments
+
+	// MCP over stdio runs as the local partner — full visibility, same as the
+	// TS get_time_entries tool.
+	filter := timekeeping.TimeFilter{
+		ProfileID:    stringArg(args, "profileId"),
+		TaskID:       stringArg(args, "taskId"),
+		MatterNumber: stringArg(args, "matterNumber"),
+	}
+	if from := stringArg(args, "from"); from != "" {
+		t, err := parseISOTime(from)
+		if err != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("invalid from date: %v", err)), nil
+		}
+		filter.From = &t
+	}
+	if to := stringArg(args, "to"); to != "" {
+		t, err := parseISOTime(to)
+		if err != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("invalid to date: %v", err)), nil
+		}
+		filter.To = &t
+	}
+
+	entries := s.time.List(filter)
+	if entries == nil {
+		entries = []types.TimeEntry{}
+	}
+	return jsonResult(entries)
+}
+
 // ─── Utility helpers ──────────────────────────────────────────────────────────
+
+// parseISOTime accepts RFC 3339 timestamps or bare ISO dates (YYYY-MM-DD).
+func parseISOTime(v string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return t, nil
+	}
+	return time.Parse("2006-01-02", v)
+}
 
 // jsonResult marshals v to JSON and wraps it in a TextContent tool result.
 func jsonResult(v interface{}) (*mcplib.CallToolResult, error) {

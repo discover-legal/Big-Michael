@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -92,6 +93,55 @@ var basePricing = map[string][2]float64{
 	"claude-3-opus-20240229":     {15.00, 75.00},
 }
 
+// pricingFamilies are the model families whose pricing can be overridden at
+// startup via COST_<FAMILY>_IN / COST_<FAMILY>_OUT env vars (USD per million
+// tokens), e.g. COST_HAIKU_IN=1.00 COST_HAIKU_OUT=5.00. An override applies
+// to every model in basePricing whose ID contains the family substring.
+var pricingFamilies = []string{"haiku", "sonnet", "opus"}
+
+func init() {
+	applyPricingEnvOverrides(basePricing)
+}
+
+// applyPricingEnvOverrides applies the COST_<FAMILY>_IN/_OUT env vars to the
+// given pricing table in place. Unset, non-numeric, or negative values are
+// ignored (the built-in rate stands).
+func applyPricingEnvOverrides(pricing map[string][2]float64) {
+	for _, family := range pricingFamilies {
+		key := strings.ToUpper(family)
+		in, inOK := parsePriceEnv("COST_" + key + "_IN")
+		out, outOK := parsePriceEnv("COST_" + key + "_OUT")
+		if !inOK && !outOK {
+			continue
+		}
+		for model, p := range pricing {
+			if !strings.Contains(model, family) {
+				continue
+			}
+			if inOK {
+				p[0] = in
+			}
+			if outOK {
+				p[1] = out
+			}
+			pricing[model] = p
+		}
+	}
+}
+
+// parsePriceEnv reads an env var as a non-negative USD-per-million-tokens rate.
+func parsePriceEnv(name string) (float64, bool) {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || f < 0 {
+		return 0, false
+	}
+	return f, true
+}
+
 func CalcCostUSD(model string, input, output, cacheWrite, cacheRead int) *float64 {
 	p, ok := basePricing[model]
 	if !ok {
@@ -137,6 +187,10 @@ var Default = &Store{
 }
 
 func (s *Store) Init(file string) error {
+	// Re-apply pricing overrides: init() ran before main loaded .env /
+	// Infisical, so env vars sourced there are only visible now. Assigning
+	// absolute rates is idempotent.
+	applyPricingEnvOverrides(basePricing)
 	s.file = file
 	if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
 		return err

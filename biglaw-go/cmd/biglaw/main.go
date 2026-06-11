@@ -258,7 +258,7 @@ func main() {
 	switch mode {
 	case "mcp":
 		// Pure MCP mode — serve stdio only.
-		mcpSrv := mcp.New(orch, knowledgeStore, agentReg)
+		mcpSrv := mcp.New(orch, knowledgeStore, agentReg, pluginReg, timeStore)
 		if err := mcpSrv.Serve(); err != nil {
 			fmt.Fprintf(os.Stderr, "mcp serve: %v\n", err)
 			os.Exit(1)
@@ -288,7 +288,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "api run: %v\n", err)
 			}
 		}()
-		mcpSrv := mcp.New(orch, knowledgeStore, agentReg)
+		mcpSrv := mcp.New(orch, knowledgeStore, agentReg, pluginReg, timeStore)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -312,7 +312,7 @@ func main() {
 		// If stdin is not a TTY, also serve MCP on stdio.
 		fi, _ := os.Stdin.Stat()
 		if fi.Mode()&os.ModeCharDevice == 0 {
-			mcpSrv := mcp.New(orch, knowledgeStore, agentReg)
+			mcpSrv := mcp.New(orch, knowledgeStore, agentReg, pluginReg, timeStore)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

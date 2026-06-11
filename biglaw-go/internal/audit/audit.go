@@ -130,6 +130,10 @@ func (l *Logger) Write(req WriteRequest) {
 		}()
 	}
 
+	// Forward to env-configured external destinations (OpenSearch / Splunk HEC /
+	// webhook) — async, best-effort, never blocks or panics. See forward.go.
+	forwardEntry(entry)
+
 	// Notify sinks (fire-and-forget).
 	for _, s := range sinks {
 		go func(sink Sink) {

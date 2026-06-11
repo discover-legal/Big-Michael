@@ -48,6 +48,7 @@ func (s *Server) registerContentRoutes(r *gin.Engine) {
 	r.POST("/documents/upload", s.handleUploadDocument)
 	r.GET("/tasks/:id/table.csv", s.handleTaskTableCSV)
 	r.GET("/profiles/:id/cost", s.handleProfileCost)
+	r.POST("/profiles/:id/tone/import", s.handleToneImport)
 	r.POST("/profiles/:id/tone/linkedin-import", s.handleToneLinkedInImport)
 	r.DELETE("/profiles/:id/tone", s.handleClearToneProfile)
 }
@@ -326,10 +327,25 @@ func (s *Server) handleProfileCost(c *gin.Context) {
 
 // ─── Tone profiles ────────────────────────────────────────────────────────────
 
-// handleToneLinkedInImport accepts a LinkedIn data-export ZIP or bare CSV,
-// extracts the posts, runs the chunked Haiku tone analysis, and stores the
-// resulting ToneProfile. Partner or self; 60 s per-profile rate limit.
+// handleToneImport accepts any writing-sample source — LinkedIn export
+// ZIP/CSV, DOCX, PDF, generic CSV, or plain text/Markdown — extracts the
+// samples, runs the chunked Haiku tone analysis, and stores the resulting
+// ToneProfile. Partner or self; 60 s per-profile rate limit. Mirrors
+// POST /profiles/:id/tone/import in the TS backend.
+func (s *Server) handleToneImport(c *gin.Context) {
+	s.contentToneImport(c, false)
+}
+
+// handleToneLinkedInImport accepts a LinkedIn data-export ZIP or bare CSV
+// only — the backwards-compatible alias for handleToneImport.
 func (s *Server) handleToneLinkedInImport(c *gin.Context) {
+	s.contentToneImport(c, true)
+}
+
+// contentToneImport is the shared tone-import handler. linkedInOnly selects
+// the legacy /tone/linkedin-import contract (LinkedIn parser only, LinkedIn
+// 422 message); otherwise samples come from services.ExtractWritingSamples.
+func (s *Server) contentToneImport(c *gin.Context, linkedInOnly bool) {
 	u := getUser(c)
 	profileID := c.Param("id")
 	if !auth.IsPartner(u) && u.ProfileID != profileID {
@@ -367,13 +383,30 @@ func (s *Server) handleToneLinkedInImport(c *gin.Context) {
 		}
 	}
 
-	posts := linkedin.ParseLinkedInExport(buf)
-	if len(posts) == 0 {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error":     "No posts found in export. Upload the ZIP from linkedin.com/mypreferences/d/download-my-data or the extracted Shares.csv / Posts and Articles.csv.",
-			"exportUrl": "https://www.linkedin.com/mypreferences/d/download-my-data",
-		})
-		return
+	var samples []string
+	sourceType := "linkedin_export"
+	if linkedInOnly {
+		samples = linkedin.ParseLinkedInExport(buf)
+		if len(samples) == 0 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error":     "No posts found in export. Upload the ZIP from linkedin.com/mypreferences/d/download-my-data or the extracted Shares.csv / Posts and Articles.csv.",
+				"exportUrl": "https://www.linkedin.com/mypreferences/d/download-my-data",
+			})
+			return
+		}
+	} else {
+		filename := fh.Filename
+		if filename == "" {
+			filename = "upload"
+		}
+		samples, sourceType = services.ExtractWritingSamplesWithSource(filename, buf)
+		if len(samples) == 0 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error":             "No writing samples found in the uploaded file. Accepted formats: LinkedIn export ZIP/CSV, Word (.docx), PDF, plain text, or any CSV with a text column.",
+				"linkedInExportUrl": "https://www.linkedin.com/mypreferences/d/download-my-data",
+			})
+			return
+		}
 	}
 
 	analyzer := s.contentToneAnalyzer()
@@ -381,7 +414,7 @@ func (s *Server) handleToneLinkedInImport(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Tone analysis failed. Please try again."})
 		return
 	}
-	tone, err := analyzer.Analyze(posts, profile.Name, "linkedin_export", profileID)
+	tone, err := analyzer.Analyze(samples, profile.Name, sourceType, profileID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Tone analysis failed. Please try again."})
 		return
@@ -396,14 +429,14 @@ func (s *Server) handleToneLinkedInImport(c *gin.Context) {
 		Event:   "profile.tone.imported",
 		ActorID: u.ProfileID,
 		Data: map[string]interface{}{
-			"profileId": profileID, "sampleCount": len(posts), "sourceType": "linkedin_export",
+			"profileId": profileID, "sampleCount": len(samples), "sourceType": sourceType,
 		},
 	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"toneProfile":     updated.ToneProfile,
-		"samplesAnalysed": len(posts),
-		"sourceType":      "linkedin_export",
+		"samplesAnalysed": len(samples),
+		"sourceType":      sourceType,
 	})
 }
 

@@ -10,7 +10,10 @@ package api
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/bots"
 	"github.com/discover-legal/biglaw-go/internal/briefing"
 	"github.com/discover-legal/biglaw-go/internal/clients"
+	"github.com/discover-legal/biglaw-go/internal/integrations"
 	"github.com/discover-legal/biglaw-go/internal/knowledge"
 	"github.com/discover-legal/biglaw-go/internal/lpm"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
@@ -58,13 +62,15 @@ func (s *Server) mountBots(r *gin.Engine) {
 		c.Data(status, "application/json", out)
 	})
 
-	// Matter↔channel link management (partner-gated).
+	// Matter↔channel link management + internal notify endpoints (partner-gated).
 	link := r.Group("/bots")
 	link.Use(func(c *gin.Context) {
 		if !requirePartner(c) {
 			c.Abort()
 		}
 	})
+	link.POST("/teams/notify", s.handleTeamsNotify)
+	link.POST("/slack/notify", s.handleSlackNotify)
 	link.POST("/teams/matter-link", func(c *gin.Context) {
 		var l bots.TeamsMatterLink
 		if err := c.ShouldBindJSON(&l); err != nil || l.MatterNumber == "" {
@@ -107,6 +113,138 @@ func (s *Server) mountBots(r *gin.Engine) {
 	})
 
 	s.startTaskNotifier()
+}
+
+// ─── Internal notify endpoints ───────────────────────────────────────────────
+
+// handleTeamsNotify posts a MessageCard to a Teams Incoming Webhook. Target
+// resolution mirrors the TS handler (src/bots/teams.ts): explicit webhookUrl
+// (SSRF-validated, https only) > matter link > TEAMS_INCOMING_WEBHOOK_URL.
+// Partner-gated by the route group.
+func (s *Server) handleTeamsNotify(c *gin.Context) {
+	var body struct {
+		MatterNumber string                     `json:"matterNumber"`
+		Title        string                     `json:"title"`
+		Text         string                     `json:"text"`
+		WebhookURL   string                     `json:"webhookUrl"`
+		Facts        []integrations.WebhookFact `json:"facts"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+
+	target := body.WebhookURL
+	if target == "" && body.MatterNumber != "" {
+		if l, ok := bots.GetTeamsMatterLink(body.MatterNumber); ok {
+			target = l.WebhookURL
+		}
+	}
+	if target == "" {
+		target = s.cfg.Bots.Teams.IncomingWebhookURL
+	}
+	if target == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No webhook URL configured for this matter"})
+		return
+	}
+
+	// Only the caller-supplied override needs validation; linked/default URLs
+	// were configured by a partner or the operator.
+	if body.WebhookURL != "" {
+		validated, err := botsAssertPublicHTTPSURL(body.WebhookURL, "webhookUrl")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		target = validated
+	}
+
+	if err := integrations.PostToTeamsWebhook(target, body.Title, body.Text, body.Facts); err != nil {
+		// Never echo the error verbatim — webhook URLs are capability tokens.
+		slog.Warn("Teams notify failed", "matterNumber", body.MatterNumber)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to post to Teams"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// handleSlackNotify posts a message to a Slack channel. Target resolution
+// mirrors the TS handler (src/bots/slack.ts): explicit channelId > matter
+// link > SLACK_DEFAULT_CHANNEL. Partner-gated by the route group.
+func (s *Server) handleSlackNotify(c *gin.Context) {
+	var body struct {
+		MatterNumber string `json:"matterNumber"`
+		ChannelID    string `json:"channelId"`
+		Text         string `json:"text"`
+		ThreadTS     string `json:"threadTs"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+
+	target := body.ChannelID
+	if target == "" && body.MatterNumber != "" {
+		if l, ok := bots.GetSlackMatterLink(body.MatterNumber); ok {
+			target = l.ChannelID
+		}
+	}
+	if target == "" {
+		target = s.cfg.Bots.Slack.DefaultChannel
+	}
+	if target == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No channel configured"})
+		return
+	}
+
+	if err := bots.PostToSlackChannel(target, body.Text, body.ThreadTS); err != nil {
+		slog.Warn("Slack notify failed", "matterNumber", body.MatterNumber)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to post to Slack"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// ─── URL validation ──────────────────────────────────────────────────────────
+
+var (
+	botsRfc1918_172 = regexp.MustCompile(`^172\.(1[6-9]|2\d|3[01])\.`)
+	botsCgnat100_64 = regexp.MustCompile(`^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.`)
+	botsHexIPv4     = regexp.MustCompile(`^0x[0-9a-f]+$`)
+	botsDecimalIPv4 = regexp.MustCompile(`^\d+$`)
+)
+
+// botsAssertPublicHTTPSURL validates a caller-supplied webhook override: it
+// must be a public https URL (no SSRF via loopback/private/link-local hosts).
+// Port of assertPublicHttpUrl + the https check in src/bots/teams.ts.
+func botsAssertPublicHTTPSURL(raw, label string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Hostname() == "" {
+		return "", fmt.Errorf("invalid %s '%s': must be a public https URL", label, trimmed)
+	}
+	if u.Scheme != "https" {
+		return "", fmt.Errorf("%s must use https", label)
+	}
+	h := strings.ToLower(u.Hostname())
+	private := h == "localhost" ||
+		h == "::1" || h == "::" || h == "0.0.0.0" ||
+		strings.HasPrefix(h, "0.") ||
+		botsHexIPv4.MatchString(h) ||
+		botsDecimalIPv4.MatchString(h) ||
+		strings.HasPrefix(h, "127.") ||
+		strings.HasPrefix(h, "169.254.") ||
+		strings.HasPrefix(h, "10.") ||
+		botsRfc1918_172.MatchString(h) ||
+		strings.HasPrefix(h, "192.168.") ||
+		botsCgnat100_64.MatchString(h) ||
+		strings.HasPrefix(h, "::ffff:") ||
+		strings.HasPrefix(h, "fc00:") ||
+		strings.HasPrefix(h, "fe80:")
+	if private {
+		return "", fmt.Errorf("%s '%s' resolves to a private or loopback address", label, trimmed)
+	}
+	return trimmed, nil
 }
 
 // startTaskNotifier posts a chat notification when a task completes. No-op if
