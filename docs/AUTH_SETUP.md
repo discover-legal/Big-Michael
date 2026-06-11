@@ -1,5 +1,13 @@
 # Deploying with login (OAuth + access control)
 
+> ⚠️ **This guide describes the TypeScript implementation**, preserved at the git tag
+> `typescript-final`. The Go platform (`biglaw-go/`, the current `main`) does not yet
+> ship browser OAuth login — it authenticates with `AUTH_ENABLED=true` plus a bearer
+> `API_KEY` (the credential) and an `X-Profile-ID` header identifying the acting
+> lawyer. The access model below (partner vs lawyer, matter-scoped visibility) is
+> identical and is enforced in the Go API; see the README's "Lawyers, roles & access
+> control" section.
+
 BigLaw is **single-user with no login locally** (`AUTH_ENABLED=false` → one
 "local partner" who sees everything). For a shared/firm deployment, turn auth on
 and wire one or more OAuth providers. This guide takes ~10 minutes.
@@ -13,7 +21,8 @@ and wire one or more OAuth providers. This guide takes ~10 minutes.
 
 Enforced at every matter-scoped endpoint (list, detail, SSE stream, gates, CSV,
 rounds, audit) and documents are scoped to their uploader. The rules are unit
-tested (`npm test`) and proven end-to-end over HTTP.
+tested (`npm test` on the TS tag; `go test ./...` under `biglaw-go/` on `main`)
+and proven end-to-end over HTTP.
 
 ## 1 · Register an OAuth app per provider
 

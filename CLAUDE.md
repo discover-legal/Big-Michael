@@ -2,18 +2,22 @@
 
 Multi-agent legal AI orchestration platform — the BigLaw tool stack, open and free for
 solos, boutiques, and small firms. Runs DyTopo rounds of granular epistemic/conceptual/writing
-agents over a RuVector native HNSW registry, with a debate + verification protocol on every
+agents over an in-process vector agent registry, with a debate + verification protocol on every
 finding before final synthesis.
 
 **Big Michael** is the channel agent: lives in Teams and Slack, @-mentionable in any channel,
-dispatches tasks to BigLaw's bench, and posts results back. See `src/bots/` for the implementation.
+dispatches tasks to BigLaw's bench, and posts results back. See `biglaw-go/internal/bots/`
+for the implementation.
 
-**Version 0.5.0** — Teams/Slack channel bots (Big Michael), hub-and-spoke client briefing swarm
-(Chalkboard pattern, 10 parallel spokes), SharePoint + Teams search, email search (Graph + Gmail),
-playbook-aware contract redlining, headnote generator, precedent generator, four-tier playbook
-cascade, on top of the 0.4.0 base: lawyer voice fingerprinting, per-call cost tracking,
-native in-process RuVector HNSW, Q-learning agent recruitment, two-wave DyTopo with
-intra-round whiteboard + inter-round memory rollup, billable time tracking, and NOSLEGAL v4 taxonomy.
+**Version 1.0.0** — the Go platform replaces TypeScript on `main` (TS preserved at the
+`typescript-final` tag). 131 agent definitions, Teams/Slack channel bots (Big Michael),
+hub-and-spoke client briefing swarm (Chalkboard pattern), SharePoint + Teams search, email
+search (Graph + Gmail), playbook-aware contract redlining, headnote generator, precedent
+generator, four-tier playbook cascade, lawyer voice fingerprinting, per-call cost tracking,
+Q-learning agent recruitment, TopoFlow (AgensFlow bandit over DyTopo), LPM status-report
+spine, billing (pre-bills, LEDES, invoice validation, OCG checks), docket/regulatory/budget
+monitors, two-wave DyTopo with intra-round whiteboard + inter-round memory rollup, billable
+time tracking, and NOSLEGAL v4 taxonomy.
 
 ## Quick start
 
@@ -63,17 +67,18 @@ list_tasks           — list all tasks
 approve_gate / reject_gate  — human review of flagged findings
 submit_from_template — run a pre-built workflow (eu-competition-brief etc.)
 list_templates       — see available workflow templates
-list_plugins         — list loaded external plugins and their contributed tools/agents
 get_round            — inspect a specific DyTopo round
 ingest_document      — add a document to the knowledge store
 search_knowledge     — semantic search across documents
 list_agents          — browse the agent registry
 query_memory         — query inter-round memory
 get_audit            — retrieve the structured audit log
-get_time_entries     — retrieve billable time entries (lawyers see own; partners see all)
 ```
 
-Claude Code actuates Laverne agent configs (from `agents/laverne/*.json`),
+(`list_plugins` and `get_time_entries` were MCP tools of the TypeScript implementation;
+on the Go platform use `GET /plugins` and `GET /time-entries` over REST.)
+
+Claude Code actuates Lavern agent configs (from `agents/lavern/*.json`),
 MikeOSS workflow templates (from `workflows/mikeoss/*.json`), and any JSON
 plugin adapters (from `adapters/external/*.json`).
 
@@ -567,6 +572,17 @@ INFISICAL_PROJECT_ID=...
 Self-host: `docker compose -f docker-compose.prod.yml up -d` from the Infisical repo.
 
 ## REST API endpoints
+
+> This list documents the route contract as designed in the TypeScript implementation.
+> The Go API on `main` covers most of it, but some routes are TS-only and not yet ported:
+> browser OAuth (`/auth/*`), the Clio connect flow + `POST /tasks/from-clio-matter` +
+> `POST /time-entries/sync-to-clio`, `POST /bots/{teams,slack}/notify`, and the generic
+> `POST /profiles/:id/tone/import` (Go accepts `…/tone/linkedin-import` only). The Go API
+> also adds routes the list below predates: playbooks, citations, deadlines, matters
+> (health/budget), dockets, regulatory, pre-bills/invoices/OCG, LPM reports, client-voice,
+> and `GET /time-entries/export.ledes`. The authoritative Go route map is
+> `biglaw-go/internal/api/` (one file per domain group); the README's REST API section
+> reflects it.
 
 ```
 POST   /tasks                       submit task (accepts jurisdiction, clientNumber, matterNumber)

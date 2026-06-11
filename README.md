@@ -9,15 +9,14 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-2563eb.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](biglaw-go/go.mod)
 [![MCP](https://img.shields.io/badge/MCP-stdio%20server-E6B450.svg)](#using-from-claude-code)
-[![Vector DB](https://img.shields.io/badge/RuVector-native%20HNSW-7c3aed.svg)](biglaw-go/internal/agents/registry.go)
+[![Vector search](https://img.shields.io/badge/Vector%20search-in--process-7c3aed.svg)](biglaw-go/internal/agents/registry.go)
 [![Status: Experimental](https://img.shields.io/badge/Status-Experimental-red.svg)](#-experimental--security-notice)
 
 **The platform is a single static Go binary** — it runs end-to-end on a Raspberry Pi with
 4 GB of RAM, or entirely on local models (Ollama / LM Studio). Benchmarks vs the original
-TypeScript implementation: 1.25×–6.9× ([methodology](docs/benchmarks-go-vs-ts.md)). Sections
-below that reference `src/*.ts` paths describe the architecture as originally implemented —
-the code now lives in [`biglaw-go/internal/`](biglaw-go/internal/), and the TypeScript
-original is preserved at the tag `typescript-final`.
+TypeScript implementation: 1.25×–6.9× ([methodology](docs/benchmarks-go-vs-ts.md)). The code
+lives in [`biglaw-go/internal/`](biglaw-go/internal/); the TypeScript original is preserved
+at the tag `typescript-final`.
 
 </div>
 
@@ -224,9 +223,9 @@ appropriate oversight, and appropriate professional responsibility.
 BigLaw isn't a chatbot with a legal prompt. It's an **orchestration engine** that replaces a stack
 of vendor contracts with a single open-source platform.
 
-It runs *DyTopo rounds* of granular epistemic, conceptual, and writing agents over a **RuVector
-native HNSW registry** — and puts a **debate + verification protocol** between every finding
-and the page. Low-confidence or challenged findings stop at a **human gate** before they reach
+It runs *DyTopo rounds* of granular epistemic, conceptual, and writing agents over an
+**in-process vector agent registry** — and puts a **debate + verification protocol** between
+every finding and the page. Low-confidence or challenged findings stop at a **human gate** before they reach
 final synthesis.
 
 **Big Michael** is the agent that lives inside your firm's collaboration channels. @-mention him
@@ -326,17 +325,17 @@ A real matter, mid-flight — the bench self-organising, then the cited result.
 | "Trust me" answers | Every finding survives **adversarial debate** + **verification passes** before output |
 | Hallucinated cites | **CitationGate** rejects any claim whose source isn't in the registry |
 | Locked to one jurisdiction | **Jurisdiction-neutral** native bench — applies the governing law each matter specifies |
-| Black box | Court-ready **audit trail** — every agent invocation, tool call (with the lawyer's identity), finding, gate decision, document search, and access denial — hash-chained JSONL + live SSE |
-| Text in, text out | Cited briefs, **.docx** with tracked changes, e-signed via DocuSeal |
+| Black box | Court-ready **audit trail** — every agent invocation, tool call (with the lawyer's identity), finding, gate decision, and document ingest — hash-chained JSONL + live SSE |
+| Text in, text out | Cited briefs, tabular-review CSVs, daily status reports as **.docx** |
 | Cloud-only | 3-tier cloud routing **or** fully local (Ollama / LM Studio / vLLM) |
 | Static agent pool | **Q-learning recruitment** — agents that produce high-confidence findings are promoted; weak ones deprioritised over time |
 | Siloed per-round context | **Intra-round whiteboard** broadcast to all agents + **Haiku-synthesised inter-round rollup** carried forward |
 | One-size config | **Admin panel** — lawyer/non-lawyer mode, DyTopo depth, verification & DocuSeal, applied live |
 | Generic document store | Documents auto-classified by **practice area** with matching lawyers surfaced on ingest |
 | No billing integration | Automatic **6-minute billable time units** tracked per lawyer, per matter, exportable as CSV |
-| Generic output voice | Per-lawyer **voice fingerprinting** from LinkedIn posts, DOCX, PDF, or CSV — drafting agents mirror the assigned lawyer's style |
+| Generic output voice | Per-lawyer **voice fingerprinting** from LinkedIn writing history — drafting agents mirror the assigned lawyer's style |
 | Black-box costs | **Per-call cost tracking** with prompt-cache-aware pricing, local power estimates, and an admin cost dashboard |
-| Manual setup | **Interactive setup wizard** — one curl, checks prereqs, checkbox connector picker, writes `.env`, done |
+| Manual setup | **One-command setup** — one curl, checks prereqs, seeds `.env`, brings up the Docker stack, done |
 | No deadline tracking | **Court deadline calculator** — FRCP, UK CPR, EU Competition rules; calendar vs business days, cited |
 | Info scattered across systems | **Big Michael hub-and-spoke briefing swarm** — pulls from Clio, iManage, Slack, Teams, Drive, SharePoint, email in parallel |
 
@@ -351,19 +350,20 @@ graph TD
     T1A["Analysis Manager"]
     T1D["Drafting Manager"]
     T1C["Compliance Manager"]
-    T2E["Epistemic agents ×18<br/><i>contract · M&A · privacy · antitrust<br/>employment · IP · tax · litigation…</i>"]
+    T2E["Epistemic agents ×26<br/><i>contract · M&A · privacy · antitrust<br/>employment · IP · tax · litigation…</i>"]
     T2C["Conceptual agents ×8<br/><i>materiality · liability · causation<br/>enforceability · good faith…</i>"]
     T2W["Writing agents ×13<br/><i>brief · memo · redline · headnote<br/>precedent · NDA · opinion…</i>"]
-    T3["Tool agents ×6<br/><i>web search · retrieval · extraction<br/>translation · citation · e-sign</i>"]
+    T2S["Specialist bench ×72<br/><i>Claude for Legal practice-area specialists<br/>+ goliath-killer agents</i>"]
+    T3["Tool agents ×7<br/><i>web search · retrieval · extraction<br/>translation · citation check…</i>"]
     WB[("Intra-round<br/>whiteboard")]
     MEM[("Inter-round<br/>memory store")]
     GATE["Human gate<br/><i>low-confidence findings</i>"]
     SYN["Opus synthesis<br/><i>final output</i>"]
 
     T0 -->|RoundGoal| T1R & T1A & T1D & T1C
-    T1R & T1A & T1D & T1C -->|DyTopo Need/Offer match| T2E & T2C & T2W
-    T2E & T2C & T2W -->|tool_use agentic loop| T3
-    T2E & T2C & T2W -->|findings| WB
+    T1R & T1A & T1D & T1C -->|DyTopo Need/Offer match| T2E & T2C & T2W & T2S
+    T2E & T2C & T2W & T2S -->|tool_use agentic loop| T3
+    T2E & T2C & T2W & T2S -->|findings| WB
     WB -->|CitationGate → Debate → Verify ×10| GATE
     GATE -->|approved findings| MEM
     MEM -->|context for next round| T1R & T1A & T1D & T1C
@@ -404,20 +404,21 @@ sequenceDiagram
 7. Haiku synthesises the whiteboard into a round digest → written to **inter-round memory** for the next round
 8. Low-confidence / challenged findings escalate to a **human gate** before synthesis
 
-**Q-learning agent recruitment** (`src/learning/index.ts`):
+**Q-learning agent recruitment** (`biglaw-go/internal/learning/`):
 
-- RuVector `LearningEngine` maintains a Q-table across `"phase:jurisdiction:workflowType"` states
+- A `LearningEngine` maintains a Q-table across `"phase:jurisdiction:workflowType"` states
 - High-confidence uncontested findings → reward; challenged findings → penalised ×0.3
-- `FastAgentDB` stores episodes for similarity-based retrieval across past tasks
-- Q-table persisted to `.qtable.json` and reloaded on restart
+- Q-table persisted to `.qtable.json` (override with `LEARNING_FILE`) and reloaded on restart
 
-**Vector storage** — three RuVector native HNSW stores, all in-process, no service required:
+**Vector storage** — three in-process stores with cosine-similarity search, no external
+service or native module required (for a bench this size, brute-force cosine runs in ~1 ms
+even on ARM64):
 
-| Store | Path | Used for |
+| Store | Persistence | Used for |
 |---|---|---|
-| Agent registry | `./data/agents.rvdb` | Semantic agent recruitment + outcome tracking |
-| Inter-round memory | `./data/memory.rvdb` | Cross-round context retrieval |
-| Knowledge base | `./data/knowledge.rvdb` | Document chunks + semantic search |
+| Agent registry | `./data/agents.json` | Semantic agent recruitment + outcome tracking |
+| Inter-round memory | in-memory | Cross-round context retrieval |
+| Knowledge base | in-memory | Document chunks + semantic search |
 
 ---
 
@@ -492,29 +493,34 @@ client info spread across 10 mailboxes, 2 call notes, and 4 DM threads — solve
 
 ## The bench's tools
 
-Agents act through a typed `ToolRegistry`. Highlights:
+Agents act through a typed tool registry (`biglaw-go/internal/tools/`). Highlights:
 
 | Tool | What it does |
 |---|---|
-| `search_knowledge` · `read_document` · `fetch_documents` | Semantic + full-text retrieval over the RuVector knowledge base |
+| `search_knowledge` · `read_document` · `list_documents` | Semantic + full-text retrieval over the knowledge base |
 | `find_in_document` | Whitespace-tolerant Ctrl+F with cited context windows |
-| `tabular_review` | Multi-doc × multi-column extraction matrix with **RAG flags** + pinpoint `[[page\|quote]]` citations — each cell routed through debate/verification |
-| `read_table_cells` | Read any column/row slice of a persisted review |
-| `docx_generate` | Build a Word document (headings, prose, tables, landscape, page breaks) |
-| `edit_document` | **Tracked-changes redlining** of a `.docx` — minimal `<w:ins>`/`<w:del>` substitutions with Accept/Reject annotations |
-| `replicate_document` | Byte-for-byte `.docx` copies to adapt as templates |
-| `pdf_extract_text` · `pdf_extract_tables` · `pdf_ocr` · `pdf_generate` | PyMuPDF / Camelot / Tesseract backend |
-| `docuseal_send_for_signing` | DocuSeal e-signature dispatch + status |
+| `extract_from_document` | Structured extraction — parties, dates, amounts, obligations, defined terms |
+| `query_memory` | Query the inter-round memory store |
 | `web_search` · `translate` · `citation_check` | Tavily search, translation, source verification |
 | 32 connector tools | CourtListener · Westlaw · Everlaw · Trellis · Descrybe · Ironclad · iManage · Definely · DocuSign CLM · Lawve AI · Solve Intelligence · Google Drive · Box · Slack · TopCounsel |
-| `compute_deadlines` | Court deadline calculator — trigger date → all deadlines under FRCP / UK CPR / EU Competition rules, with citations |
-| `redline_contract` | Playbook-aware contract redlining — clause extraction → Sonnet analysis → tracked-change report |
-| `generate_headnotes` | Westlaw Key Number / LexisNexis headnote replacement — Sonnet extraction + Haiku meta |
-| `generate_precedent` | Practical Law / PSL replacement — Haiku structure + Opus drafting from firm knowledge + playbook cascade |
 
-> Document generation, tabular review, and tracked-change redlining are ported from
-> [Mike](https://github.com/willchen96/mike) (AGPL-3.0) and adapted to BigLaw's tool
-> registry and provider abstraction. See [`NOTICE`](NOTICE).
+The heavier engines are exposed over REST rather than as agent tools:
+
+| Engine | Endpoint |
+|---|---|
+| Court deadline calculator — FRCP / UK CPR / EU Competition, with citations | `POST /deadlines/compute` |
+| Playbook-aware contract redlining | `POST /redline` |
+| Headnote extraction (Westlaw Key Number / LexisNexis replacement) | `POST /headnotes/generate` |
+| Precedent generation (Practical Law / PSL replacement) | `POST /precedents/generate` |
+| Citation checking (CourtListener-backed KeyCite/Shepard's replacement) | `GET`/`POST /citations/check` |
+| Tabular review output (tabulate workflow) | `GET /tasks/:id/table.csv` |
+| Daily status reports as DOCX (LPM spine) | `GET /reports/:id/docx` |
+
+> The TypeScript implementation additionally shipped agent-facing document-production tools
+> ported from [Mike](https://github.com/willchen96/mike) (AGPL-3.0) — `docx_generate`,
+> tracked-changes `edit_document`, `tabular_review`, PyMuPDF/Camelot/Tesseract PDF tools,
+> and DocuSeal e-signing. Those tools are preserved at the `typescript-final` tag and are
+> not yet ported to the Go platform. See [`NOTICE`](NOTICE).
 
 ---
 
@@ -526,12 +532,16 @@ Agents act through a typed `ToolRegistry`. Highlights:
 curl -fsSL https://raw.githubusercontent.com/discover-legal/BigLaw/main/setup.sh | bash
 ```
 
-Handles everything: Node.js install (via nvm if needed), clone, `npm install`, then an interactive wizard that checks Python / Docker / Tesseract, walks you through every API key with inline instructions, shows a **checkbox picker for all 32 connectors**, writes `.env`, and optionally runs the smoke test. Re-run any time to add connectors.
+Needs git + Docker. Handles everything: clones the repo if needed, seeds `.env` from
+`.env.example`, builds and starts the three-container stack (TypeDB → conflict-graph sidecar →
+BigLaw core), and waits for the REST API at **http://localhost:3102**. Add your
+`ANTHROPIC_API_KEY` (or local-inference settings) to `.env` — unconfigured connectors degrade
+gracefully. Re-run any time.
 
 ### Already have the repo cloned?
 
 ```bash
-bash setup.sh       # or: npm run setup  (requires Node 18+ already installed)
+bash setup.sh       # needs Docker running
 ```
 
 ### Manual setup (Go platform)
@@ -556,7 +566,7 @@ go run ./biglaw-go/cmd/biglaw           # REST API on :3101
 cd biglaw-go && go test ./...
 ```
 
-### 2 · Web workbench (Vite + React)
+### Web workbench (Vite + React)
 
 ```bash
 cd ui
@@ -630,42 +640,37 @@ Unconfigured connectors return a structured `{ error: "not configured" }` — th
 
 **Practice management**
 
-| Provider | Tools | Activation |
+| Provider | Feeds | Activation |
 |---|---|---|
-| Clio | `clio_list_matters`, `clio_get_matter`, `clio_list_documents`, `clio_download_document`, `clio_create_activity`, `clio_create_note`, `clio_list_contacts` | `CLIO_CLIENT_ID` + `CLIO_CLIENT_SECRET` (OAuth) |
+| Clio | Big Michael's client-briefing swarm (matters · contacts · notes) | `CLIO_CLIENT_ID` + `CLIO_CLIENT_SECRET` (OAuth 2.0) |
 
-Clio uses OAuth 2.0 rather than a static API key. After setting credentials, a partner visits
-`GET /auth/clio/connect` to authorise the firm's Clio account. Tokens are persisted to
-`./data/clio-auth.json` and auto-refreshed. All four Clio data regions are supported (`CLIO_REGION=us|eu|ca|au`).
+Clio uses OAuth 2.0 rather than a static API key. Tokens are persisted to
+`./data/clio-auth.json` and auto-refreshed. All four Clio data regions are supported
+(`CLIO_REGION=us|eu|ca|au`).
 
-**Matter import:** `POST /tasks/from-clio-matter` fetches a Clio matter's details, ingests its
-attached documents into the knowledge base, and submits a BigLaw task in one call.
-
-**Time sync:** `POST /time-entries/sync-to-clio` pushes BigLaw billable time entries back to a
-Clio matter as activity records, preserving 6-minute billing unit rounding. Idempotent — entries
-are stamped with `clioSyncedAt` on success and skipped on subsequent calls.
+> The TypeScript implementation (`typescript-final` tag) additionally exposed the in-browser
+> OAuth connect flow (`/auth/clio/*`), seven `clio_*` agent tools, one-call matter import
+> (`POST /tasks/from-clio-matter`), and time-entry sync (`POST /time-entries/sync-to-clio`).
+> These are not yet ported to the Go API.
 
 ---
 
 ## Court deadline calculator
 
-`src/deadlines/engine.ts` — pure TypeScript, no external service required.
+`biglaw-go/internal/deadlines` — pure Go, no external service required. Rule sets are YAML
+files in `deadlines/rules/` at the repo root, loaded at startup.
 
 Feed it a trigger event and date; it returns every downstream deadline under the applicable rule set, calendar vs business days computed correctly, jurisdiction holidays applied, with the procedural citation for each.
 
-```typescript
-import { DeadlineEngine } from "./src/deadlines/engine.js";
-
-const engine = new DeadlineEngine();
-await engine.loadRulesDir("./src/deadlines/rules");
-
-const result = engine.compute({
-  jurisdiction: "us-federal-frcp",
-  trigger: "complaint_served",
-  triggerDate: new Date("2025-09-01"),
-});
-// result.deadlines → [{ event: "answer_due", date: Date, cite: "FRCP 12(a)(1)(A)(i)", warning: Date }, …]
+```bash
+curl -X POST http://localhost:3101/deadlines/compute \
+  -H "Content-Type: application/json" \
+  -d '{ "jurisdiction": "us-federal-frcp", "triggerEvent": "complaint_served", "triggerDate": "2026-09-01" }'
+# → deadlines: [{ "event": "answer_due", "date": "…", "cite": "FRCP 12(a)(1)(A)(i)", … }, …]
 ```
+
+`GET /deadlines/rules` lists the loaded jurisdictions; `POST /matters/:matterNumber/deadlines`
+computes and attaches deadlines to a matter.
 
 **Rule sets shipped** (marked `SAMPLE — AI-GENERATED — NOT VERIFIED BY COUNSEL` until a practitioner submits a verified PR):
 
@@ -675,94 +680,39 @@ const result = engine.compute({
 | `uk-cpr.yaml` | UK | CPR acknowledgment, defence, summary judgment response, appeal notice |
 | `eu-competition.yaml` | EU | Competition regulation response, appeal, leniency deadlines |
 
-Holiday tables are computed in-process (US federal, UK bank, EU institutions — Butcher/Meeus Easter). Adding a new jurisdiction is a YAML file drop in `src/deadlines/rules/`.
+Holiday tables are computed in-process (US federal, UK bank, EU institutions — Butcher/Meeus Easter). Adding a new jurisdiction is a YAML file drop in `deadlines/rules/`.
 
-> ⚠️ **These rule sets are illustrative examples only.** Deadlines vary by judge, local rules, and standing orders. ALWAYS verify with a licensed attorney before relying on any computed deadline. See `src/deadlines/rules/CONTRIBUTING.md` to submit a verified rule set.
+> ⚠️ **These rule sets are illustrative examples only.** Deadlines vary by judge, local rules, and standing orders. ALWAYS verify with a licensed attorney before relying on any computed deadline. See `deadlines/rules/CONTRIBUTING.md` to submit a verified rule set.
 
 ---
 
 ## Clio — getting started
 
-Clio uses OAuth 2.0 rather than a static API key. Setup takes about five minutes.
+Clio uses OAuth 2.0 rather than a static API key.
 
-### 1. Register an OAuth app in Clio
+1. Log in to Clio as a firm admin → **Settings → Developer Applications → New Application**.
+   Enable API access for **Matters**, **Contacts**, **Documents**, **Activities**, **Notes**,
+   and **Users**, then copy the Client ID and Client Secret.
+2. Configure `.env`:
 
-1. Log in to Clio as a firm admin.
-2. Go to **Settings → Developer Applications → New Application**.
-3. Fill in a name (e.g. "BigLaw") and set the **Redirect URI** to:
+   ```bash
+   CLIO_CLIENT_ID=your-client-id
+   CLIO_CLIENT_SECRET=your-client-secret
+
+   # Must match where the firm's data is hosted — wrong region = 401 on every call
+   # us (default) | eu | ca | au
+   CLIO_REGION=us
    ```
-   http://localhost:3101/auth/clio/callback
-   ```
-   For production, replace with your actual `PUBLIC_BASE_URL`, e.g.:
-   ```
-   https://biglaw.yourfirm.com/auth/clio/callback
-   ```
-   Clio performs an exact-string match — the URI must be identical to `CLIO_REDIRECT_URI` in your `.env`.
 
-4. In the app's **API Access** panel, enable permissions for each resource BigLaw uses:
+3. Tokens are persisted to `./data/clio-auth.json` (override with `CLIO_TOKENS_FILE`) and
+   auto-refresh; once connected, you won't need to reconnect unless the refresh token is revoked.
 
-   | Resource | Why |
-   |---|---|
-   | **Matters** | `clio_list_matters`, `clio_get_matter`, matter import |
-   | **Contacts** | `clio_list_contacts` |
-   | **Documents** | `clio_list_documents`, `clio_download_document` |
-   | **Activities** | `clio_create_activity`, time-entry sync |
-   | **Notes** | `clio_create_note` |
-   | **Users** | `who_am_i` call to fetch firm name on connect |
+With Clio connected, Big Michael's client-briefing swarm pulls matters, contacts, and notes
+into every `@BigMichael briefing` run.
 
-5. Save. Copy the **Client ID** and **Client Secret**.
-
-### 2. Configure your `.env`
-
-```bash
-CLIO_CLIENT_ID=your-client-id
-CLIO_CLIENT_SECRET=your-client-secret
-
-# Must match where the firm's data is hosted — wrong region = 401 on every call
-# us (default) | eu | ca | au
-CLIO_REGION=us
-
-# Only needed if your app deployment URL differs from the default
-# CLIO_REDIRECT_URI=https://biglaw.yourfirm.com/auth/clio/callback
-```
-
-### 3. Connect
-
-Start the server (`npm start` or `npm run dev`), then have a **partner** visit:
-
-```
-GET http://localhost:3101/auth/clio/connect
-```
-
-This redirects to Clio's OAuth consent screen. After the firm admin approves, Clio redirects back
-and tokens are stored to `./data/clio-auth.json`. They auto-refresh; you won't need to reconnect
-unless the refresh token is revoked.
-
-Check the connection status at any time:
-
-```bash
-curl http://localhost:3101/auth/clio/status
-# → { "connected": true, "firmName": "Smith & Jones LLP", "connectedAt": "2026-06-03T..." }
-```
-
-### 4. Use it
-
-**Import a matter:**
-```bash
-curl -X POST http://localhost:3101/tasks/from-clio-matter \
-  -H "Content-Type: application/json" \
-  -d '{ "matterId": 12345, "workflowType": "roundtable" }'
-```
-This fetches the matter, ingests attached documents into the knowledge base, and kicks off a full
-bench run. Returns `{ task, documentsIngested }`.
-
-**Sync billable time to Clio:**
-```bash
-curl -X POST http://localhost:3101/time-entries/sync-to-clio \
-  -H "Content-Type: application/json" \
-  -d '{ "clioMatterId": 12345, "matterNumber": "001-2024" }'
-```
-Returns `{ synced, skipped, errors }`. Already-synced entries are skipped automatically.
+> The in-browser connect flow (`GET /auth/clio/connect` → consent → `/auth/clio/callback`),
+> one-call matter import, and time-entry sync are part of the TypeScript implementation at
+> the `typescript-final` tag — not yet ported to the Go API.
 
 ---
 
@@ -781,10 +731,11 @@ positions for the customer. Run a roundtable workflow.
 Claude Code submits the task, polls progress, approves any human gates, and surfaces the
 final synthesis.
 
-`.mcp.json` runs in `auto` mode: if a backend is already serving the REST API (e.g. the web
-console started with `npm run serve`), Claude Code's MCP attaches to it as a thin client
-instead of opening the vector DB itself — so the console and the MCP run side by side without
-fighting over the single-writer lock. See **Run modes** above.
+`.mcp.json` runs in `auto` mode: if a backend is already serving the REST API (e.g. the
+Docker stack, or a native process started with `BIG_MICHAEL_MODE=backend`), Claude Code's
+MCP attaches to it as a thin client instead of opening the vector DB itself — so the console
+and the MCP run side by side without fighting over the single-writer lock. See **Run modes**
+above.
 
 ---
 
@@ -795,8 +746,8 @@ Three cost/latency tiers, chosen per agent tier + task type — or routed entire
 | Condition | Model |
 |---|---|
 | T0 root orchestrator · debate · synthesis · high complexity | **Opus** |
-| T1 managers · T2 specialists · drafting · verification | **Sonnet** |
-| T3 tool agents · descriptors · extraction · translation | **Haiku** |
+| T1 managers · T2 specialists · drafting | **Sonnet** |
+| T3 tool agents · descriptors · extraction · translation · verification passes | **Haiku** |
 | `OLLAMA_ENABLED=true` + `OLLAMA_TIERS=3` | T3 → local Ollama |
 | `LOCAL_INFERENCE_TIERS=all` | Everything → LM Studio / vLLM / Jan |
 
@@ -811,35 +762,47 @@ explicitly routed local.
 POST   /tasks                 GET /tasks · /tasks/:id · /tasks/:id/stream (SSE)
 DELETE /tasks/:id             POST /tasks/:id/assign         (partner only)
 POST   /tasks/from-template   POST /tasks/:id/gates/:gateId/{approve,reject}
-POST   /documents             POST /documents/upload (PDF/text) · GET /documents/search
+GET    /tasks/:id/rounds/:round            GET /tasks/:id/table.csv
+POST   /tasks/:id/status-report            (LPM status-report spine)
+POST   /documents             POST /documents/upload (PDF/text)
+GET    /documents             GET /documents/search
 GET    /agents · /templates · /settings   PUT /settings      (admin)
 GET    /plugins                                               (partner only)
 GET    /me · /profiles        POST /profiles                 (partner only)
                               PATCH /profiles/:id            (partner or profile owner)
                               DELETE /profiles/:id           (partner only)
 GET    /clients               POST /clients · PATCH/DELETE /clients/:id   (partner only)
-POST   /clients/:id/matters   DELETE /clients/:id/matters/:matterNumber   (partner only)
-POST   /clients/check-conflict                                             (partner only)
-GET    /time-entries          GET /time-entries/export.{json,csv}          (partner: all; lawyer: own)
-GET    /analytics/noslegal                                                 (partner only)
-POST   /profiles/:id/tone/import           DELETE /profiles/:id/tone
-POST   /profiles/:id/tone/linkedin-import  (backwards-compatible alias)
+POST   /clients/:id/matters   DELETE /clients/:id/matters/:num            (partner only)
+POST   /clients/check-conflict             POST /clients/check-conflict-graph
+GET    /clients/:id/briefing               hub-and-spoke client briefing
+POST   /clients/:id/ocg                    GET/DELETE /clients/:id/ocg · GET …/ocg/stats
+GET    /time-entries          GET /time-entries/export.{json,csv,ledes}    (partner: all; lawyer: own)
+GET    /time-entries/{agent-summary,suggestions}
+GET    /analytics/noslegal · /analytics/portfolio-health                  (partner only)
+POST   /profiles/:id/tone/linkedin-import  DELETE /profiles/:id/tone
 GET    /cost/summary                                                       (partner only)
 GET    /tasks/:id/cost        GET /profiles/:id/cost
-GET    /auth/providers        GET /auth/:provider/{login,callback} · POST /auth/logout
-GET    /auth/clio/status      GET /auth/clio/connect · GET /auth/clio/callback
-DELETE /auth/clio/disconnect
-POST   /tasks/from-clio-matter                                             (partner only)
-POST   /time-entries/sync-to-clio                                         (partner only)
+GET    /playbooks · /playbooks/:id · /playbooks/resolve/:clauseType
+POST   /playbooks/build       DELETE /playbooks/:id                       (partner only)
+POST   /redline               Contract redline (playbook-aware)
+POST   /headnotes/generate    Headnote extraction from case opinions
+POST   /precedents/generate   Precedent document generation
+GET/POST /citations/check     Citation engine (CourtListener-backed)
+GET    /deadlines/rules       POST /deadlines/compute
+PUT/GET /clients/:id/matters/:num/budget   POST …/budget/check
+GET    /matters/:matterNumber/{health,budget-prediction}
+POST   /matters/:matterNumber/deadlines
+PUT/GET /matters/:matterNumber/client-voice                  (Remy advocacy briefs)
+POST   /dockets/watch · /dockets/check-now  GET /dockets · /dockets/alerts/stream (SSE)
+POST   /regulatory/check-now               GET /regulatory/alerts/stream (SSE)
+GET    /budget/alerts/stream (SSE)
+POST   /pre-bills             GET/PATCH /pre-bills(/:id) · POST /invoices/{validate,upload}
+POST   /reports/generate · /portfolio/generate   GET /reports · /reports/:id/docx   (LPM)
+POST   /memory/query          GET /jobs · /jobs/stats · POST /jobs/:id/retry
 GET    /audit · /audit/stream (SSE)        GET /health
 POST   /bots/teams/webhook                 Teams Outgoing Webhook receiver
-POST   /bots/teams/notify                  Internal: post to a Teams channel
 POST   /bots/slack/events                  Slack Events API receiver
-POST   /bots/slack/notify                  Internal: post to a Slack channel
-POST   /bots/{teams,slack}/matter-link     Link a matter to a channel
-GET    /redline                            Contract redline (playbook-aware)
-POST   /headnotes/generate                 Headnote extraction from case opinions
-POST   /precedents/generate                Precedent document generation
+POST   /bots/{teams,slack}/matter-link     Link a matter to a channel (partner only)
 ```
 
 Document ingestion (`POST /documents`, `POST /documents/upload`) returns enriched metadata:
@@ -864,19 +827,16 @@ Every significant event is recorded in an **append-only, SHA-256 hash-chained JS
 |---|---|
 | **Task lifecycle** | `task.created`, `task.started`, `task.complete`, `task.failed`, `task.deleted` |
 | **Lawyer assignment** | `task.assigned` — carries the assigning partner's profileId, plus added/removed lawyer delta |
-| **DyTopo rounds** | `round.start`, `round.complete` — includes agent roster, finding count, phase |
+| **DyTopo rounds** | `round.start`, `round.complete`, `round.digest` — includes agent roster, finding count, phase |
 | **Agent activity** | `agent.processing`, `agent.complete` — agentId, tier, domain, round, duration |
 | **Findings** | `finding.produced` — findingId, confidence, content preview, attributed to responsible lawyer |
-| **Tool calls** | `tool.call`, `tool.result` — **actorId = the responsible lawyer** (not "system"); category field distinguishes `external_connector` (Westlaw, CourtListener, Clio…) from `internal` tools |
-| **Protocol** | `citation.gate`, `debate.start`, `debate.resolved`, `verification.start`, `verification.complete` |
-| **Human gates** | `gate.created`, `gate.approved`, `gate.rejected` — with reviewer's profileId |
-| **Documents** | `document.ingested`, `document.uploaded`, `document.searched` — actor, query, result count |
-| **Access control** | `access.denied` on every 403 (method, URL, actor); `auth.session.expired` on every 401 |
-| **Authentication** | `auth.login`, `auth.logout`, `auth.failed` — provider, role |
-| **Billable time** | `time.opened`, `time.closed` — entryId, matter, billing units, attributed to lawyer or agent |
-| **Profiles & clients** | `profile.created/updated/deleted`, `client.created/updated/deleted`, `matter.added/removed` |
-| **OCG compliance** | `ocg.violation`, `ocg.outcome` |
-| **Security** | `security.ssrf_blocked`, `security.rate_limited` |
+| **Tool calls** | `tool.call`, `tool.result` — **actorId = the responsible lawyer** (not "system") |
+| **Protocol** | `debate.start`, `debate.resolved`, `verification.start`, `verification.complete` |
+| **Human gates** | `gate.approved`, `gate.rejected` — with reviewer's profileId |
+| **Documents** | `document.ingested`, `document.uploaded` |
+| **Voice profiles** | `profile.tone.imported`, `profile.tone.cleared` |
+| **Matters** | `matter.client_voice_updated`, `matter.notification` |
+| **OCG compliance** | `client.ocg.ingested`, `client.ocg.deleted` |
 
 ### Key design for legal defensibility
 
@@ -892,7 +852,9 @@ GET /audit?taskId=<id>            entries for a specific matter
 GET /audit/stream                 live SSE stream of new events
 ```
 
-Entries also forward to **OpenSearch**, **Splunk**, or a **custom webhook** — set `AUDIT_OPENSEARCH_URL`, `AUDIT_SPLUNK_HEC_URL`, or `AUDIT_WEBHOOK_URL` to activate.
+The hash chain is re-verified when the log is restored on restart — a break logs a tamper
+warning. (The TypeScript implementation additionally forwarded entries to OpenSearch, Splunk,
+or a custom webhook; that forwarding is not yet ported to Go.)
 
 ---
 
@@ -906,6 +868,7 @@ when it completes or is deleted; duration is rounded up to the nearest **6-minut
 GET  /time-entries                query: profileId, taskId, matterNumber, from, to
 GET  /time-entries/export.json    full export (partner only)
 GET  /time-entries/export.csv     CSV for billing import (partner only)
+GET  /time-entries/export.ledes   LEDES 1998B export for e-billing (partner only)
 ```
 
 ---
@@ -929,34 +892,36 @@ so work product reads as if the lawyer wrote it themselves, not as generic AI ou
 
 **How it works:**
 
-1. Partner or lawyer uploads writing samples to `POST /profiles/:id/tone/import` or clicks
-   **Voice** in Admin › Users — the UI shows a polished modal with drag-and-drop and a live
-   profile display once the voice is built
-2. Any of the following file types are accepted:
-   - **LinkedIn ZIP** (or extracted `Shares.csv` / `Posts and Articles.csv`) — detected automatically
-   - **DOCX** — paragraphs extracted from `word/document.xml`
-   - **PDF** — PyMuPDF text extraction, split into paragraphs
-   - **CSV** — scores columns by average text length; uses the richest column (or joins all cells)
-   - **Plain text / Markdown** — split on double-newlines
-3. Content is sanitised (`sanitizeForHaiku` strips `FINDING:/END_FINDING` markers and other
-   prompt injection vectors) before reaching any model
-4. A chunked recursive MapReduce Haiku analysis runs: batches of 8 samples → prose notes → merged
+1. Partner or lawyer uploads their LinkedIn data export to
+   `POST /profiles/:id/tone/linkedin-import` (multipart; ZIP or raw CSV; 60-second
+   per-profile rate limit) or via the **Voice** modal in Admin › Users
+2. Content is sanitised (prompt-injection markers like `FINDING:`/`END_FINDING` and control
+   characters are stripped) before reaching any model
+3. A chunked recursive MapReduce Haiku analysis runs: batches of posts → prose notes → merged
    up to a single note → structured `ToneProfile`
-5. The `ToneProfile` is stored on the lawyer's profile and injected into all drafting-domain agent
+4. The `ToneProfile` is stored on the lawyer's profile and injected into all drafting-domain agent
    system prompts and the final Opus synthesis call
+
+`DELETE /profiles/:id/tone` clears the profile.
 
 **Getting a LinkedIn export:**
 
 1. Go to <https://www.linkedin.com/mypreferences/d/download-my-data>
 2. Select **Posts & Articles** → **Request archive**
 3. Download the ZIP when LinkedIn emails you the link
-4. Upload the ZIP (or the extracted CSV) — or just drop a DOCX, PDF, or CSV of your own writing
+4. Upload the ZIP (or the extracted `Shares.csv` / `Posts.csv`)
+
+> The TypeScript implementation also accepted DOCX, PDF, CSV, and plain-text/Markdown writing
+> samples via a generic `POST /profiles/:id/tone/import` route; the Go platform currently
+> imports LinkedIn exports only.
 
 ---
 
 ## Cost visibility
 
-Every Anthropic and Ollama API call is recorded and persisted to `./data/costs.jsonl`.
+Every model call is recorded and persisted to `./data/costs.jsonl` (override the path with
+`COST_LOG_FILE`). Pricing is cache-aware: cache writes bill at 1.25× the input rate, cache
+reads at 0.10×.
 
 **Pricing table (per million tokens, input / output):**
 
@@ -966,10 +931,8 @@ Every Anthropic and Ollama API call is recorded and persisted to `./data/costs.j
 | Claude Sonnet 4.6 | $3 | $15 |
 | Claude Opus 4.8 | $15 | $75 |
 
-Override any entry via env: `COST_<MODEL_ID>_IN` / `COST_<MODEL_ID>_OUT` (USD per MTok).
-
-**Local power estimate:** set `LOCAL_INFERENCE_WATTS` to your GPU's TDP
-(default: 250 W for GPU, 30 W for Apple Silicon, 65 W for CPU).
+**Local power estimate:** set `LOCAL_INFERENCE_WATTS` to your GPU's TDP (default 250 W) —
+local-inference calls record estimated watt-hours instead of USD.
 
 **REST endpoints:**
 
@@ -988,31 +951,30 @@ attack surface is treated seriously.
 
 | Area | What's in place |
 |---|---|
-| **Profile data scoping** | `GET /profiles/:id` returns full PII only to partners and the profile owner; other lawyers receive display-only fields |
-| **Constant-time auth** | API key comparison pads to expected length before `timingSafeEqual` so wrong-length keys don't short-circuit the comparison and leak key length |
-| **Auth rate limiting** | Auth endpoints are sliding-window rate-limited to 20 req/min per IP |
-| **Input caps** | `fetch_documents` capped at 20 IDs; `tabular_review` capped at 50 documents × 30 columns |
-| **CSV safety** | Time-entry and table CSV exports strip `\r\n` from field values to prevent row injection |
-| **SSRF protection** | All admin-configurable endpoint URLs are validated against a private/loopback blocklist at startup |
-| **Path traversal** | PDF and docx tools enforce an allow-list of read roots; the plugin directory is pinned to the project root |
-| **Prompt injection** | Lavern agent system prompts are sanitised with `sanitizePromptContent()` to remove rogue markers |
-| **Bot signature verification** | Teams Outgoing Webhook: HMAC-SHA256 (`Authorization: HMAC <base64>`). Slack Events API: signing-secret + 5-min replay window |
-| **No secrets in logs** | API keys appear only in `Authorization` headers; connector error messages are capped at 200–400 chars |
-| **Signed sessions** | Session cookies are signed, httpOnly, sameSite:lax, secure on HTTPS |
+| **Constant-time auth** | Bearer-token comparison uses `subtle.ConstantTimeCompare`; the token is the credential — `X-Profile-ID` alone is just a claim |
+| **Prompt injection** | `SanitizePromptContent` strips rogue protocol markers (FINDING/CHALLENGE/RESOLUTION…, case-insensitive) and control characters from all user-supplied content before it reaches a model — task descriptions, round goals, tone imports, debate resolutions |
+| **SSRF protection** | Endpoint URLs are validated against a private/loopback blocklist (incl. `::`, `0.0.0.0`, CGNAT 100.64/10, IPv4-mapped IPv6, hex/decimal IP forms); the CourtListener client refuses redirects |
+| **CSV safety** | Time-entry and tabulate CSV exports neutralise formula injection and strip `\r\n` from field values |
+| **Audit integrity** | SHA-256 hash chain verified on restore — tampering logs a warning |
+| **Bot signature verification** | Teams Outgoing Webhook: HMAC-SHA256 over the raw body (`Authorization: HMAC <base64>`). Slack Events API: signing-secret + 5-min replay window |
+| **Access control** | Partner gates on playbook, roster, client, billing, and analytics endpoints; lawyers see only assigned matters |
+| **Conflict checks** | Entity-name normalisation + bidirectional matching, with an optional TypeDB conflict-graph sidecar |
+| **Round resilience** | Per-agent round timeout (`AGENT_ROUND_TIMEOUT_MS`); malformed debate resolutions route to a human gate instead of passing silently |
+| **No secrets in logs** | API keys appear only in `Authorization` headers; connector error messages are length-capped; response bodies capped (1–2 MB) with 30 s timeouts |
 
 ---
 
 ## Lawyers, roles & access control
 
-BigLaw is multi-user when deployed. Identity comes from **OAuth** (Google,
-Microsoft, or LinkedIn); each person is a **lawyer profile** with a role:
+BigLaw is multi-user when deployed. Each person is a **lawyer profile** with a role:
 
 - **partner** (admin) — sees every matter, manages the lawyer roster, assigns
   matters to lawyers, and manages clients.
 - **lawyer** — sees **only** the matters they're assigned to. There is no
   inter-lawyer visibility unless a partner shares a case.
 
-This is enforced at every matter-scoped endpoint and documented in unit tests (`npm test`).
+This is enforced at every matter-scoped endpoint and documented in unit tests
+(`cd biglaw-go && go test ./...`).
 
 ### Lawyer profiles
 
@@ -1029,22 +991,25 @@ bio, and optionally a `ToneProfile` for voice fingerprinting.
 
 ### Auth setup (production)
 
+The Go platform authenticates with a **bearer API key plus a profile header**: every request
+carries `Authorization: Bearer <API_KEY>` (the credential, compared in constant time) and
+`X-Profile-ID: <profile id>` (which lawyer is acting). Role and visibility come from the
+matching lawyer profile.
+
 ```bash
 AUTH_ENABLED=true
-SESSION_SECRET=<random 32+ char secret>
+API_KEY=<random 32+ char secret>     # the shared bearer credential
 PUBLIC_BASE_URL=https://api.your-host
 PUBLIC_UI_URL=https://app.your-host
 CORS_ORIGINS=https://app.your-host
-ADMIN_EMAILS=you@firm.com
-
-GOOGLE_CLIENT_ID=…       GOOGLE_CLIENT_SECRET=…
-MICROSOFT_CLIENT_ID=…    MICROSOFT_CLIENT_SECRET=…
-LINKEDIN_CLIENT_ID=…     LINKEDIN_CLIENT_SECRET=…
 ```
 
-**Local dev** runs with auth OFF — a single "local partner" who sees everything. No OAuth required to develop.
+**Local dev** runs with auth OFF (`AUTH_ENABLED=false`, the default) — a single "local
+partner" who sees everything. **Never expose the API on a shared network with auth off.**
 
-📖 Full step-by-step provider registration: [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md).
+> The TypeScript implementation (`typescript-final` tag) shipped browser OAuth login
+> (Google / Microsoft / LinkedIn) with signed session cookies — see
+> [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md). That flow is not yet ported to the Go API.
 
 ---
 
@@ -1061,52 +1026,64 @@ Client requirements win; firm defaults are the market-standard baseline. A playb
 priority level overrides the corresponding clause or preference from any lower level.
 
 ```bash
-# Create a firm-level fallback playbook
-POST /playbooks { "scope": "firm", "name": "Standard NDA positions", "clauses": [...] }
+# Build a firm-level fallback playbook from the knowledge store (partner only)
+POST /playbooks/build { "scope": "firm", "practiceArea": "Commercial Contracts", "name": "Standard NDA positions" }
 
-# Override at matter level (e.g. bespoke retention terms for M&A)
-POST /playbooks { "scope": "matter", "matterNumber": "M-001", "clauses": [...] }
+# Resolve which clause position wins across the cascade
+GET /playbooks/resolve/limitation_of_liability?clientId=C-001&matterNumber=M-001
+
+# List / inspect / delete
+GET /playbooks          GET /playbooks/:id          DELETE /playbooks/:id
 ```
 
 ---
 
 ## Project layout
 
+All platform code lives under `biglaw-go/` (module `biglaw-go`, entry point
+`biglaw-go/cmd/biglaw`). The retired TypeScript sources are at the `typescript-final` tag.
+
 | Path | Role |
 |---|---|
-| `src/orchestrator.ts` | Task lifecycle, phase sequencing, synthesis |
-| `src/dytopo/engine.ts` | Need/Offer matching, comm graph, two-wave round execution |
-| `src/agents/` | 50 jurisdiction-neutral agent definitions + the agentic-loop base class |
-| `src/agents/registry.ts` | RuVector HNSW agent registry — persists to `./data/agents.rvdb` |
-| `src/learning/index.ts` | RuVector Q-learning recruitment — `LearningEngine` + `FastAgentDB` |
-| `src/memory/index.ts` | Intra-round whiteboard + inter-round RuVector memory store |
-| `src/knowledge/index.ts` | Document knowledge base — chunk ingestion + semantic search |
-| `src/protocols/` | CitationGate · DebateProtocol · VerificationPipeline |
-| `src/tools/` | Tool registry — PDF, DocuSeal, docx, tabular, document, tracked-changes |
-| `src/tools/connectors.ts` | 32 legal connector tools across 15 providers |
-| `src/routing/model.ts` | Haiku / Sonnet / Opus / Ollama / local routing |
-| `src/auth/` | Lawyer profiles, roles, RLS access control + OAuth login |
-| `src/clients/` | Client roster, matter sub-lists, conflict-of-interest checks |
-| `src/time/index.ts` | Billable time tracking — 6-min units, open/close lifecycle, CSV export |
-| `src/playbook/index.ts` | Four-tier playbook cascade — firm/personal/matter/client |
-| `src/citations/engine.ts` | Citation engine — CourtListener-backed KeyCite replacement |
-| `src/redline/engine.ts` | Playbook-aware contract redlining |
-| `src/headnotes/engine.ts` | Headnote extraction from case opinions |
-| `src/precedent/generator.ts` | Precedent document generation from knowledge store + playbooks |
-| `src/briefing/index.ts` | Hub-and-spoke client briefing swarm (Chalkboard pattern) |
-| `src/bots/teams.ts` · `src/bots/slack.ts` | Big Michael — Teams + Slack channel agent |
-| `src/integrations/graph.ts` | Microsoft Graph API — SharePoint, Teams, Exchange |
-| `src/email/client.ts` | Email search — Microsoft Graph (O365) + Gmail |
-| `src/services/classifier.ts` | Haiku-based practice area + client + NOSLEGAL detection |
-| `src/services/toneAnalyzer.ts` | Chunked recursive Haiku tone analysis (MapReduce) |
-| `src/cost/index.ts` | `CostStore`, pricing table, `calcCostUsd`, `calcWattHours` |
-| `src/settings/` | Live admin settings (DyTopo depth, debate, DocuSeal, modes) |
-| `src/mcp/server.ts` | MCP stdio server + Fastify REST API |
-| `src/adapters/` | Plugin adapter — drop JSON in `adapters/external/` for instant integration |
-| `src/secrets/index.ts` | Infisical secrets manager (bootstrap from `.env`, rest from vault) |
+| `biglaw-go/cmd/biglaw/` | Entry point — run modes, firm-wide budget/docket/regulatory monitors |
+| `biglaw-go/cmd/topoflow-eval/` | TopoFlow ablation harness (bandit-over-DyTopo evaluation) |
+| `internal/orchestrator/` | Task lifecycle, phase sequencing, synthesis, tabulate |
+| `internal/dytopo/` | Need/Offer matching, comm graph, two-wave round execution |
+| `internal/topoflow/` | AgensFlow bandit over DyTopo topology selection |
+| `internal/agents/` | All 131 agent definitions + the agentic-loop base class |
+| `internal/agents/registry.go` | In-process vector agent registry — persists to `./data/agents.json` |
+| `internal/learning/` | Q-learning recruitment — Q-table persisted to `.qtable.json` |
+| `internal/memory/` | Intra-round whiteboard + inter-round vector memory store |
+| `internal/knowledge/` | Document knowledge base — chunk ingestion + semantic search |
+| `internal/protocols/` | CitationGate · DebateProtocol · VerificationPipeline |
+| `internal/tools/` | Tool registry — knowledge retrieval, extraction, 32 connectors |
+| `internal/routing/` | Haiku / Sonnet / Opus / Ollama / local routing |
+| `internal/api/` | REST API (gin) — one file per domain route group |
+| `internal/mcp/` | MCP stdio server |
+| `internal/auth/` | Lawyer profiles, roles, access control |
+| `internal/clients/` | Client roster, matter sub-lists, conflict-of-interest checks |
+| `internal/timekeeping/` | Billable time tracking — 6-min units, CSV export |
+| `internal/billing/` | Pre-bills, LEDES 1998B export/parse, invoice validation |
+| `internal/ocg/` | Outside-counsel-guidelines compliance checks |
+| `internal/playbook/` | Four-tier playbook cascade — firm/personal/matter/client |
+| `internal/citations/` | Citation engine — CourtListener-backed KeyCite replacement |
+| `internal/redline/` | Playbook-aware contract redlining |
+| `internal/headnotes/` | Headnote extraction from case opinions |
+| `internal/precedent/` | Precedent document generation from knowledge store + playbooks |
+| `internal/briefing/` | Hub-and-spoke client briefing swarm (Chalkboard pattern) |
+| `internal/bots/` | Big Michael — Teams + Slack channel agent |
+| `internal/lpm/` | Legal project management — daily status reports, portfolio BLUF, DOCX |
+| `internal/clientvoice/` | Remy client-voice advocacy briefs |
+| `internal/dockets/` · `internal/regulatory/` · `internal/budget/` | Docket watch, regulatory alerts, matter budget monitors |
+| `internal/graph/` · `internal/email/` | Microsoft Graph (SharePoint/Teams) + O365/Gmail search |
+| `internal/services/` | Haiku classifiers (practice area, client, NOSLEGAL) + tone analyzer |
+| `internal/cost/` | Cost store, cache-aware pricing, watt-hour estimates |
+| `internal/deadlines/` | Court deadline engine (rules in `deadlines/rules/*.yaml`) |
+| `internal/adapters/` | Plugin adapter — drop JSON in `adapters/external/` for instant integration |
+| `internal/secrets/` | Infisical secrets manager (bootstrap from `.env`, rest from vault) |
+| `sidecar/` | TypeDB conflict-graph sidecar (Unix-socket IPC) |
 | `ui/` | Vite + React console |
-| `tests/` | Unit tests (`npm test`) — routing, adapters, access control, path safety |
-| `workflows/mikeoss/` · `src/templates/` | Workflow presets (CP checklist, credit/SHA summary, …) |
+| `templates/` · `workflows/` · `agents/lavern/` | Task templates, MikeOSS/Lavern workflow + agent configs |
 
 ---
 

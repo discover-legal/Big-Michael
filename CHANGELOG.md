@@ -17,7 +17,26 @@ House rules:
 
 ## [Unreleased]
 
-_Nothing yet — next drop accumulates here._
+### Docs
+- README + docs verified against the Go platform and corrected: Docker-based
+  setup.sh description (was the Node wizard), Go agent counts (131 definitions;
+  architecture diagram), in-process vector search (was "RuVector native HNSW";
+  registry persists to `data/agents.json`, memory/knowledge are in-memory),
+  REST route map regenerated from `internal/api/` (adds playbooks, citations,
+  deadlines, matters, dockets, regulatory, pre-bills/invoices/OCG, LPM, LEDES;
+  `POST /redline` was listed as GET), bench tool table split into Go agent
+  tools vs REST engines, verification passes routed to Haiku (was listed under
+  Sonnet), deadline calculator example moved to `POST /deadlines/compute` with
+  rules at `deadlines/rules/`, cost section drops unimplemented
+  `COST_<MODEL>_IN/OUT` overrides, audit event table trimmed to events the Go
+  log actually emits, security table updated to shipped hardening
+- TS-only features now explicitly marked as preserved at `typescript-final`
+  and not yet ported: browser OAuth login (banner added to
+  `docs/AUTH_SETUP.md`), Clio connect flow / matter import / time sync,
+  Mike document-production tools (docx/tabular/PDF/DocuSeal), generic tone
+  import (Go is LinkedIn-only), audit forwarding (OpenSearch/Splunk/webhook)
+- CLAUDE.md: version block updated to 1.0.0/Go, MCP tool list matched to the
+  Go server, route-list caveat added, `agents/lavern/` path fixed
 
 ---
 
