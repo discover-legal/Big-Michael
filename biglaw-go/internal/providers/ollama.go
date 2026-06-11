@@ -20,9 +20,10 @@ import (
 )
 
 type OllamaProvider struct {
-	baseURL string
-	apiKey  string
-	client  *http.Client
+	baseURL                string
+	apiKey                 string
+	useMaxCompletionTokens bool
+	client                 *http.Client
 }
 
 func NewOllamaProvider(cfg *config.Config) *OllamaProvider {
@@ -43,18 +44,26 @@ func NewOllamaProvider(cfg *config.Config) *OllamaProvider {
 	return &OllamaProvider{
 		baseURL: baseURL,
 		apiKey:  apiKey,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		// See openAIChatRequest: OpenAI-hosted models take a different
+		// token-cap parameter than local OpenAI-compatible servers.
+		useMaxCompletionTokens: strings.Contains(baseURL, "api.openai.com"),
+		client:                 &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
 // openAIChatRequest matches the OpenAI/Ollama chat completions format.
+// Exactly one of MaxTokens / MaxCompletionTokens is set per request:
+// OpenAI-hosted models (gpt-5.x, o-series) reject max_tokens outright and
+// require max_completion_tokens, while local OpenAI-compatible servers
+// (Ollama, LM Studio, vLLM, llama.cpp) speak the original max_tokens.
 type openAIChatRequest struct {
-	Model          string             `json:"model"`
-	Messages       []openAIMessage    `json:"messages"`
-	Tools          []openAITool       `json:"tools,omitempty"`
-	MaxTokens      int                `json:"max_tokens,omitempty"`
-	Stream         bool               `json:"stream"`
-	ResponseFormat *openAIResponseFmt `json:"response_format,omitempty"`
+	Model               string             `json:"model"`
+	Messages            []openAIMessage    `json:"messages"`
+	Tools               []openAITool       `json:"tools,omitempty"`
+	MaxTokens           int                `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int                `json:"max_completion_tokens,omitempty"`
+	Stream              bool               `json:"stream"`
+	ResponseFormat      *openAIResponseFmt `json:"response_format,omitempty"`
 }
 
 // openAIResponseFmt requests JSON-constrained decoding. Ollama and LM Studio
@@ -123,10 +132,14 @@ func (p *OllamaProvider) Chat(params ChatParams) (*ChatResponse, error) {
 
 	bareModel := routing.ResolveModelID(params.Model)
 	reqBody := openAIChatRequest{
-		Model:     bareModel,
-		Messages:  msgs,
-		MaxTokens: params.MaxTokens,
-		Stream:    false,
+		Model:    bareModel,
+		Messages: msgs,
+		Stream:   false,
+	}
+	if p.useMaxCompletionTokens {
+		reqBody.MaxCompletionTokens = params.MaxTokens
+	} else {
+		reqBody.MaxTokens = params.MaxTokens
 	}
 	if params.JSONMode {
 		reqBody.ResponseFormat = &openAIResponseFmt{Type: "json_object"}
