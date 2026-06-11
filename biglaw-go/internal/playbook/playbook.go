@@ -485,8 +485,8 @@ For each clause type, extract:
 - dealPoints: list of 2–4 key negotiating observations
 - exampleLanguage: up to 2 short verbatim excerpt fragments
 
-Return a JSON array. One object per clause type:
-[{"clauseType":"...","standardPosition":"...","fallbackPosition":"...","redLines":["..."],"dealPoints":["..."],"exampleLanguage":["..."]}]
+Return a JSON object with an "entries" array. One object per clause type:
+{"entries": [{"clauseType":"...","standardPosition":"...","fallbackPosition":"...","redLines":["..."],"dealPoints":["..."],"exampleLanguage":["..."]}]}
 
 If insufficient data: standardPosition: "Insufficient precedent data — apply firm standard market position for %s." redLines: ["Do not agree without partner sign-off"]`,
 		opts.PracticeArea, strings.ToUpper(string(opts.Scope)), scopeLabel, jur)
@@ -499,6 +499,7 @@ If insufficient data: standardPosition: "Insufficient precedent data — apply f
 		MaxTokens:   2048,
 		System:      system,
 		CacheSystem: true,
+		JSONMode:    true,
 		Messages:    []providers.Message{{Role: "user", Content: userMsg}},
 	})
 	if err != nil {
@@ -530,6 +531,10 @@ If insufficient data: standardPosition: "Insufficient precedent data — apply f
 			break
 		}
 	}
+	// Strip markdown fences a JSON-mode-ignoring server might still emit.
+	raw = strings.ReplaceAll(raw, "```json", "")
+	raw = strings.ReplaceAll(raw, "```", "")
+	raw = strings.ReplaceAll(raw, "`", "")
 	s := strings.Index(raw, "[")
 	eIdx := strings.LastIndex(raw, "]")
 	if s < 0 || eIdx <= s {

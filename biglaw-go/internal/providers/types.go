@@ -48,6 +48,12 @@ type ChatParams struct {
 	Tools       []ToolParam
 	CacheSystem bool
 	Thinking    *ThinkingConfig
+	// JSONMode constrains the decoder to emit a single valid JSON value — no
+	// prose preamble, no markdown fences. Honored by the local OpenAI-compatible
+	// provider (Ollama/LM Studio) via response_format; the Anthropic provider
+	// ignores it (Claude already emits clean JSON on request, and prefill-style
+	// forcing 400s on current models). Set it on structured-extraction calls.
+	JSONMode bool
 }
 
 type Usage struct {

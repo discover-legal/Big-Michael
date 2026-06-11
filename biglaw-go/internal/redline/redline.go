@@ -219,8 +219,8 @@ Extract every distinct legal clause that actually appears in the contract text. 
 
 Only report clauses present in the document — never invent clause types that are not there.%s
 
-Return a JSON array:
-[{"clauseType": "...", "text": "..."}]
+Return a JSON object with a "clauses" array:
+{"clauses": [{"clauseType": "...", "text": "..."}]}
 
 Include up to 40 clauses. Skip boilerplate recitals.`, area, vocabHint)
 
@@ -229,6 +229,7 @@ Include up to 40 clauses. Skip boilerplate recitals.`, area, vocabHint)
 		MaxTokens:   3000,
 		System:      system,
 		CacheSystem: true,
+		JSONMode:    true,
 		Messages:    []providers.Message{{Role: "user", Content: "Contract text:\n" + truncate(text, 12000)}},
 	})
 	if err != nil {
@@ -305,8 +306,8 @@ For each missing clause return:
 - rationale: 1 sentence on the risk of leaving it out
 - severity: "critical", "high", "medium", or "low"
 
-Return a JSON array (empty array if nothing material is missing):
-[{"clauseType":"...","suggestedText":"...","rationale":"...","severity":"..."}]`
+Return a JSON object with a "missing" array (empty array if nothing material is missing):
+{"missing": [{"clauseType":"...","suggestedText":"...","rationale":"...","severity":"..."}]}`
 
 	user := fmt.Sprintf("PLAYBOOK EXPECTS:\n%s\n\nCLAUSES PRESENT IN DRAFT:\n%s",
 		strings.Join(expBlocks, "\n"), strings.Join(foundTypes, ", "))
@@ -317,6 +318,7 @@ Return a JSON array (empty array if nothing material is missing):
 		MaxTokens:   2500,
 		System:      system,
 		CacheSystem: true,
+		JSONMode:    true,
 		Messages:    []providers.Message{{Role: "user", Content: user}},
 	})
 	if err != nil {
@@ -432,15 +434,17 @@ For each clause, determine:
 - rationale: 1-2 sentences
 - isRedLine: true if a firm red line is crossed
 
-Return a JSON array — one object per clause. ALWAYS include "clauseIndex" set to the
-CLAUSE number shown in the input header (1-based) so each verdict is bound to its clause:
-[{"clauseIndex":1,"clauseType":"...","action":"...","severity":"...","proposedText":"...","rationale":"...","isRedLine":false}]`
+Return a JSON object with a "verdicts" array — one object per clause. ALWAYS include
+"clauseIndex" set to the CLAUSE number shown in the input header (1-based) so each
+verdict is bound to its clause:
+{"verdicts": [{"clauseIndex":1,"clauseType":"...","action":"...","severity":"...","proposedText":"...","rationale":"...","isRedLine":false}]}`
 
 	resp, err := e.provider.Chat(providers.ChatParams{
 		Model:       e.sonnet,
 		MaxTokens:   4096,
 		System:      system,
 		CacheSystem: true,
+		JSONMode:    true,
 		Messages:    []providers.Message{{Role: "user", Content: strings.Join(blocks, "\n\n")}},
 	})
 	if err != nil {

@@ -49,11 +49,19 @@ func NewOllamaProvider(cfg *config.Config) *OllamaProvider {
 
 // openAIChatRequest matches the OpenAI/Ollama chat completions format.
 type openAIChatRequest struct {
-	Model     string          `json:"model"`
-	Messages  []openAIMessage `json:"messages"`
-	Tools     []openAITool    `json:"tools,omitempty"`
-	MaxTokens int             `json:"max_tokens,omitempty"`
-	Stream    bool            `json:"stream"`
+	Model          string             `json:"model"`
+	Messages       []openAIMessage    `json:"messages"`
+	Tools          []openAITool       `json:"tools,omitempty"`
+	MaxTokens      int                `json:"max_tokens,omitempty"`
+	Stream         bool               `json:"stream"`
+	ResponseFormat *openAIResponseFmt `json:"response_format,omitempty"`
+}
+
+// openAIResponseFmt requests JSON-constrained decoding. Ollama and LM Studio
+// honor {"type":"json_object"} on the OpenAI-compatible endpoint, guaranteeing
+// a single valid JSON value with no prose preamble or markdown fences.
+type openAIResponseFmt struct {
+	Type string `json:"type"`
 }
 
 type openAIMessage struct {
@@ -119,6 +127,9 @@ func (p *OllamaProvider) Chat(params ChatParams) (*ChatResponse, error) {
 		Messages:  msgs,
 		MaxTokens: params.MaxTokens,
 		Stream:    false,
+	}
+	if params.JSONMode {
+		reqBody.ResponseFormat = &openAIResponseFmt{Type: "json_object"}
 	}
 
 	body, _ := json.Marshal(reqBody)
