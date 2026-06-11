@@ -18,11 +18,11 @@ COPY --from=build /out/biglaw /usr/local/bin/biglaw
 
 # Config payloads loaded at startup (templates, Lavern/MikeOSS workflows,
 # Lavern agents, external plugin adapters, jurisdiction deadline rules).
-COPY src/templates/       ./templates/
-COPY workflows/           ./workflows/
-COPY adapters/            ./adapters/
-COPY agents/lavern/       ./agents/lavern/
-COPY src/deadlines/rules/ ./deadlines/rules/
+COPY templates/       ./templates/
+COPY workflows/       ./workflows/
+COPY adapters/        ./adapters/
+COPY agents/lavern/   ./agents/lavern/
+COPY deadlines/rules/ ./deadlines/rules/
 
 # /run/biglaw is shared with the sidecar container via a named volume; 1777
 # (sticky, /tmp-style) so either uid can create the socket regardless of which

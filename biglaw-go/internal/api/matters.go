@@ -5,12 +5,10 @@
 // court deadlines, matter health scoring, and portfolio + NOSLEGAL analytics.
 // HTTP contract mirrors the TypeScript backend (src/mcp/server.ts).
 //
-// The budget domain package (internal/budget) expects a ClientStore with
-// pointer-returning List() and an exported Persist(), which the concrete
-// clients.ClientStore does not provide. Until those methods land on the store,
-// mattersBudgetClientAdapter bridges the gap: it overlays budget state
-// (budgetUsd / thresholds / alerts-triggered) onto roster copies and persists
-// the overlay to its own JSON file beside the clients file.
+// mattersBudgetClientAdapter overlays budget state (budgetUsd / thresholds /
+// alerts-triggered) onto roster copies, persisted to its own JSON file beside
+// the clients file; budget writes also flow through to the client store so the
+// firm-wide monitor and bot facade share the same numbers.
 //
 // Also hosts the adapters behind the firm-wide bot/monitor budget reader
 // (apiBudgetTime / apiBudgetClients) and AttachDockets, which exposes the
@@ -98,7 +96,7 @@ func (s *Server) mattersDeps() *mattersSubsystem {
 		// (no rules loaded → compute returns 404), exactly like TS.
 		rulesDir := os.Getenv("DEADLINES_RULES_DIR")
 		if rulesDir == "" {
-			rulesDir = "./src/deadlines/rules"
+			rulesDir = "./deadlines/rules"
 		}
 		_ = sys.deadlines.LoadRulesDir(rulesDir)
 
