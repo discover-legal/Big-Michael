@@ -674,6 +674,12 @@ func recordCost(model string, resp *providers.ChatResponse, dms int64, taskID st
 // them constantly, and a review that silently returns nothing is worse than
 // a forgiving parse.
 func parseJSONArray(raw string, v interface{}) error {
+	// Strip markdown code fences (```json … ```) and stray backticks — small
+	// local models love to wrap JSON in them, which otherwise lands inside the
+	// extracted fragment and fails the parse with "invalid character '`'".
+	raw = strings.ReplaceAll(raw, "```json", "")
+	raw = strings.ReplaceAll(raw, "```", "")
+	raw = strings.ReplaceAll(raw, "`", "")
 	s := strings.Index(raw, "[")
 	e := strings.LastIndex(raw, "]")
 	if s < 0 || e <= s {
