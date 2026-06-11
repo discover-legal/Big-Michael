@@ -124,6 +124,13 @@ func (r *Registry) registerAll() {
 	// Connector stubs — return structured errors when unconfigured.
 	r.registerConnectors()
 	r.registerClioTools()
+	// Document production (ported from the Mike-derived TS tool set).
+	r.registerDocxTools()
+	r.registerTrackedChangesTools()
+	r.registerPdfTools()
+	r.registerDocusealTools()
+	r.registerTabularTools()
+	r.registerDocumentExtraTools()
 }
 
 // ─── web_search ──────────────────────────────────────────────────────────────

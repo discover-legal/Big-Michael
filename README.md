@@ -326,14 +326,14 @@ A real matter, mid-flight — the bench self-organising, then the cited result.
 | Hallucinated cites | **CitationGate** rejects any claim whose source isn't in the registry |
 | Locked to one jurisdiction | **Jurisdiction-neutral** native bench — applies the governing law each matter specifies |
 | Black box | Court-ready **audit trail** — every agent invocation, tool call (with the lawyer's identity), finding, gate decision, and document ingest — hash-chained JSONL + live SSE |
-| Text in, text out | Cited briefs, tabular-review CSVs, daily status reports as **.docx** |
+| Text in, text out | Cited briefs, **.docx** with tracked changes, e-signed via DocuSeal |
 | Cloud-only | 3-tier cloud routing **or** fully local (Ollama / LM Studio / vLLM) |
 | Static agent pool | **Q-learning recruitment** — agents that produce high-confidence findings are promoted; weak ones deprioritised over time |
 | Siloed per-round context | **Intra-round whiteboard** broadcast to all agents + **Haiku-synthesised inter-round rollup** carried forward |
 | One-size config | **Admin panel** — lawyer/non-lawyer mode, DyTopo depth, verification & DocuSeal, applied live |
 | Generic document store | Documents auto-classified by **practice area** with matching lawyers surfaced on ingest |
 | No billing integration | Automatic **6-minute billable time units** tracked per lawyer, per matter, exportable as CSV |
-| Generic output voice | Per-lawyer **voice fingerprinting** from LinkedIn writing history — drafting agents mirror the assigned lawyer's style |
+| Generic output voice | Per-lawyer **voice fingerprinting** from LinkedIn posts, DOCX, PDF, or CSV — drafting agents mirror the assigned lawyer's style |
 | Black-box costs | **Per-call cost tracking** with prompt-cache-aware pricing, local power estimates, and an admin cost dashboard |
 | Manual setup | **One-command setup** — one curl, checks prereqs, seeds `.env`, brings up the Docker stack, done |
 | No deadline tracking | **Court deadline calculator** — FRCP, UK CPR, EU Competition rules; calendar vs business days, cited |
@@ -500,8 +500,17 @@ Agents act through a typed tool registry (`biglaw-go/internal/tools/`). Highligh
 | `search_knowledge` · `read_document` · `list_documents` | Semantic + full-text retrieval over the knowledge base |
 | `find_in_document` | Whitespace-tolerant Ctrl+F with cited context windows |
 | `extract_from_document` | Structured extraction — parties, dates, amounts, obligations, defined terms |
+| `fetch_documents` | Fetch up to 20 documents by ID in one call |
 | `query_memory` | Query the inter-round memory store |
+| `tabular_review` | Multi-doc × multi-column extraction matrix with RAG flags + pinpoint citations (50 docs × 30 columns) |
+| `read_table_cells` | Read any column/row slice of a persisted review |
+| `docx_generate` | Build a Word document (headings, prose, bullets, tables, landscape, page breaks) |
+| `edit_document` | **Tracked-changes redlining** of a `.docx` — minimal `<w:ins>`/`<w:del>` substitutions with smart-quote/whitespace-tolerant anchoring |
+| `replicate_document` | Byte-for-byte `.docx` copies to adapt as templates |
+| `pdf_extract_text` · `pdf_extract_tables` · `pdf_ocr` · `pdf_generate` | PyMuPDF / Camelot / Tesseract backend (`scripts/pdf_tools.py`) |
+| `docuseal_send_for_signing` · `_list_templates` · `_submission_status` | DocuSeal e-signature dispatch + status |
 | `web_search` · `translate` · `citation_check` | Tavily search, translation, source verification |
+| 7 `clio_*` tools | Clio matters, documents, contacts, notes, activities |
 | 32 connector tools | CourtListener · Westlaw · Everlaw · Trellis · Descrybe · Ironclad · iManage · Definely · DocuSign CLM · Lawve AI · Solve Intelligence · Google Drive · Box · Slack · TopCounsel |
 
 The heavier engines are exposed over REST rather than as agent tools:
@@ -516,11 +525,9 @@ The heavier engines are exposed over REST rather than as agent tools:
 | Tabular review output (tabulate workflow) | `GET /tasks/:id/table.csv` |
 | Daily status reports as DOCX (LPM spine) | `GET /reports/:id/docx` |
 
-> The TypeScript implementation additionally shipped agent-facing document-production tools
-> ported from [Mike](https://github.com/willchen96/mike) (AGPL-3.0) — `docx_generate`,
-> tracked-changes `edit_document`, `tabular_review`, PyMuPDF/Camelot/Tesseract PDF tools,
-> and DocuSeal e-signing. Those tools are preserved at the `typescript-final` tag and are
-> not yet ported to the Go platform. See [`NOTICE`](NOTICE).
+> Document generation, tabular review, and tracked-change redlining are ported from
+> [Mike](https://github.com/willchen96/mike) (AGPL-3.0) and adapted to BigLaw's tool
+> registry and provider abstraction. See [`NOTICE`](NOTICE).
 
 ---
 
@@ -640,18 +647,21 @@ Unconfigured connectors return a structured `{ error: "not configured" }` — th
 
 **Practice management**
 
-| Provider | Feeds | Activation |
+| Provider | Tools | Activation |
 |---|---|---|
-| Clio | Big Michael's client-briefing swarm (matters · contacts · notes) | `CLIO_CLIENT_ID` + `CLIO_CLIENT_SECRET` (OAuth 2.0) |
+| Clio | `clio_list_matters`, `clio_get_matter`, `clio_list_documents`, `clio_download_document`, `clio_create_activity`, `clio_create_note`, `clio_list_contacts` | `CLIO_CLIENT_ID` + `CLIO_CLIENT_SECRET` (OAuth) |
 
-Clio uses OAuth 2.0 rather than a static API key. Tokens are persisted to
-`./data/clio-auth.json` and auto-refreshed. All four Clio data regions are supported
-(`CLIO_REGION=us|eu|ca|au`).
+Clio uses OAuth 2.0 rather than a static API key. After setting credentials, a partner visits
+`GET /auth/clio/connect` to authorise the firm's Clio account. Tokens are persisted to disk
+and auto-refreshed. All four Clio data regions are supported (`CLIO_REGION=us|eu|ca|au`).
+Clio also feeds Big Michael's client-briefing swarm (matters · contacts · notes).
 
-> The TypeScript implementation (`typescript-final` tag) additionally exposed the in-browser
-> OAuth connect flow (`/auth/clio/*`), seven `clio_*` agent tools, one-call matter import
-> (`POST /tasks/from-clio-matter`), and time-entry sync (`POST /time-entries/sync-to-clio`).
-> These are not yet ported to the Go API.
+**Matter import:** `POST /tasks/from-clio-matter` fetches a Clio matter's details, ingests its
+attached documents into the knowledge base, and submits a BigLaw task in one call.
+
+**Time sync:** `POST /time-entries/sync-to-clio` pushes BigLaw billable time entries back to a
+Clio matter as activity records, preserving 6-minute billing unit rounding. Idempotent — entries
+are stamped with `clioSyncedAt` on success and skipped on subsequent calls.
 
 ---
 
@@ -704,15 +714,32 @@ Clio uses OAuth 2.0 rather than a static API key.
    CLIO_REGION=us
    ```
 
-3. Tokens are persisted to `./data/clio-auth.json` (override with `CLIO_TOKENS_FILE`) and
-   auto-refresh; once connected, you won't need to reconnect unless the refresh token is revoked.
+3. Connect: have a **partner** visit `GET /auth/clio/connect`. This redirects to Clio's OAuth
+   consent screen; after approval, tokens are persisted (default `./data/clio-tokens.json`,
+   override with `CLIO_TOKENS_FILE`) and auto-refresh. Check status any time:
 
-With Clio connected, Big Michael's client-briefing swarm pulls matters, contacts, and notes
-into every `@BigMichael briefing` run.
+   ```bash
+   curl http://localhost:3101/auth/clio/status
+   # → { "connected": true, "firmName": "Smith & Jones LLP", "connectedAt": "…" }
+   ```
 
-> The in-browser connect flow (`GET /auth/clio/connect` → consent → `/auth/clio/callback`),
-> one-call matter import, and time-entry sync are part of the TypeScript implementation at
-> the `typescript-final` tag — not yet ported to the Go API.
+4. Use it:
+
+   ```bash
+   # Import a matter: fetch details, ingest attached documents, submit a task
+   curl -X POST http://localhost:3101/tasks/from-clio-matter \
+     -H "Content-Type: application/json" \
+     -d '{ "matterId": 12345, "workflowType": "roundtable" }'
+
+   # Sync billable time to Clio (already-synced entries are skipped)
+   curl -X POST http://localhost:3101/time-entries/sync-to-clio \
+     -H "Content-Type: application/json" \
+     -d '{ "clioMatterId": 12345, "matterNumber": "001-2024" }'
+   ```
+
+With Clio connected, agents can use the seven `clio_*` tools and Big Michael's client-briefing
+swarm pulls matters, contacts, and notes into every `@BigMichael briefing` run.
+`DELETE /auth/clio/disconnect` revokes the stored tokens.
 
 ---
 
@@ -778,8 +805,10 @@ GET    /clients/:id/briefing               hub-and-spoke client briefing
 POST   /clients/:id/ocg                    GET/DELETE /clients/:id/ocg · GET …/ocg/stats
 GET    /time-entries          GET /time-entries/export.{json,csv,ledes}    (partner: all; lawyer: own)
 GET    /time-entries/{agent-summary,suggestions}
+POST   /time-entries/sync-to-clio                                          (partner only)
 GET    /analytics/noslegal · /analytics/portfolio-health                  (partner only)
-POST   /profiles/:id/tone/linkedin-import  DELETE /profiles/:id/tone
+POST   /profiles/:id/tone/import           DELETE /profiles/:id/tone
+POST   /profiles/:id/tone/linkedin-import  (LinkedIn-only legacy contract)
 GET    /cost/summary                                                       (partner only)
 GET    /tasks/:id/cost        GET /profiles/:id/cost
 GET    /playbooks · /playbooks/:id · /playbooks/resolve/:clauseType
@@ -799,9 +828,14 @@ GET    /budget/alerts/stream (SSE)
 POST   /pre-bills             GET/PATCH /pre-bills(/:id) · POST /invoices/{validate,upload}
 POST   /reports/generate · /portfolio/generate   GET /reports · /reports/:id/docx   (LPM)
 POST   /memory/query          GET /jobs · /jobs/stats · POST /jobs/:id/retry
+GET    /auth/providers        GET /auth/{google,microsoft,linkedin}/{login,callback}
+POST   /auth/logout
+GET    /auth/clio/status      GET /auth/clio/{connect,callback}            (connect: partner)
+DELETE /auth/clio/disconnect               POST /tasks/from-clio-matter    (partner only)
 GET    /audit · /audit/stream (SSE)        GET /health
 POST   /bots/teams/webhook                 Teams Outgoing Webhook receiver
 POST   /bots/slack/events                  Slack Events API receiver
+POST   /bots/{teams,slack}/notify          Internal: post to a channel (partner only)
 POST   /bots/{teams,slack}/matter-link     Link a matter to a channel (partner only)
 ```
 
@@ -834,6 +868,7 @@ Every significant event is recorded in an **append-only, SHA-256 hash-chained JS
 | **Protocol** | `debate.start`, `debate.resolved`, `verification.start`, `verification.complete` |
 | **Human gates** | `gate.approved`, `gate.rejected` — with reviewer's profileId |
 | **Documents** | `document.ingested`, `document.uploaded` |
+| **Authentication** | `auth.login`, `auth.logout`, `auth.failed` — provider, role |
 | **Voice profiles** | `profile.tone.imported`, `profile.tone.cleared` |
 | **Matters** | `matter.client_voice_updated`, `matter.notification` |
 | **OCG compliance** | `client.ocg.ingested`, `client.ocg.deleted` |
@@ -853,8 +888,11 @@ GET /audit/stream                 live SSE stream of new events
 ```
 
 The hash chain is re-verified when the log is restored on restart — a break logs a tamper
-warning. (The TypeScript implementation additionally forwarded entries to OpenSearch, Splunk,
-or a custom webhook; that forwarding is not yet ported to Go.)
+warning.
+
+Entries also forward asynchronously (best-effort, fire-and-forget) to **OpenSearch**,
+**Splunk HEC**, or a **custom webhook** — set `AUDIT_OPENSEARCH_URL`,
+`AUDIT_SPLUNK_HEC_URL` + `AUDIT_SPLUNK_HEC_TOKEN`, or `AUDIT_WEBHOOK_URL` to activate.
 
 ---
 
@@ -892,14 +930,20 @@ so work product reads as if the lawyer wrote it themselves, not as generic AI ou
 
 **How it works:**
 
-1. Partner or lawyer uploads their LinkedIn data export to
-   `POST /profiles/:id/tone/linkedin-import` (multipart; ZIP or raw CSV; 60-second
-   per-profile rate limit) or via the **Voice** modal in Admin › Users
-2. Content is sanitised (prompt-injection markers like `FINDING:`/`END_FINDING` and control
+1. Partner or lawyer uploads writing samples to `POST /profiles/:id/tone/import`
+   (multipart; 60-second per-profile rate limit) or via the **Voice** modal in Admin › Users
+2. Any of the following file types are accepted:
+   - **LinkedIn ZIP** (or extracted `Shares.csv` / `Posts.csv`) — detected automatically
+   - **DOCX** — paragraphs extracted from `word/document.xml`
+   - **PDF** — text extraction via `scripts/pdf_tools.py` (requires Python)
+   - **CSV** — scores columns by average text length; uses the richest column
+   - **Plain text / Markdown** — split on double-newlines
+   (`POST /profiles/:id/tone/linkedin-import` remains as the LinkedIn-only legacy route)
+3. Content is sanitised (prompt-injection markers like `FINDING:`/`END_FINDING` and control
    characters are stripped) before reaching any model
-3. A chunked recursive MapReduce Haiku analysis runs: batches of posts → prose notes → merged
+4. A chunked recursive MapReduce Haiku analysis runs: batches of posts → prose notes → merged
    up to a single note → structured `ToneProfile`
-4. The `ToneProfile` is stored on the lawyer's profile and injected into all drafting-domain agent
+5. The `ToneProfile` is stored on the lawyer's profile and injected into all drafting-domain agent
    system prompts and the final Opus synthesis call
 
 `DELETE /profiles/:id/tone` clears the profile.
@@ -909,11 +953,7 @@ so work product reads as if the lawyer wrote it themselves, not as generic AI ou
 1. Go to <https://www.linkedin.com/mypreferences/d/download-my-data>
 2. Select **Posts & Articles** → **Request archive**
 3. Download the ZIP when LinkedIn emails you the link
-4. Upload the ZIP (or the extracted `Shares.csv` / `Posts.csv`)
-
-> The TypeScript implementation also accepted DOCX, PDF, CSV, and plain-text/Markdown writing
-> samples via a generic `POST /profiles/:id/tone/import` route; the Go platform currently
-> imports LinkedIn exports only.
+4. Upload the ZIP (or the extracted CSV) — or just drop a DOCX, PDF, or CSV of your own writing
 
 ---
 
@@ -930,6 +970,9 @@ reads at 0.10×.
 | Claude Haiku 4.5 | $1 | $5 |
 | Claude Sonnet 4.6 | $3 | $15 |
 | Claude Opus 4.8 | $15 | $75 |
+
+Override per model family via env: `COST_HAIKU_IN/OUT`, `COST_SONNET_IN/OUT`,
+`COST_OPUS_IN/OUT` (USD per MTok).
 
 **Local power estimate:** set `LOCAL_INFERENCE_WATTS` to your GPU's TDP (default 250 W) —
 local-inference calls record estimated watt-hours instead of USD.
@@ -951,7 +994,10 @@ attack surface is treated seriously.
 
 | Area | What's in place |
 |---|---|
-| **Constant-time auth** | Bearer-token comparison uses `subtle.ConstantTimeCompare`; the token is the credential — `X-Profile-ID` alone is just a claim |
+| **Constant-time auth** | Bearer-token and session-signature comparison use `subtle.ConstantTimeCompare`; the token is the credential — `X-Profile-ID` alone is just a claim |
+| **Signed sessions** | Session cookies are HMAC-SHA256-signed, httpOnly, SameSite=Lax, Secure on HTTPS, 12 h expiry with jti revocation |
+| **Auth rate limiting** | `/auth/*` endpoints are sliding-window rate-limited to 20 req/min per IP |
+| **Path traversal** | PDF/docx tools enforce an allow-list of read roots and confine output to the output directory (symlinks resolved) |
 | **Prompt injection** | `SanitizePromptContent` strips rogue protocol markers (FINDING/CHALLENGE/RESOLUTION…, case-insensitive) and control characters from all user-supplied content before it reaches a model — task descriptions, round goals, tone imports, debate resolutions |
 | **SSRF protection** | Endpoint URLs are validated against a private/loopback blocklist (incl. `::`, `0.0.0.0`, CGNAT 100.64/10, IPv4-mapped IPv6, hex/decimal IP forms); the CourtListener client refuses redirects |
 | **CSV safety** | Time-entry and tabulate CSV exports neutralise formula injection and strip `\r\n` from field values |
@@ -966,7 +1012,8 @@ attack surface is treated seriously.
 
 ## Lawyers, roles & access control
 
-BigLaw is multi-user when deployed. Each person is a **lawyer profile** with a role:
+BigLaw is multi-user when deployed. Identity comes from **OAuth** (Google,
+Microsoft, or LinkedIn) or a bearer API key; each person is a **lawyer profile** with a role:
 
 - **partner** (admin) — sees every matter, manages the lawyer roster, assigns
   matters to lawyers, and manages clients.
@@ -991,25 +1038,33 @@ bio, and optionally a `ToneProfile` for voice fingerprinting.
 
 ### Auth setup (production)
 
-The Go platform authenticates with a **bearer API key plus a profile header**: every request
-carries `Authorization: Bearer <API_KEY>` (the credential, compared in constant time) and
-`X-Profile-ID: <profile id>` (which lawyer is acting). Role and visibility come from the
-matching lawyer profile.
+With `AUTH_ENABLED=true` the API accepts two credentials:
+
+- **Browser OAuth login** (Google / Microsoft / LinkedIn) — `GET /auth/<provider>/login` →
+  consent → signed, httpOnly session cookie (HMAC-SHA256, 12 h). First login from an
+  `ADMIN_EMAILS` address is provisioned as a **partner**; everyone else as a **lawyer**.
+  Auth endpoints are rate-limited to 20 req/min per IP.
+- **Bearer API key** (non-browser clients) — `Authorization: Bearer <API_KEY>` (compared in
+  constant time) plus `X-Profile-ID: <profile id>` identifying the acting lawyer.
 
 ```bash
 AUTH_ENABLED=true
-API_KEY=<random 32+ char secret>     # the shared bearer credential
+SESSION_SECRET=<random 32+ char secret>   # signs session cookies
+API_KEY=<random 32+ char secret>          # bearer credential for non-browser clients
 PUBLIC_BASE_URL=https://api.your-host
 PUBLIC_UI_URL=https://app.your-host
 CORS_ORIGINS=https://app.your-host
+ADMIN_EMAILS=you@firm.com
+
+GOOGLE_CLIENT_ID=…       GOOGLE_CLIENT_SECRET=…
+MICROSOFT_CLIENT_ID=…    MICROSOFT_CLIENT_SECRET=…
+LINKEDIN_CLIENT_ID=…     LINKEDIN_CLIENT_SECRET=…
 ```
 
 **Local dev** runs with auth OFF (`AUTH_ENABLED=false`, the default) — a single "local
 partner" who sees everything. **Never expose the API on a shared network with auth off.**
 
-> The TypeScript implementation (`typescript-final` tag) shipped browser OAuth login
-> (Google / Microsoft / LinkedIn) with signed session cookies — see
-> [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md). That flow is not yet ported to the Go API.
+📖 Full step-by-step provider registration: [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md).
 
 ---
 
@@ -1056,11 +1111,11 @@ All platform code lives under `biglaw-go/` (module `biglaw-go`, entry point
 | `internal/memory/` | Intra-round whiteboard + inter-round vector memory store |
 | `internal/knowledge/` | Document knowledge base — chunk ingestion + semantic search |
 | `internal/protocols/` | CitationGate · DebateProtocol · VerificationPipeline |
-| `internal/tools/` | Tool registry — knowledge retrieval, extraction, 32 connectors |
+| `internal/tools/` | Tool registry — knowledge retrieval, extraction, docx/tracked-changes/PDF/DocuSeal/tabular document production, Clio, 32 connectors |
 | `internal/routing/` | Haiku / Sonnet / Opus / Ollama / local routing |
 | `internal/api/` | REST API (gin) — one file per domain route group |
 | `internal/mcp/` | MCP stdio server |
-| `internal/auth/` | Lawyer profiles, roles, access control |
+| `internal/auth/` | Lawyer profiles, roles, access control + OAuth login, signed sessions, rate limiting |
 | `internal/clients/` | Client roster, matter sub-lists, conflict-of-interest checks |
 | `internal/timekeeping/` | Billable time tracking — 6-min units, CSV export |
 | `internal/billing/` | Pre-bills, LEDES 1998B export/parse, invoice validation |

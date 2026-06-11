@@ -73,10 +73,9 @@ search_knowledge     — semantic search across documents
 list_agents          — browse the agent registry
 query_memory         — query inter-round memory
 get_audit            — retrieve the structured audit log
+list_plugins         — list loaded external plugins
+get_time_entries     — billable time entries (profileId/taskId/matterNumber/from/to filters)
 ```
-
-(`list_plugins` and `get_time_entries` were MCP tools of the TypeScript implementation;
-on the Go platform use `GET /plugins` and `GET /time-entries` over REST.)
 
 Claude Code actuates Lavern agent configs (from `agents/lavern/*.json`),
 MikeOSS workflow templates (from `workflows/mikeoss/*.json`), and any JSON
@@ -573,16 +572,14 @@ Self-host: `docker compose -f docker-compose.prod.yml up -d` from the Infisical 
 
 ## REST API endpoints
 
-> This list documents the route contract as designed in the TypeScript implementation.
-> The Go API on `main` covers most of it, but some routes are TS-only and not yet ported:
-> browser OAuth (`/auth/*`), the Clio connect flow + `POST /tasks/from-clio-matter` +
-> `POST /time-entries/sync-to-clio`, `POST /bots/{teams,slack}/notify`, and the generic
-> `POST /profiles/:id/tone/import` (Go accepts `…/tone/linkedin-import` only). The Go API
-> also adds routes the list below predates: playbooks, citations, deadlines, matters
-> (health/budget), dockets, regulatory, pre-bills/invoices/OCG, LPM reports, client-voice,
-> and `GET /time-entries/export.ledes`. The authoritative Go route map is
-> `biglaw-go/internal/api/` (one file per domain group); the README's REST API section
-> reflects it.
+> This list documents the route contract as designed in the TypeScript implementation;
+> the Go API on `main` now covers it (browser OAuth uses static
+> `/auth/{google,microsoft,linkedin}/{login,callback}` paths rather than `:provider`
+> params). The Go API also adds routes the list below predates: playbooks, citations,
+> deadlines, matters (health/budget), dockets, regulatory, pre-bills/invoices/OCG, LPM
+> reports, client-voice, and `GET /time-entries/export.ledes`. The authoritative Go route
+> map is `biglaw-go/internal/api/` (one file per domain group); the README's REST API
+> section reflects it.
 
 ```
 POST   /tasks                       submit task (accepts jurisdiction, clientNumber, matterNumber)

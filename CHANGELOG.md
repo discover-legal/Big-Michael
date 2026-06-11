@@ -17,6 +17,43 @@ House rules:
 
 ## [Unreleased]
 
+### TS→Go porting complete — feature parity with `typescript-final`
+Everything previously marked "TS-only, not yet ported" is now on the Go platform:
+- **Browser OAuth login** (Google / Microsoft / LinkedIn OIDC): static
+  `/auth/<provider>/{login,callback}` routes, first-login provisioning
+  (partner via `ADMIN_EMAILS`), stateless HMAC-signed session cookies
+  (constant-time verify, jti revocation, 12 h), session accepted as an
+  alternative credential to the bearer key, 20 req/min/IP auth rate limiting,
+  `auth.login/logout/failed` audit events
+- **Clio**: `/auth/clio/{status,connect,callback,disconnect}` connect flow
+  (single-use server-side state), seven `clio_*` agent tools,
+  `POST /tasks/from-clio-matter` (fetch → ingest docs → submit task),
+  `POST /time-entries/sync-to-clio` (6-min units, `clioSyncedAt` idempotency);
+  new ClioClient methods (GetMatter, DownloadDocument, CreateNote, ListContacts)
+- **Document-production tools** (Mike port): `docx_generate`,
+  tracked-changes `edit_document` (order-preserving OOXML round-trip,
+  4-stage anchor matching, multi-run reconstruction), `replicate_document`,
+  `pdf_extract_text/_tables/_ocr/_generate` (via `scripts/pdf_tools.py`,
+  path allow-list, 30 s timeout), DocuSeal tools (`_list_templates`,
+  `_send_for_signing`, `_submission_status`), `tabular_review` +
+  `read_table_cells` (50×30 caps, per-cell extraction with citations),
+  `fetch_documents` (20-ID cap)
+- **Generic tone import**: `POST /profiles/:id/tone/import` accepts LinkedIn
+  ZIP/CSV, DOCX, PDF, CSV, and plain text/Markdown
+  (`services.ExtractWritingSamples`); `…/tone/linkedin-import` keeps its
+  legacy contract
+- **Audit forwarding**: async best-effort to OpenSearch / Splunk HEC /
+  custom webhook (`AUDIT_*` env vars)
+- **Bot notify routes**: `POST /bots/{teams,slack}/notify` with
+  explicit-target → matter-link → default resolution, partner-gated,
+  SSRF-validated webhook URLs
+- **Cost overrides**: `COST_{HAIKU,SONNET,OPUS}_{IN,OUT}` env vars applied to
+  the pricing table by model family
+- **MCP**: `list_plugins` and `get_time_entries` tools restored
+- Unit tests across auth (sessions, rate limiter), tools (17 tracked-changes/
+  docx/tabular tests), timekeeping (sync skip), cost (overrides), audit
+  (forwarding), services (sample extraction)
+
 ### Docs
 - README + docs verified against the Go platform and corrected: Docker-based
   setup.sh description (was the Node wizard), Go agent counts (131 definitions;
