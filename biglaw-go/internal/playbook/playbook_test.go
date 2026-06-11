@@ -12,14 +12,14 @@ import (
 
 func TestNormalizeClauseType(t *testing.T) {
 	cases := map[string]string{
-		"governing_law":            "governing_law",
-		"Governing Law":            "governing_law",
-		"  Governing  Law  ":       "governing_law",
-		"Limitation of Liability":  "limitation_of_liability",
-		"limitation_of_liability":  "limitation_of_liability",
-		"MAC/MAE definition":       "mac_mae_definition",
-		"Indemnification (cap)":    "indemnification_cap",
-		"":                         "",
+		"governing_law":           "governing_law",
+		"Governing Law":           "governing_law",
+		"  Governing  Law  ":      "governing_law",
+		"Limitation of Liability": "limitation_of_liability",
+		"limitation_of_liability": "limitation_of_liability",
+		"MAC/MAE definition":      "mac_mae_definition",
+		"Indemnification (cap)":   "indemnification_cap",
+		"":                        "",
 	}
 	for in, want := range cases {
 		if got := NormalizeClauseType(in); got != want {

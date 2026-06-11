@@ -78,6 +78,20 @@ func (m *Monitor) SetAlertHandler(h AlertHandler) {
 	m.mu.Unlock()
 }
 
+// AddAlertHandler registers an additional alert callback alongside any
+// existing one — e.g. the firm monitor's channel poster plus the REST SSE
+// broadcaster. Handlers run in registration order.
+func (m *Monitor) AddAlertHandler(h AlertHandler) {
+	m.mu.Lock()
+	prev := m.onAlert
+	if prev == nil {
+		m.onAlert = h
+	} else {
+		m.onAlert = func(a types.DocketAlert) { prev(a); h(a) }
+	}
+	m.mu.Unlock()
+}
+
 // Init loads persisted watched dockets.
 func (m *Monitor) Init() error {
 	data, err := os.ReadFile(m.path)

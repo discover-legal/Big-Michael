@@ -251,17 +251,17 @@ func lastWeekday(year, month int, weekday time.Weekday) string {
 
 func usFederalHolidays(year int) map[string]bool {
 	h := map[string]bool{}
-	h[observedWeekday(year, 1, 1)] = true                        // New Year's Day
-	h[nthWeekday(year, 1, time.Monday, 3)] = true                // MLK Day
-	h[nthWeekday(year, 2, time.Monday, 3)] = true                // Presidents Day
-	h[lastWeekday(year, 5, time.Monday)] = true                  // Memorial Day
-	h[observedWeekday(year, 6, 19)] = true                       // Juneteenth
-	h[observedWeekday(year, 7, 4)] = true                        // Independence Day
-	h[nthWeekday(year, 9, time.Monday, 1)] = true                // Labor Day
-	h[nthWeekday(year, 10, time.Monday, 2)] = true               // Columbus Day
-	h[observedWeekday(year, 11, 11)] = true                      // Veterans Day
-	h[nthWeekday(year, 11, time.Thursday, 4)] = true             // Thanksgiving
-	h[observedWeekday(year, 12, 25)] = true                      // Christmas
+	h[observedWeekday(year, 1, 1)] = true            // New Year's Day
+	h[nthWeekday(year, 1, time.Monday, 3)] = true    // MLK Day
+	h[nthWeekday(year, 2, time.Monday, 3)] = true    // Presidents Day
+	h[lastWeekday(year, 5, time.Monday)] = true      // Memorial Day
+	h[observedWeekday(year, 6, 19)] = true           // Juneteenth
+	h[observedWeekday(year, 7, 4)] = true            // Independence Day
+	h[nthWeekday(year, 9, time.Monday, 1)] = true    // Labor Day
+	h[nthWeekday(year, 10, time.Monday, 2)] = true   // Columbus Day
+	h[observedWeekday(year, 11, 11)] = true          // Veterans Day
+	h[nthWeekday(year, 11, time.Thursday, 4)] = true // Thanksgiving
+	h[observedWeekday(year, 12, 25)] = true          // Christmas
 	return h
 }
 
@@ -314,13 +314,13 @@ func euInstitutionHolidays(year int) map[string]bool {
 
 	add := func(d time.Time) { h[d.Format("2006-01-02")] = true }
 
-	add(time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC))        // New Year's
-	add(easter.AddDate(0, 0, 1))                              // Easter Monday
-	add(time.Date(year, 5, 1, 0, 0, 0, 0, time.UTC))        // Labour Day
-	add(easter.AddDate(0, 0, 39))                             // Ascension Thursday
-	add(easter.AddDate(0, 0, 50))                             // Whit Monday
-	add(time.Date(year, 12, 25, 0, 0, 0, 0, time.UTC))      // Christmas
-	add(time.Date(year, 12, 26, 0, 0, 0, 0, time.UTC))      // Second Christmas
+	add(time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC))   // New Year's
+	add(easter.AddDate(0, 0, 1))                       // Easter Monday
+	add(time.Date(year, 5, 1, 0, 0, 0, 0, time.UTC))   // Labour Day
+	add(easter.AddDate(0, 0, 39))                      // Ascension Thursday
+	add(easter.AddDate(0, 0, 50))                      // Whit Monday
+	add(time.Date(year, 12, 25, 0, 0, 0, 0, time.UTC)) // Christmas
+	add(time.Date(year, 12, 26, 0, 0, 0, 0, time.UTC)) // Second Christmas
 	return h
 }
 

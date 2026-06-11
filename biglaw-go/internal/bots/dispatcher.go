@@ -44,6 +44,17 @@ type OrchestratorFacade interface {
 	Knowledge() KnowledgeSearcher
 	Briefing() BriefingGenerator
 	ListTimeEntries() []types.TimeEntry
+	// LPM commands return ready-to-post Markdown (or an error/availability
+	// message); kept as strings so the dispatcher stays decoupled from the LPM
+	// package.
+	LPMReport(matterNumber string) (string, error)
+	LPMPortfolio() (string, error)
+	// Budget + docket inputs (return a human-readable confirmation/summary).
+	BudgetStatus(matterNumber string) (string, error)
+	SetMatterBudget(matterNumber, amount string) (string, error)
+	WatchDocket(matterNumber, docketNumber, court string) (string, error)
+	UnwatchDocket(matterNumber string) (string, error)
+	ListDockets() (string, error)
 }
 
 // ─── Message / response types ─────────────────────────────────────────────────
@@ -202,6 +213,53 @@ func Dispatch(msg BotMessage, orch OrchestratorFacade) BotResponse {
 			},
 		}
 
+	case "report":
+		mn := strings.TrimSpace(args)
+		if mn == "" {
+			return BotResponse{Immediate: "Usage: `@BigMichael report [matter-number]`"}
+		}
+		return BotResponse{
+			Immediate: fmt.Sprintf("Generating status report for **%s**…", mn),
+			AsyncWork: func() (string, error) { return orch.LPMReport(mn) },
+		}
+
+	case "portfolio":
+		return BotResponse{
+			Immediate: "Assembling the portfolio briefing…",
+			AsyncWork: func() (string, error) { return orch.LPMPortfolio() },
+		}
+
+	case "budget":
+		f := strings.Fields(args)
+		if len(f) == 0 {
+			return BotResponse{Immediate: "Usage: `@BigMichael budget [matter] [amount?]` (omit amount to see burn)"}
+		}
+		if len(f) >= 2 {
+			return BotResponse{Immediate: immediateResult(orch.SetMatterBudget(f[0], f[1]))}
+		}
+		return BotResponse{Immediate: immediateResult(orch.BudgetStatus(f[0]))}
+
+	case "watch":
+		f := strings.Fields(args)
+		if len(f) < 2 {
+			return BotResponse{Immediate: "Usage: `@BigMichael watch [matter] [docket-number] [court?]`"}
+		}
+		court := ""
+		if len(f) >= 3 {
+			court = f[2]
+		}
+		return BotResponse{Immediate: immediateResult(orch.WatchDocket(f[0], f[1], court))}
+
+	case "unwatch":
+		mn := strings.TrimSpace(args)
+		if mn == "" {
+			return BotResponse{Immediate: "Usage: `@BigMichael unwatch [matter]`"}
+		}
+		return BotResponse{Immediate: immediateResult(orch.UnwatchDocket(mn))}
+
+	case "dockets":
+		return BotResponse{Immediate: immediateResult(orch.ListDockets())}
+
 	case "run":
 		templateID := strings.TrimSpace(args)
 		if templateID == "" {
@@ -231,6 +289,14 @@ func Dispatch(msg BotMessage, orch OrchestratorFacade) BotResponse {
 	}
 }
 
+// immediateResult formats a synchronous facade result for posting.
+func immediateResult(msg string, err error) string {
+	if err != nil {
+		return "Error: " + err.Error()
+	}
+	return msg
+}
+
 func truncate80(s string) string {
 	if len(s) <= 80 {
 		return s
@@ -243,6 +309,12 @@ const helpText = `**Big Michael** — multi-agent legal AI
 | Command | Description |
 |---------|-------------|
 | ` + "`status [matter]`" + ` | Matter health score + active tasks |
+| ` + "`report [matter]`" + ` | Daily LPM status report for a matter |
+| ` + "`portfolio`" + ` | 0600 BLUF portfolio briefing across active matters |
+| ` + "`budget [matter] [amount?]`" + ` | Show burn, or set the matter budget |
+| ` + "`watch [matter] [docket] [court?]`" + ` | Watch a court docket for new filings |
+| ` + "`unwatch [matter]`" + ` | Stop watching a matter's docket |
+| ` + "`dockets`" + ` | List watched dockets |
 | ` + "`briefing [client]`" + ` | Client intelligence briefing (all sources) |
 | ` + "`search [query]`" + ` | Semantic search across the knowledge store |
 | ` + "`task [description]`" + ` | Submit a new roundtable AI task |

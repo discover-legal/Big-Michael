@@ -167,8 +167,8 @@ func (r *Registry) searchKnowledgeTool() *ToolImpl {
 			InputSchema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"query":   map[string]interface{}{"type": "string", "description": "Search query"},
-					"top_k":   map[string]interface{}{"type": "number", "description": "Number of results (default 6)"},
+					"query": map[string]interface{}{"type": "string", "description": "Search query"},
+					"top_k": map[string]interface{}{"type": "number", "description": "Number of results (default 6)"},
 				},
 				"required": []string{"query"},
 			},

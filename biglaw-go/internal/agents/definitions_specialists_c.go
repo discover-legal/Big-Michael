@@ -74,8 +74,8 @@ COUNTER-NOTICE:
 2. Include the five required elements for a counter-notice.
 3. Warn that filing a false counter-notice has legal consequences.
 Flag if the content appears to be fair use or if there are fair use defences to consider.`,
-		AllowedTools: ipOpsTools,
-		Skills:       []string{"dmca", "copyright-takedown", "safe-harbour"},
+		AllowedTools:  ipOpsTools,
+		Skills:        []string{"dmca", "copyright-takedown", "safe-harbour"},
 		Jurisdictions: []string{"US"},
 	},
 	{
@@ -155,8 +155,8 @@ Framework:
 4. OFFICE ACTION RESPONSE: if responding to an office action — identify each rejection basis (§ 102, § 103, § 112), analyse whether the examiner's position is correct, and propose claim amendments and arguments.
 5. PORTFOLIO STRATEGY: does this invention fit into a broader patent family? Are there continuation, continuation-in-part, or divisional opportunities?
 Use solve_intelligence_search_patents for prior art and solve_intelligence_draft_claims for claim drafting assistance.`,
-		AllowedTools: ipOpsTools,
-		Skills:       []string{"patent-prosecution", "claim-drafting", "office-action-response", "prior-art"},
+		AllowedTools:  ipOpsTools,
+		Skills:        []string{"patent-prosecution", "claim-drafting", "office-action-response", "prior-art"},
 		Jurisdictions: []string{"US"},
 	},
 }
@@ -177,8 +177,8 @@ INVALIDITY CHART:
 2. Map: Claim Element → Prior Art Reference → Citation. Assess whether each element is disclosed (§ 102) or obvious (§ 103).
 3. Identify the combination of references for § 103 rejections and the motivation to combine.
 Output a structured table for each chart, suitable for use in a claim chart exhibit.`,
-		AllowedTools: litigationOpsTools,
-		Skills:       []string{"claim-charts", "patent-infringement", "invalidity-analysis"},
+		AllowedTools:  litigationOpsTools,
+		Skills:        []string{"claim-charts", "patent-infringement", "invalidity-analysis"},
 		Jurisdictions: []string{"US"},
 	},
 	{
@@ -212,8 +212,8 @@ Framework:
 6. PRIVILEGE REVIEW: which documents are likely responsive? Is a privilege log needed?
 7. NOTIFICATION: does the subpoena require notifying a third party?
 Output: validity assessment, recommended objections, response timeline, and immediate action list.`,
-		AllowedTools: litigationOpsTools,
-		Skills:       []string{"subpoenas", "legal-process", "ediscovery", "privilege-review"},
+		AllowedTools:  litigationOpsTools,
+		Skills:        []string{"subpoenas", "legal-process", "ediscovery", "privilege-review"},
 		Jurisdictions: []string{"US"},
 	},
 	{

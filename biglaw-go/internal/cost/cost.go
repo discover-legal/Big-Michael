@@ -18,48 +18,48 @@ import (
 type CostContext string
 
 const (
-	ContextTask          CostContext = "task"
-	ContextDescriptor    CostContext = "descriptor"
-	ContextSynthesis     CostContext = "synthesis"
-	ContextTabulate      CostContext = "tabulate"
-	ContextRoundGoal     CostContext = "round_goal"
-	ContextDebate        CostContext = "protocol_debate"
-	ContextVerify        CostContext = "protocol_verify"
-	ContextToneAnalysis  CostContext = "tone_analysis"
+	ContextTask           CostContext = "task"
+	ContextDescriptor     CostContext = "descriptor"
+	ContextSynthesis      CostContext = "synthesis"
+	ContextTabulate       CostContext = "tabulate"
+	ContextRoundGoal      CostContext = "round_goal"
+	ContextDebate         CostContext = "protocol_debate"
+	ContextVerify         CostContext = "protocol_verify"
+	ContextToneAnalysis   CostContext = "tone_analysis"
 	ContextClassification CostContext = "classification"
 	ContextEntrySummarize CostContext = "entry_summarize"
 	ContextClientVoice    CostContext = "client_voice"
 )
 
 type CostEntry struct {
-	ID                  string     `json:"id"`
-	TS                  string     `json:"ts"`
-	Model               string     `json:"model"`
-	Provider            string     `json:"provider"`
-	InputTokens         int        `json:"inputTokens"`
-	OutputTokens        int        `json:"outputTokens"`
-	CacheWriteTokens    *int       `json:"cacheWriteTokens,omitempty"`
-	CacheReadTokens     *int       `json:"cacheReadTokens,omitempty"`
-	CostUSD             *float64   `json:"costUsd"`
-	EstimatedWh         *float64   `json:"estimatedWh"`
-	EstimatedWatts      *int       `json:"estimatedWatts"`
-	DurationMs          int64      `json:"durationMs"`
-	Context             CostContext `json:"context"`
-	TaskID              string     `json:"taskId,omitempty"`
-	ProfileID           string     `json:"profileId,omitempty"`
-	AgentID             string     `json:"agentId,omitempty"`
+	ID               string      `json:"id"`
+	TS               string      `json:"ts"`
+	Model            string      `json:"model"`
+	Provider         string      `json:"provider"`
+	InputTokens      int         `json:"inputTokens"`
+	OutputTokens     int         `json:"outputTokens"`
+	CacheWriteTokens *int        `json:"cacheWriteTokens,omitempty"`
+	CacheReadTokens  *int        `json:"cacheReadTokens,omitempty"`
+	CostUSD          *float64    `json:"costUsd"`
+	EstimatedWh      *float64    `json:"estimatedWh"`
+	EstimatedWatts   *int        `json:"estimatedWatts"`
+	DurationMs       int64       `json:"durationMs"`
+	Context          CostContext `json:"context"`
+	TaskID           string      `json:"taskId,omitempty"`
+	ProfileID        string      `json:"profileId,omitempty"`
+	AgentID          string      `json:"agentId,omitempty"`
 }
 
 type CostSummary struct {
-	TotalUSD            float64                        `json:"totalUsd"`
-	TotalInputTokens    int                            `json:"totalInputTokens"`
-	TotalOutputTokens   int                            `json:"totalOutputTokens"`
-	TotalCacheWrite     int                            `json:"totalCacheWriteTokens"`
-	TotalCacheRead      int                            `json:"totalCacheReadTokens"`
-	TotalWh             float64                        `json:"totalWh"`
-	ByModel             map[string]*ModelSummary       `json:"byModel"`
-	ByContext           map[string]*ContextSummary     `json:"byContext"`
-	EntryCount          int                            `json:"entryCount"`
+	TotalUSD          float64                    `json:"totalUsd"`
+	TotalInputTokens  int                        `json:"totalInputTokens"`
+	TotalOutputTokens int                        `json:"totalOutputTokens"`
+	TotalCacheWrite   int                        `json:"totalCacheWriteTokens"`
+	TotalCacheRead    int                        `json:"totalCacheReadTokens"`
+	TotalWh           float64                    `json:"totalWh"`
+	ByModel           map[string]*ModelSummary   `json:"byModel"`
+	ByContext         map[string]*ContextSummary `json:"byContext"`
+	EntryCount        int                        `json:"entryCount"`
 }
 
 type ModelSummary struct {
@@ -126,10 +126,10 @@ type RecordRequest struct {
 }
 
 type Store struct {
-	mu       sync.Mutex
-	entries  []CostEntry
-	file     string
-	writeCh  chan CostEntry
+	mu      sync.Mutex
+	entries []CostEntry
+	file    string
+	writeCh chan CostEntry
 }
 
 var Default = &Store{

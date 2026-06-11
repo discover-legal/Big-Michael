@@ -38,30 +38,30 @@ type Clause struct {
 
 // Document is the complete generated precedent.
 type Document struct {
-	ID                   string   `json:"id"`
-	DocumentType         string   `json:"documentType"`
-	Title                string   `json:"title"`
-	PracticeArea         string   `json:"practiceArea,omitempty"`
-	Jurisdiction         string   `json:"jurisdiction,omitempty"`
-	ActingFor            string   `json:"actingFor,omitempty"`
-	SourcePrecedentCount int      `json:"sourcePrecedentCount"`
-	PlaybookPositionCount int     `json:"playbookPositionCount"`
-	Clauses              []Clause `json:"clauses"`
-	DocumentText         string   `json:"document"`
-	DraftingNotes        []string `json:"draftingNotes"`
-	GeneratedAt          string   `json:"generatedAt"`
+	ID                    string   `json:"id"`
+	DocumentType          string   `json:"documentType"`
+	Title                 string   `json:"title"`
+	PracticeArea          string   `json:"practiceArea,omitempty"`
+	Jurisdiction          string   `json:"jurisdiction,omitempty"`
+	ActingFor             string   `json:"actingFor,omitempty"`
+	SourcePrecedentCount  int      `json:"sourcePrecedentCount"`
+	PlaybookPositionCount int      `json:"playbookPositionCount"`
+	Clauses               []Clause `json:"clauses"`
+	DocumentText          string   `json:"document"`
+	DraftingNotes         []string `json:"draftingNotes"`
+	GeneratedAt           string   `json:"generatedAt"`
 }
 
 // GenerateOpts parameterises a document generation run.
 type GenerateOpts struct {
-	PracticeArea       string
-	Jurisdiction       string
-	ActingFor          string
-	MatterNumber       string
-	ClientID           string
-	ProfileID          string
+	PracticeArea        string
+	Jurisdiction        string
+	ActingFor           string
+	MatterNumber        string
+	ClientID            string
+	ProfileID           string
 	SpecialInstructions string
-	TaskID             string
+	TaskID              string
 }
 
 // KnowledgeSearcher is the subset of the knowledge store the generator needs.
@@ -117,18 +117,18 @@ func (g *Generator) Generate(documentType string, ks KnowledgeSearcher, store *p
 
 	title := buildTitle(documentType, opts)
 	doc := &Document{
-		ID:                   uuid.New().String(),
-		DocumentType:         documentType,
-		Title:                title,
-		PracticeArea:         opts.PracticeArea,
-		Jurisdiction:         opts.Jurisdiction,
-		ActingFor:            opts.ActingFor,
-		SourcePrecedentCount: len(precedents),
+		ID:                    uuid.New().String(),
+		DocumentType:          documentType,
+		Title:                 title,
+		PracticeArea:          opts.PracticeArea,
+		Jurisdiction:          opts.Jurisdiction,
+		ActingFor:             opts.ActingFor,
+		SourcePrecedentCount:  len(precedents),
 		PlaybookPositionCount: playbookPositionCount,
-		Clauses:              clauses,
-		DocumentText:         docText,
-		DraftingNotes:        draftingNotes,
-		GeneratedAt:          time.Now().UTC().Format(time.RFC3339),
+		Clauses:               clauses,
+		DocumentText:          docText,
+		DraftingNotes:         draftingNotes,
+		GeneratedAt:           time.Now().UTC().Format(time.RFC3339),
 	}
 
 	slog.Info("Precedent document generated", "id", doc.ID, "type", documentType, "clauses", len(clauses), "precedents", len(precedents))
@@ -400,18 +400,18 @@ func (g *Generator) fallbackDraft(docType string, positions []posEntry) ([]Claus
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 var titleLabels = map[string]string{
-	"nda":              "Confidentiality Agreement (NDA)",
-	"spa":              "Share Purchase Agreement",
-	"asset_purchase":   "Asset Purchase Agreement",
-	"facility":         "Facility Agreement",
-	"employment":       "Contract of Employment",
+	"nda":               "Confidentiality Agreement (NDA)",
+	"spa":               "Share Purchase Agreement",
+	"asset_purchase":    "Asset Purchase Agreement",
+	"facility":          "Facility Agreement",
+	"employment":        "Contract of Employment",
 	"service_agreement": "Professional Services Agreement",
-	"supply_agreement": "Supply and Distribution Agreement",
-	"jv_agreement":     "Joint Venture Agreement",
-	"ip_assignment":    "IP Assignment Agreement",
-	"licence":          "Licence Agreement",
-	"settlement":       "Settlement Agreement",
-	"term_sheet":       "Heads of Terms",
+	"supply_agreement":  "Supply and Distribution Agreement",
+	"jv_agreement":      "Joint Venture Agreement",
+	"ip_assignment":     "IP Assignment Agreement",
+	"licence":           "Licence Agreement",
+	"settlement":        "Settlement Agreement",
+	"term_sheet":        "Heads of Terms",
 }
 
 func buildTitle(docType string, opts GenerateOpts) string {

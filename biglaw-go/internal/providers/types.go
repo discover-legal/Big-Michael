@@ -8,26 +8,26 @@ package providers
 type ContentBlockType string
 
 const (
-	BlockText      ContentBlockType = "text"
-	BlockToolUse   ContentBlockType = "tool_use"
+	BlockText       ContentBlockType = "text"
+	BlockToolUse    ContentBlockType = "tool_use"
 	BlockToolResult ContentBlockType = "tool_result"
-	BlockThinking  ContentBlockType = "thinking"
+	BlockThinking   ContentBlockType = "thinking"
 )
 
 type ContentBlock struct {
-	Type    ContentBlockType       `json:"type"`
-	Text    string                 `json:"text,omitempty"`
-	Thinking string               `json:"thinking,omitempty"`
-	ID      string                 `json:"id,omitempty"`      // tool_use
-	Name    string                 `json:"name,omitempty"`    // tool_use
-	Input   map[string]interface{} `json:"input,omitempty"`   // tool_use
-	ToolUseID string               `json:"tool_use_id,omitempty"` // tool_result
-	Content string                 `json:"content,omitempty"` // tool_result
+	Type      ContentBlockType       `json:"type"`
+	Text      string                 `json:"text,omitempty"`
+	Thinking  string                 `json:"thinking,omitempty"`
+	ID        string                 `json:"id,omitempty"`          // tool_use
+	Name      string                 `json:"name,omitempty"`        // tool_use
+	Input     map[string]interface{} `json:"input,omitempty"`       // tool_use
+	ToolUseID string                 `json:"tool_use_id,omitempty"` // tool_result
+	Content   string                 `json:"content,omitempty"`     // tool_result
 }
 
 type Message struct {
-	Role    string         `json:"role"` // "user" | "assistant"
-	Content interface{}    `json:"content"` // string | []ContentBlock
+	Role    string      `json:"role"`    // "user" | "assistant"
+	Content interface{} `json:"content"` // string | []ContentBlock
 }
 
 type ToolParam struct {
@@ -41,13 +41,13 @@ type ThinkingConfig struct {
 }
 
 type ChatParams struct {
-	Model        string
-	MaxTokens    int
-	System       string
-	Messages     []Message
-	Tools        []ToolParam
-	CacheSystem  bool
-	Thinking     *ThinkingConfig
+	Model       string
+	MaxTokens   int
+	System      string
+	Messages    []Message
+	Tools       []ToolParam
+	CacheSystem bool
+	Thinking    *ThinkingConfig
 }
 
 type Usage struct {

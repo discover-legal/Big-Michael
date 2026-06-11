@@ -33,10 +33,10 @@ func New(provider providers.Provider, opusModel string) *Generator {
 
 // Opts controls report generation.
 type Opts struct {
-	Format              string // "html" or "markdown"
-	IncludeTimeEntries  bool
-	IncludeBudgetBurn   bool
-	CustomNote          string
+	Format             string // "html" or "markdown"
+	IncludeTimeEntries bool
+	IncludeBudgetBurn  bool
+	CustomNote         string
 }
 
 // Generate produces a status report for a task.

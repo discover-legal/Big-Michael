@@ -27,11 +27,11 @@ import (
 )
 
 const (
-	tavilyURL          = "https://api.tavily.com/search"
-	maxTavilyResults   = 5
-	maxResponseBytes   = 2 * 1024 * 1024
-	requestTimeoutMs   = 30_000
-	cooldownPerMatter  = time.Hour
+	tavilyURL         = "https://api.tavily.com/search"
+	maxTavilyResults  = 5
+	maxResponseBytes  = 2 * 1024 * 1024
+	requestTimeoutMs  = 30_000
+	cooldownPerMatter = time.Hour
 )
 
 // AlertHandler is called when a regulation alert is detected.
@@ -63,6 +63,20 @@ func New(provider providers.Provider, haikuModel string) *Monitor {
 func (m *Monitor) SetAlertHandler(h AlertHandler) {
 	m.mu.Lock()
 	m.onAlert = h
+	m.mu.Unlock()
+}
+
+// AddAlertHandler registers an additional alert callback alongside any
+// existing one — e.g. the firm monitor's channel poster plus the REST SSE
+// broadcaster. Handlers run in registration order.
+func (m *Monitor) AddAlertHandler(h AlertHandler) {
+	m.mu.Lock()
+	prev := m.onAlert
+	if prev == nil {
+		m.onAlert = h
+	} else {
+		m.onAlert = func(a types.RegulationAlert) { prev(a); h(a) }
+	}
 	m.mu.Unlock()
 }
 
@@ -197,10 +211,10 @@ type tavilyResponse struct {
 
 func (m *Monitor) searchTavily(query string) ([]tavilyResult, error) {
 	body, err := json.Marshal(map[string]interface{}{
-		"api_key":       m.tavilyKey,
-		"query":         query,
-		"search_depth":  "basic",
-		"max_results":   maxTavilyResults,
+		"api_key":        m.tavilyKey,
+		"query":          query,
+		"search_depth":   "basic",
+		"max_results":    maxTavilyResults,
 		"include_answer": false,
 	})
 	if err != nil {

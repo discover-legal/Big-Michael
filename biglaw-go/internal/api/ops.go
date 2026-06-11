@@ -207,6 +207,17 @@ func (k *opsKnowledgeIngester) IngestDoc(title, content, source, docType string)
 func (s *Server) opsDockets() (*dockets.Monitor, *opsBroadcaster[types.DocketAlert]) {
 	st := s.ops()
 	st.docketsOnce.Do(func() {
+		// Prefer the firm-wide monitor started in main (AttachDockets): it
+		// already polls, ingests filings, and posts channel alerts. The SSE
+		// broadcaster chains onto its alert handler.
+		if s.dockets != nil {
+			b := newOpsBroadcaster[types.DocketAlert]()
+			s.dockets.AddAlertHandler(func(a types.DocketAlert) { b.Publish(a) })
+			st.docketMonitor = s.dockets
+			st.docketBroadcast = b
+			return
+		}
+		// Standalone fallback: no firm monitor running — own the instance.
 		path := os.Getenv("DOCKETS_FILE")
 		if path == "" {
 			path = "./data/dockets.json" // TS default (Config.dockets.file)
@@ -230,6 +241,15 @@ func (s *Server) opsDockets() (*dockets.Monitor, *opsBroadcaster[types.DocketAle
 func (s *Server) opsRegulatory() (*regulatory.Monitor, *opsBroadcaster[types.RegulationAlert], error) {
 	st := s.ops()
 	st.regOnce.Do(func() {
+		// Prefer the firm-wide pulse started in main (AttachRegulatory).
+		if s.regulatory != nil {
+			b := newOpsBroadcaster[types.RegulationAlert]()
+			s.regulatory.AddAlertHandler(func(a types.RegulationAlert) { b.Publish(a) })
+			st.regMonitor = s.regulatory
+			st.regBroadcast = b
+			return
+		}
+		// Standalone fallback: no firm monitor running — own the instance.
 		provider, err := s.orch.Providers().Get(routing.ModelHaiku)
 		if err != nil {
 			st.regErr = err
@@ -320,7 +340,9 @@ func (a *opsClientAdapter) List() []*types.Client {
 	return out
 }
 
-func (a *opsClientAdapter) Persist() error { return nil }
+func (a *opsClientAdapter) SetMatterBudgetAlerts(matterNumber string, triggered []float64) error {
+	return a.server.clients.SetMatterBudgetAlerts(matterNumber, triggered)
+}
 
 func (s *Server) opsBudget() *budget.Monitor {
 	st := s.ops()

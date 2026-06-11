@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	slackAPI       = "https://slack.com/api"
-	slackTimeout   = 15 * time.Second
+	slackAPI     = "https://slack.com/api"
+	slackTimeout = 15 * time.Second
 )
 
 // ─── Matter link store ────────────────────────────────────────────────────────
@@ -185,14 +185,14 @@ type SlackEventBody struct {
 	Type      string `json:"type"`
 	Challenge string `json:"challenge"`
 	Event     struct {
-		Type    string `json:"type"`
-		Text    string `json:"text"`
-		User    string `json:"user"`
-		Channel string `json:"channel"`
-		TS      string `json:"ts"`
+		Type     string `json:"type"`
+		Text     string `json:"text"`
+		User     string `json:"user"`
+		Channel  string `json:"channel"`
+		TS       string `json:"ts"`
 		ThreadTS string `json:"thread_ts"`
-		BotID   string `json:"bot_id"`
-		Subtype string `json:"subtype"`
+		BotID    string `json:"bot_id"`
+		Subtype  string `json:"subtype"`
 	} `json:"event"`
 }
 
@@ -289,4 +289,3 @@ func NotifySlackTaskComplete(taskID, matterNumber, workflowType, output string, 
 		slog.Warn("Slack task notifier failed", "error", err)
 	}
 }
-

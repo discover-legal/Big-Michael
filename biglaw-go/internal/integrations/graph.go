@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	graphBase       = "https://graph.microsoft.com/v1.0"
-	graphTimeout    = 15 * time.Second
-	graphMaxBytes   = 512 * 1024
+	graphBase     = "https://graph.microsoft.com/v1.0"
+	graphTimeout  = 15 * time.Second
+	graphMaxBytes = 512 * 1024
 )
 
 // ─── Token cache ──────────────────────────────────────────────────────────────

@@ -33,10 +33,13 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/embeddings"
 	"github.com/discover-legal/biglaw-go/internal/knowledge"
 	"github.com/discover-legal/biglaw-go/internal/learning"
+	"github.com/discover-legal/biglaw-go/internal/lpm"
 	"github.com/discover-legal/biglaw-go/internal/mcp"
 	"github.com/discover-legal/biglaw-go/internal/memory"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
 	"github.com/discover-legal/biglaw-go/internal/providers"
+	"github.com/discover-legal/biglaw-go/internal/queue"
+	"github.com/discover-legal/biglaw-go/internal/routing"
 	"github.com/discover-legal/biglaw-go/internal/secrets"
 	"github.com/discover-legal/biglaw-go/internal/settings"
 	"github.com/discover-legal/biglaw-go/internal/templates"
@@ -159,6 +162,90 @@ func main() {
 	}
 	orch.SetClientVoiceStore(clientVoiceStore)
 
+	// Build the LPM service (daily status-report spine) when enabled. It owns a
+	// durable queue, a daily scheduler, and a background worker.
+	var lpmSvc *lpm.Service
+	if cfg.LPM.Enabled {
+		lpmQueue := queue.New(cfg.Persistence.JobsFile)
+		if err := lpmQueue.Init(); err != nil {
+			fmt.Fprintf(os.Stderr, "lpm queue init: %v\n", err)
+		}
+		model := cfg.LPM.Model
+		if model == "" {
+			// Route to the low-power tier (Haiku / Ollama / local) for the box.
+			model = routing.SelectModel(cfg, routing.SelectParams{TaskType: routing.TaskExtraction})
+		}
+		if prov, err := provReg.Get(model); err != nil {
+			fmt.Fprintf(os.Stderr, "lpm provider: %v\n", err)
+		} else {
+			gen := lpm.NewGenerator(prov, model)
+			corpus := lpm.NewCorpus(cfg.LPM.CorpusFile)
+			data := newLPMDataProvider(orch, timeStore, clientStore)
+			channelPoster := newMatterChannelPoster(cfg)
+			lpmSvc = lpm.NewService(cfg.LPM, gen, corpus, data, lpmQueue, nil)
+
+			// Phase 2: email intake + matter routing when a mail provider is set.
+			if cfg.Email.Graph.Enabled || cfg.Email.Gmail.Enabled {
+				routed := lpm.NewRoutedStore(cfg.LPM.RoutedFile)
+				if err := routed.Init(); err != nil {
+					fmt.Fprintf(os.Stderr, "lpm routed store init: %v\n", err)
+				}
+				router := lpm.NewRouter(prov, model, cfg.LPM.RouteMinConf)
+				intake := lpm.NewIntake(lpm.IntakeConfig{
+					IntakeMode:  cfg.LPM.IntakeMode,
+					SharedInbox: cfg.LPM.SharedInbox,
+					IntervalMin: cfg.LPM.PollIntervalM,
+				}, nil, router, routed, data.MatterOptions)
+				lpmSvc.WithEmailIntake(intake, routed)
+
+				// Phase 4: historical backfill grinds older mail on cheap compute.
+				if cfg.LPM.BackfillEnabled {
+					backfill := lpm.NewBackfill(lpm.BackfillConfig{
+						WindowDays: cfg.LPM.BackfillWindowDays,
+						StepDays:   cfg.LPM.BackfillStepDays,
+						MaxPerStep: cfg.LPM.BackfillMaxPerStep,
+						PauseMs:    cfg.LPM.BackfillPauseMs,
+						CursorFile: cfg.LPM.BackfillCursorFile,
+					}, nil, router, routed, data.MatterOptions)
+					lpmSvc.WithBackfill(backfill)
+				}
+			}
+
+			// Outbound drafting (email-write-mode), guard-enforced. Default "off".
+			transport := lpm.NewTransport(
+				cfg.Email.Graph.Enabled, cfg.Email.Gmail.Enabled,
+				cfg.Email.Graph.UserEmail, cfg.Email.Gmail.UserEmail,
+			)
+			lpmSvc.WithDrafting(cfg.LPM.EmailWriteMode, cfg.LPM.AllowedDomains, transport, channelPoster)
+
+			// send_gate pending-drafts store (queryable + approvable by ID).
+			pending := lpm.NewPendingStore(cfg.LPM.PendingFile)
+			if err := pending.Init(); err != nil {
+				fmt.Fprintf(os.Stderr, "lpm pending store init: %v\n", err)
+			}
+			lpmSvc.WithPendingDrafts(pending)
+
+			// Phase 3: 0600 portfolio briefing.
+			lpmSvc.WithPortfolio(lpm.NewPortfolioBriefer(prov, model))
+
+			lpmSvc.Start()
+			defer lpmSvc.Stop()
+		}
+	}
+
+	// Firm-wide background monitors (budget alerts, dockets, regulatory pulse).
+	monitors := startMonitors(cfg, orch, timeStore, clientStore, knowledgeStore, provReg)
+	defer monitors.Stop()
+
+	// makeAPI builds the REST server and attaches optional LPM + docket routes.
+	makeAPI := func() *api.Server {
+		srv := api.New(cfg, orch, provReg, profileStore, clientStore, timeStore, knowledgeStore, agentReg, costStore)
+		srv.AttachLPM(lpmSvc)
+		srv.AttachDockets(monitors.Dockets)
+		srv.AttachRegulatory(monitors.Regulatory)
+		return srv
+	}
+
 	mode := os.Getenv("BIG_MICHAEL_MODE")
 	if mode == "" {
 		mode = "auto"
@@ -180,7 +267,7 @@ func main() {
 	case "backend":
 		// REST API only.
 		addr := fmt.Sprintf("%s:%d", cfg.API.Host, cfg.API.Port)
-		apiSrv := api.New(cfg, orch, profileStore, clientStore, timeStore, knowledgeStore, agentReg, costStore)
+		apiSrv := makeAPI()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -193,7 +280,7 @@ func main() {
 	case "standalone":
 		// REST API + MCP stdio.
 		addr := fmt.Sprintf("%s:%d", cfg.API.Host, cfg.API.Port)
-		apiSrv := api.New(cfg, orch, profileStore, clientStore, timeStore, knowledgeStore, agentReg, costStore)
+		apiSrv := makeAPI()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -214,7 +301,7 @@ func main() {
 	default: // "auto"
 		// Default: run REST API (ARM devices are always "backend").
 		addr := fmt.Sprintf("%s:%d", cfg.API.Host, cfg.API.Port)
-		apiSrv := api.New(cfg, orch, profileStore, clientStore, timeStore, knowledgeStore, agentReg, costStore)
+		apiSrv := makeAPI()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

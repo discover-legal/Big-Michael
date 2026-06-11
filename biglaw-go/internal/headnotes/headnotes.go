@@ -23,12 +23,12 @@ import (
 
 // GenerateOpts parameterises a headnote generation run.
 type GenerateOpts struct {
-	CaseName   string
-	Citation   string
-	Court      string
-	DateFiled  string
+	CaseName     string
+	Citation     string
+	Court        string
+	DateFiled    string
 	Jurisdiction string
-	TaskID     string
+	TaskID       string
 }
 
 // Engine extracts headnotes from court opinions.
@@ -80,21 +80,21 @@ func (e *Engine) Generate(opinionText string, opts GenerateOpts) (*types.Headnot
 	practiceAreas := splitLines(meta["practiceAreas"])
 
 	report := &types.HeadnoteReport{
-		ID:               uuid.New().String(),
-		CaseName:         caseName,
-		Citation:         citation,
-		Court:            court,
-		DateFiled:        opts.DateFiled,
-		Jurisdiction:     opts.Jurisdiction,
-		KeyHolding:       meta["keyHolding"],
-		Headnotes:        headnotes,
+		ID:                uuid.New().String(),
+		CaseName:          caseName,
+		Citation:          citation,
+		Court:             court,
+		DateFiled:         opts.DateFiled,
+		Jurisdiction:      opts.Jurisdiction,
+		KeyHolding:        meta["keyHolding"],
+		Headnotes:         headnotes,
 		RelatedPrinciples: relatedPrinciples,
-		PracticeAreas:    practiceAreas,
-		NosLegalArea:     meta["noslegalArea"],
-		TotalHeadnotes:   len(headnotes),
-		RatioCount:       ratioCount,
-		ObiterCount:      obiterCount,
-		GeneratedAt:      time.Now().UTC().Format(time.RFC3339),
+		PracticeAreas:     practiceAreas,
+		NosLegalArea:      meta["noslegalArea"],
+		TotalHeadnotes:    len(headnotes),
+		RatioCount:        ratioCount,
+		ObiterCount:       obiterCount,
+		GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
 	}
 
 	slog.Info("Headnote report generated", "id", report.ID, "case", report.CaseName, "headnotes", report.TotalHeadnotes, "ratio", report.RatioCount)

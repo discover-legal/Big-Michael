@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"math"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/discover-legal/biglaw-go/internal/types"
@@ -25,7 +26,10 @@ type TimeStore interface {
 // ClientStore is the subset of clients.ClientStore used by budget.
 type ClientStore interface {
 	List() []*types.Client
-	Persist() error
+	// SetMatterBudgetAlerts persists the set of thresholds already alerted for a
+	// matter (dedup state). The store mutates its live record — callers must not
+	// mutate the copies returned by List.
+	SetMatterBudgetAlerts(matterNumber string, triggered []float64) error
 }
 
 // AlertHandler is called when a budget threshold is crossed.
@@ -33,14 +37,61 @@ type AlertHandler func(alert types.BudgetAlert)
 
 // Monitor checks matter spend against OCG budget thresholds.
 type Monitor struct {
-	time     TimeStore
-	clients  ClientStore
-	onAlert  AlertHandler
+	time    TimeStore
+	clients ClientStore
+	onAlert AlertHandler
+
+	ticker *time.Ticker
+	stop   chan struct{}
+	mu     sync.Mutex
 }
 
 // NewMonitor creates a BudgetMonitor.
 func NewMonitor(time TimeStore, clients ClientStore, onAlert AlertHandler) *Monitor {
 	return &Monitor{time: time, clients: clients, onAlert: onAlert}
+}
+
+// Start begins periodic budget checks. matters is called each tick to get the
+// matter numbers to evaluate.
+func (m *Monitor) Start(interval time.Duration, matters func() []string) {
+	m.mu.Lock()
+	if m.ticker != nil {
+		m.mu.Unlock()
+		return
+	}
+	m.ticker = time.NewTicker(interval)
+	m.stop = make(chan struct{})
+	m.mu.Unlock()
+
+	go func() {
+		m.checkAll(matters())
+		for {
+			select {
+			case <-m.ticker.C:
+				m.checkAll(matters())
+			case <-m.stop:
+				return
+			}
+		}
+	}()
+	slog.Info("BudgetMonitor: started", "interval", interval)
+}
+
+// Stop halts periodic checks.
+func (m *Monitor) Stop() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ticker != nil {
+		m.ticker.Stop()
+		close(m.stop)
+		m.ticker = nil
+	}
+}
+
+func (m *Monitor) checkAll(matters []string) {
+	for _, mn := range matters {
+		m.CheckMatter(mn)
+	}
 }
 
 // CheckMatter evaluates budget thresholds for a matter and fires alerts.
@@ -103,11 +154,11 @@ func (m *Monitor) CheckMatter(matterNumber string) {
 	}
 
 	if changed {
-		matter.BudgetAlertsTriggered = make([]float64, 0, len(triggered))
+		newTriggered := make([]float64, 0, len(triggered))
 		for t := range triggered {
-			matter.BudgetAlertsTriggered = append(matter.BudgetAlertsTriggered, t)
+			newTriggered = append(newTriggered, t)
 		}
-		if err := m.clients.Persist(); err != nil {
+		if err := m.clients.SetMatterBudgetAlerts(matterNumber, newTriggered); err != nil {
 			slog.Warn("Failed to persist budget alert state", "error", err)
 		}
 	}

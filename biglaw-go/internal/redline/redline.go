@@ -140,17 +140,17 @@ func (e *Engine) Redline(documentText string, store *playbook.Store, opts Redlin
 	summary := e.generateSummary(issues, opts)
 
 	r := &Report{
-		ID:            uuid.New().String(),
-		DocumentID:    opts.DocumentID,
-		DocumentTitle: opts.DocumentTitle,
-		PracticeArea:  opts.PracticeArea,
-		Jurisdiction:  opts.Jurisdiction,
-		TotalClauses:  len(issues),
-		Issues:        issues,
-		MissingClauses: missing,
-		MissingCount:  len(missing),
+		ID:               uuid.New().String(),
+		DocumentID:       opts.DocumentID,
+		DocumentTitle:    opts.DocumentTitle,
+		PracticeArea:     opts.PracticeArea,
+		Jurisdiction:     opts.Jurisdiction,
+		TotalClauses:     len(issues),
+		Issues:           issues,
+		MissingClauses:   missing,
+		MissingCount:     len(missing),
 		ExecutiveSummary: summary,
-		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
+		GeneratedAt:      time.Now().UTC().Format(time.RFC3339),
 	}
 	for _, iss := range issues {
 		switch iss.Action {

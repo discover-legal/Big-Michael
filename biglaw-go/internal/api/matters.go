@@ -11,6 +11,10 @@
 // mattersBudgetClientAdapter bridges the gap: it overlays budget state
 // (budgetUsd / thresholds / alerts-triggered) onto roster copies and persists
 // the overlay to its own JSON file beside the clients file.
+//
+// Also hosts the adapters behind the firm-wide bot/monitor budget reader
+// (apiBudgetTime / apiBudgetClients) and AttachDockets, which exposes the
+// running docket monitor to the REST handlers and the bot facade.
 
 package api
 
@@ -29,8 +33,10 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/budget"
 	"github.com/discover-legal/biglaw-go/internal/clients"
 	"github.com/discover-legal/biglaw-go/internal/deadlines"
+	"github.com/discover-legal/biglaw-go/internal/dockets"
 	"github.com/discover-legal/biglaw-go/internal/matters"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
+	"github.com/discover-legal/biglaw-go/internal/regulatory"
 	"github.com/discover-legal/biglaw-go/internal/timekeeping"
 	"github.com/discover-legal/biglaw-go/internal/types"
 )
@@ -167,6 +173,11 @@ func (s *Server) handleSetMatterBudget(c *gin.Context) {
 	if matter == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Client or matter not found"})
 		return
+	}
+	// Write through to the client store so the firm-wide budget monitor and
+	// the bot facade (which read budgets from the roster) see it too.
+	if err := s.clients.SetMatterBudget(c.Param("num"), &body.BudgetUsd, thresholds); err != nil {
+		slog.Warn("matter budgets: store write-through failed", "matter", c.Param("num"), "err", err)
 	}
 	c.JSON(http.StatusOK, matter)
 }
@@ -531,20 +542,13 @@ type mattersBudgetState struct {
 
 // mattersBudgetClientAdapter implements budget.ClientStore on top of
 // clients.ClientStore. Budget fields are kept in an overlay map persisted to
-// its own JSON file: the concrete store has no SetMatterBudget / Persist API
-// yet, and its List() returns value copies whose Matters slices alias internal
-// state (so in-place mutation through the store is off the table).
-//
-// List() returns deep-copied clients with the overlay merged in and caches the
-// result; Persist() harvests budget fields back out of that cached slice —
-// which the budget Monitor mutates between the two calls — into the overlay.
+// its own JSON file, merged onto deep-copied roster snapshots in List().
 // All Monitor call sequences are serialised by mattersSubsystem.budgetMu.
 type mattersBudgetClientAdapter struct {
 	mu      sync.Mutex
 	store   *clients.ClientStore
 	path    string
 	overlay map[string]mattersBudgetState // keyed by matter number
-	cache   []*types.Client               // last List() result, scanned by Persist()
 }
 
 func newMattersBudgetClientAdapter(store *clients.ClientStore, path string) *mattersBudgetClientAdapter {
@@ -589,29 +593,20 @@ func (a *mattersBudgetClientAdapter) List() []*types.Client {
 		}
 		out = append(out, &c)
 	}
-	a.cache = out
 	return out
 }
 
-// Persist implements budget.ClientStore: harvest budget fields (including any
-// alert-threshold state the Monitor mutated on the cached slice) into the
-// overlay and save it.
-func (a *mattersBudgetClientAdapter) Persist() error {
+// SetMatterBudgetAlerts implements budget.ClientStore: record the set of
+// thresholds already alerted for a matter (dedup state) in the overlay.
+func (a *mattersBudgetClientAdapter) SetMatterBudgetAlerts(matterNumber string, triggered []float64) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, c := range a.cache {
-		for i := range c.Matters {
-			m := c.Matters[i]
-			if m.BudgetUsd == nil {
-				continue
-			}
-			a.overlay[m.MatterNumber] = mattersBudgetState{
-				BudgetUsd:  *m.BudgetUsd,
-				Thresholds: append([]float64(nil), m.BudgetAlertThresholds...),
-				Triggered:  append([]float64(nil), m.BudgetAlertsTriggered...),
-			}
-		}
+	st, ok := a.overlay[matterNumber]
+	if !ok {
+		return nil // no budget set for this matter — nothing to record
 	}
+	st.Triggered = append([]float64(nil), triggered...)
+	a.overlay[matterNumber] = st
 	return a.save()
 }
 
@@ -714,4 +709,43 @@ func (b *mattersAlertBroker) Publish(alert types.BudgetAlert) {
 		default:
 		}
 	}
+}
+
+// ─── Firm-wide monitor adapters ───────────────────────────────────────────────
+
+// apiBudgetTime adapts the time store to the budget TimeStore interface.
+type apiBudgetTime struct{ ts *timekeeping.TimeStore }
+
+func (a apiBudgetTime) List(matter string) []types.TimeEntry {
+	return a.ts.List(timekeeping.TimeFilter{MatterNumber: matter})
+}
+func (a apiBudgetTime) ListAll() []types.TimeEntry { return a.ts.List(timekeeping.TimeFilter{}) }
+
+// apiBudgetClients adapts the client roster to the budget ClientStore interface.
+type apiBudgetClients struct{ cs *clients.ClientStore }
+
+func (a apiBudgetClients) List() []*types.Client {
+	src := a.cs.List()
+	out := make([]*types.Client, len(src))
+	for i := range src {
+		c := src[i]
+		out[i] = &c
+	}
+	return out
+}
+func (a apiBudgetClients) SetMatterBudgetAlerts(matterNumber string, triggered []float64) error {
+	return a.cs.SetMatterBudgetAlerts(matterNumber, triggered)
+}
+
+// AttachDockets exposes the running docket monitor to the REST handlers
+// (ops.go serves the /dockets routes against it) and the bot facade
+// (watch/unwatch/dockets commands). Routes degrade to 503 when nil.
+func (s *Server) AttachDockets(dm *dockets.Monitor) {
+	s.dockets = dm
+}
+
+// AttachRegulatory exposes the running regulatory pulse monitor to the REST
+// handlers (ops.go serves /regulatory routes against it when attached).
+func (s *Server) AttachRegulatory(rm *regulatory.Monitor) {
+	s.regulatory = rm
 }

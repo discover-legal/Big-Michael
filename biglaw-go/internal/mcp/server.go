@@ -325,16 +325,16 @@ func (s *MCPServer) handleListTasks(_ context.Context, _ mcplib.CallToolRequest)
 
 	// Return lightweight summaries to keep the response compact.
 	type taskSummary struct {
-		ID           string           `json:"id"`
-		Description  string           `json:"description"`
+		ID           string             `json:"id"`
+		Description  string             `json:"description"`
 		WorkflowType types.WorkflowType `json:"workflowType"`
-		Status       types.TaskStatus `json:"status"`
-		CurrentPhase types.TaskPhase  `json:"currentPhase"`
-		CurrentRound int              `json:"currentRound"`
-		Findings     int              `json:"findings"`
-		PendingGates int              `json:"pendingGates"`
-		CreatedAt    time.Time        `json:"createdAt"`
-		UpdatedAt    time.Time        `json:"updatedAt"`
+		Status       types.TaskStatus   `json:"status"`
+		CurrentPhase types.TaskPhase    `json:"currentPhase"`
+		CurrentRound int                `json:"currentRound"`
+		Findings     int                `json:"findings"`
+		PendingGates int                `json:"pendingGates"`
+		CreatedAt    time.Time          `json:"createdAt"`
+		UpdatedAt    time.Time          `json:"updatedAt"`
 	}
 
 	summaries := make([]taskSummary, len(tasks))

@@ -55,14 +55,14 @@ type Sink interface {
 }
 
 type Logger struct {
-	mu         sync.Mutex
-	buffer     []AuditEntry
-	maxBuffer  int
-	lastHash   string
-	logFile    string
-	enabled    bool
-	sinks      []Sink
-	listeners  []chan AuditEntry
+	mu        sync.Mutex
+	buffer    []AuditEntry
+	maxBuffer int
+	lastHash  string
+	logFile   string
+	enabled   bool
+	sinks     []Sink
+	listeners []chan AuditEntry
 }
 
 var Default = &Logger{

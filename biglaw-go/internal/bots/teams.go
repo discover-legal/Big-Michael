@@ -102,8 +102,12 @@ type TeamsWebhookRequest struct {
 		Name string `json:"name"`
 	} `json:"from"`
 	ChannelData struct {
-		Channel struct{ ID string `json:"id"` } `json:"channel"`
-		Team    struct{ ID string `json:"id"` } `json:"team"`
+		Channel struct {
+			ID string `json:"id"`
+		} `json:"channel"`
+		Team struct {
+			ID string `json:"id"`
+		} `json:"team"`
 	} `json:"channelData"`
 }
 

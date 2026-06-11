@@ -39,8 +39,8 @@ const (
 	ComplexityLow    Complexity = "low"
 )
 
-func IsOllamaModel(model string) bool  { return strings.HasPrefix(model, "ollama:") }
-func IsLocalModel(model string) bool   { return strings.HasPrefix(model, "local:") }
+func IsOllamaModel(model string) bool { return strings.HasPrefix(model, "ollama:") }
+func IsLocalModel(model string) bool  { return strings.HasPrefix(model, "local:") }
 
 func OllamaModelID(cfg *config.Config) string {
 	return "ollama:" + cfg.Local.OllamaModel

@@ -136,18 +136,18 @@ type ClientVoiceConfig struct {
 }
 
 type LocalConfig struct {
-	OllamaURL             string
-	OllamaEnabled         bool
-	OllamaModel           string
-	OllamaTiers           string
-	LocalEmbeddings       bool
-	LocalEmbeddingModel   string
-	LocalInferenceURL     string
-	LocalInferenceKey     string
-	LocalInferenceModel   string
-	LocalInferenceTiers   string
-	InferenceWatts        int
-	InferenceRegion       string
+	OllamaURL           string
+	OllamaEnabled       bool
+	OllamaModel         string
+	OllamaTiers         string
+	LocalEmbeddings     bool
+	LocalEmbeddingModel string
+	LocalInferenceURL   string
+	LocalInferenceKey   string
+	LocalInferenceModel string
+	LocalInferenceTiers string
+	InferenceWatts      int
+	InferenceRegion     string
 }
 
 type PDFConfig struct {
@@ -157,14 +157,14 @@ type PDFConfig struct {
 }
 
 type PersistenceConfig struct {
-	TasksFile    string
-	SettingsFile string
-	ProfilesFile string
-	ClientsFile  string
-	TimeFile     string
-	LearningFile string
-	OcgFile      string
-	JobsFile     string
+	TasksFile       string
+	SettingsFile    string
+	ProfilesFile    string
+	ClientsFile     string
+	TimeFile        string
+	LearningFile    string
+	OcgFile         string
+	JobsFile        string
 	PreBillsFile    string
 	CostFile        string
 	PlaybooksFile   string
@@ -216,8 +216,8 @@ type GmailConfig struct {
 }
 
 type EmailConfig struct {
-	Graph  GraphEmailConfig
-	Gmail  GmailConfig
+	Graph GraphEmailConfig
+	Gmail GmailConfig
 }
 
 type TeamsBotsConfig struct {
@@ -234,56 +234,118 @@ type SlackBotConfig struct {
 }
 
 type BotsConfig struct {
-	Teams  TeamsBotsConfig
-	Slack  SlackBotConfig
+	Teams TeamsBotsConfig
+	Slack SlackBotConfig
 }
 
 type PlaybooksConfig struct {
 	File string
 }
 
+// LPMConfig governs the Legal Project Management subsystem: the daily
+// status-report spine plus the (Phase 2) email intake/routing knobs.
+//
+//	EmailWriteMode — how much email-writing power the agent has:
+//	  "off"       insights only; never composes outbound mail
+//	  "channel"   posts drafts into the matter's Teams/Slack channel for comment
+//	  "draft"     writes an unsent draft into the mailbox for a human to send
+//	  "send_gate" may send, but only after an explicit human approval gate
+//
+//	IntakeMode — how new email reaches the classifier (Phase 2):
+//	  "shared_inbox" scope polling to one project inbox CC'd on everything
+//	  "polling"      poll the configured mailbox(es) directly
+//	  "both"         shared inbox first, falling back to direct polling
+type LPMConfig struct {
+	Enabled        bool
+	DailyHour      int      // local-time hour (0–23) the daily run fires; 6 == 0600
+	Formats        []string // any of: json, docx, markdown
+	CorpusFile     string   // append-only JSONL corpus of MatterStatusReports
+	ReportDir      string   // rendered DOCX/MD/JSON artifacts land here
+	Model          string   // override; empty = low-power routing (Haiku/Ollama/local)
+	ChannelPost    bool     // post a short summary + DOCX link to the matter channel
+	EmailWriteMode string   // off | channel | draft | send_gate
+	IntakeMode     string   // shared_inbox | polling | both
+	SharedInbox    string   // mailbox address for shared-inbox intake
+	PollIntervalM  int      // email poll interval in minutes
+	RoutedFile     string   // append-only JSONL of email→matter routing decisions
+	RouteMinConf   float64  // confidence floor below which a routing is "unrouted"
+	AllowedDomains []string // recipient-domain allowlist for outbound drafts
+	PendingFile    string   // send_gate pending-drafts store
+
+	// Phase 4 historical backfill (grinds old mail on cheap compute).
+	BackfillEnabled    bool
+	BackfillWindowDays int    // total history to cover
+	BackfillStepDays   int    // window size per step
+	BackfillMaxPerStep int    // page size per step
+	BackfillPauseMs    int    // rate-limit pause between steps
+	BackfillCursorFile string // resumable progress cursor
+}
+
+// MonitorsConfig governs the firm-wide background monitors.
+type MonitorsConfig struct {
+	BudgetAlertsEnabled   bool
+	BudgetIntervalMin     int
+	DocketsEnabled        bool
+	DocketsIntervalMin    int
+	DocketsFile           string
+	RegulatoryIntervalMin int // regulatory auto-enables only when TAVILY_API_KEY is set
+}
+
 type ConnectorsConfig struct {
-	CourtListener  ConnectorConfig
-	Ironclad       ConnectorConfig
-	IManage        ConnectorConfig
-	Definely       ConnectorConfig
-	Westlaw        ConnectorConfig
-	Everlaw        ConnectorConfig
-	Trellis        ConnectorConfig
-	Descrybe       ConnectorConfig
-	DocuSign       ConnectorConfig
-	SolveIntel     ConnectorConfig
-	Slack          ConnectorConfig
-	GoogleDrive    ConnectorConfig
-	Box            ConnectorConfig
-	Lawve          ConnectorConfig
-	TopCounsel     ConnectorConfig
+	CourtListener ConnectorConfig
+	Ironclad      ConnectorConfig
+	IManage       ConnectorConfig
+	Definely      ConnectorConfig
+	Westlaw       ConnectorConfig
+	Everlaw       ConnectorConfig
+	Trellis       ConnectorConfig
+	Descrybe      ConnectorConfig
+	DocuSign      ConnectorConfig
+	SolveIntel    ConnectorConfig
+	Slack         ConnectorConfig
+	GoogleDrive   ConnectorConfig
+	Box           ConnectorConfig
+	Lawve         ConnectorConfig
+	TopCounsel    ConnectorConfig
 }
 
 type Config struct {
-	Anthropic     AnthropicConfig
-	Embeddings    EmbeddingsConfig
-	VectorDB      VectorDBConfig
-	API           APIConfig
-	Auth          AuthConfig
-	Agents        AgentsConfig
-	DyTopo        DyTopoConfig
-	Debate        DebateConfig
-	Presentation  PresentationConfig
-	DocuSeal      DocuSealConfig
-	ClientVoice   ClientVoiceConfig
-	Local         LocalConfig
-	PDF           PDFConfig
-	Persistence   PersistenceConfig
-	Queue         QueueConfig
-	AgentBilling  AgentBillingConfig
-	Audit         AuditConfig
-	Connectors    ConnectorsConfig
-	SearchTavily  string
-	LogLevel      string
-	Email         EmailConfig
-	Bots          BotsConfig
-	Playbooks     PlaybooksConfig
+	Anthropic    AnthropicConfig
+	Embeddings   EmbeddingsConfig
+	VectorDB     VectorDBConfig
+	API          APIConfig
+	Auth         AuthConfig
+	Agents       AgentsConfig
+	DyTopo       DyTopoConfig
+	Debate       DebateConfig
+	Presentation PresentationConfig
+	DocuSeal     DocuSealConfig
+	ClientVoice  ClientVoiceConfig
+	Local        LocalConfig
+	PDF          PDFConfig
+	Persistence  PersistenceConfig
+	Queue        QueueConfig
+	AgentBilling AgentBillingConfig
+	Audit        AuditConfig
+	Connectors   ConnectorsConfig
+	SearchTavily string
+	LogLevel     string
+	Email        EmailConfig
+	Bots         BotsConfig
+	Playbooks    PlaybooksConfig
+	LPM          LPMConfig
+	Monitors     MonitorsConfig
+}
+
+// normalizeEnum returns v lowercased if it is in allowed, else fallback.
+func normalizeEnum(v, fallback string, allowed ...string) string {
+	v = strings.ToLower(strings.TrimSpace(v))
+	for _, a := range allowed {
+		if v == a {
+			return v
+		}
+	}
+	return fallback
 }
 
 func Load() *Config {
@@ -363,17 +425,17 @@ func Load() *Config {
 			OutputDir: env("PDF_OUTPUT_DIR", "./output/documents"),
 		},
 		Persistence: PersistenceConfig{
-			TasksFile:    env("TASKS_FILE", ".tasks.json"),
-			SettingsFile: env("SETTINGS_FILE", ".settings.json"),
-			ProfilesFile: env("PROFILES_FILE", ".profiles.json"),
-			ClientsFile:  env("CLIENTS_FILE", ".clients.json"),
-			TimeFile:     env("TIME_FILE", ".time-entries.json"),
-			LearningFile: env("LEARNING_FILE", ".qtable.json"),
-			OcgFile:      env("OCG_FILE", ".ocg.json"),
-			JobsFile:     env("JOBS_FILE", ".jobs.json"),
-			PreBillsFile:  env("PREBILLS_FILE", "./data/prebills.json"),
-			CostFile:      env("COST_LOG_FILE", "./data/costs.jsonl"),
-			PlaybooksFile: env("PLAYBOOKS_FILE", "./data/playbooks.json"),
+			TasksFile:       env("TASKS_FILE", ".tasks.json"),
+			SettingsFile:    env("SETTINGS_FILE", ".settings.json"),
+			ProfilesFile:    env("PROFILES_FILE", ".profiles.json"),
+			ClientsFile:     env("CLIENTS_FILE", ".clients.json"),
+			TimeFile:        env("TIME_FILE", ".time-entries.json"),
+			LearningFile:    env("LEARNING_FILE", ".qtable.json"),
+			OcgFile:         env("OCG_FILE", ".ocg.json"),
+			JobsFile:        env("JOBS_FILE", ".jobs.json"),
+			PreBillsFile:    env("PREBILLS_FILE", "./data/prebills.json"),
+			CostFile:        env("COST_LOG_FILE", "./data/costs.jsonl"),
+			PlaybooksFile:   env("PLAYBOOKS_FILE", "./data/playbooks.json"),
 			ClientVoiceFile: env("CLIENT_VOICE_FILE", "./data/clientvoice.json"),
 		},
 		Queue: QueueConfig{
@@ -421,7 +483,7 @@ func Load() *Config {
 			Teams: TeamsBotsConfig{
 				WebhookSecret:      os.Getenv("TEAMS_WEBHOOK_SECRET"),
 				IncomingWebhookURL: os.Getenv("TEAMS_INCOMING_WEBHOOK_URL"),
-				Enabled: os.Getenv("TEAMS_WEBHOOK_SECRET") != "" || os.Getenv("TEAMS_INCOMING_WEBHOOK_URL") != "",
+				Enabled:            os.Getenv("TEAMS_WEBHOOK_SECRET") != "" || os.Getenv("TEAMS_INCOMING_WEBHOOK_URL") != "",
 			},
 			Slack: SlackBotConfig{
 				BotToken:       os.Getenv("SLACK_BOT_TOKEN"),
@@ -457,6 +519,38 @@ func Load() *Config {
 				Enabled:  os.Getenv("TRELLIS_API_KEY") != "",
 			},
 		},
+		LPM: LPMConfig{
+			Enabled:        envBool("LPM_ENABLED", false),
+			DailyHour:      envInt("LPM_DAILY_HOUR", 6),
+			Formats:        envList("LPM_REPORT_FORMATS", "json,docx,markdown"),
+			CorpusFile:     env("LPM_CORPUS_FILE", "./data/status-reports.jsonl"),
+			ReportDir:      env("LPM_REPORT_DIR", "./data/reports"),
+			Model:          env("LPM_MODEL", ""),
+			ChannelPost:    envBool("LPM_CHANNEL_POST", false),
+			EmailWriteMode: normalizeEnum(env("LPM_EMAIL_WRITE_MODE", "off"), "off", "off", "channel", "draft", "send_gate"),
+			IntakeMode:     normalizeEnum(env("LPM_INTAKE_MODE", "polling"), "polling", "shared_inbox", "polling", "both"),
+			SharedInbox:    env("LPM_SHARED_INBOX", ""),
+			PollIntervalM:  envInt("LPM_POLL_INTERVAL_MIN", 15),
+			RoutedFile:     env("LPM_ROUTED_FILE", "./data/routed-emails.jsonl"),
+			RouteMinConf:   envFloat("LPM_ROUTE_MIN_CONFIDENCE", 0.6),
+			AllowedDomains: envList("LPM_ALLOWED_DOMAINS", ""),
+			PendingFile:    env("LPM_PENDING_FILE", "./data/pending-drafts.json"),
+
+			BackfillEnabled:    envBool("LPM_BACKFILL_ENABLED", false),
+			BackfillWindowDays: envInt("LPM_BACKFILL_WINDOW_DAYS", 365),
+			BackfillStepDays:   envInt("LPM_BACKFILL_STEP_DAYS", 7),
+			BackfillMaxPerStep: envInt("LPM_BACKFILL_MAX_PER_STEP", 100),
+			BackfillPauseMs:    envInt("LPM_BACKFILL_PAUSE_MS", 1000),
+			BackfillCursorFile: env("LPM_BACKFILL_CURSOR_FILE", "./data/backfill-cursor.json"),
+		},
+		Monitors: MonitorsConfig{
+			BudgetAlertsEnabled:   envBool("MONITOR_BUDGET_ALERTS", true),
+			BudgetIntervalMin:     envInt("MONITOR_BUDGET_INTERVAL_MIN", 60),
+			DocketsEnabled:        envBool("MONITOR_DOCKETS", true),
+			DocketsIntervalMin:    envInt("MONITOR_DOCKET_INTERVAL_MIN", 30),
+			DocketsFile:           env("DOCKETS_FILE", "./data/dockets.json"),
+			RegulatoryIntervalMin: envInt("MONITOR_REGULATORY_INTERVAL_MIN", 360),
+		},
 	}
 	return c
 }
@@ -471,36 +565,36 @@ func (cc ConnectorsConfig) Has(envKey string) bool {
 // Returns "" if the connector is not recognised or not configured.
 func (cc ConnectorsConfig) EndpointFor(toolName string) string {
 	m := map[string]string{
-		"court_listener_search":  cc.CourtListener.Endpoint,
-		"court_listener_opinion": cc.CourtListener.Endpoint,
-		"court_listener_docket":  cc.CourtListener.Endpoint,
-		"westlaw_research":        cc.Westlaw.Endpoint,
-		"westlaw_check_citation":  cc.Westlaw.Endpoint,
-		"everlaw_search_documents": cc.Everlaw.Endpoint,
-		"everlaw_get_review_set":   cc.Everlaw.Endpoint,
-		"trellis_search_cases":     cc.Trellis.Endpoint,
-		"trellis_get_docket":       cc.Trellis.Endpoint,
-		"trellis_judge_analytics":  cc.Trellis.Endpoint,
-		"descrybe_search_cases":    cc.Descrybe.Endpoint,
-		"descrybe_check_citation":  cc.Descrybe.Endpoint,
-		"ironclad_search_contracts": cc.Ironclad.Endpoint,
-		"ironclad_get_contract":     cc.Ironclad.Endpoint,
-		"docusign_search_contracts": cc.DocuSign.Endpoint,
-		"docusign_get_envelope":     cc.DocuSign.Endpoint,
-		"imanage_search":      cc.IManage.Endpoint,
-		"imanage_get_document": cc.IManage.Endpoint,
-		"definely_analyze_structure":  cc.Definely.Endpoint,
-		"definely_resolve_definition": cc.Definely.Endpoint,
-		"lawve_review_contract": cc.Lawve.Endpoint,
-		"lawve_search_clauses":  cc.Lawve.Endpoint,
-		"google_drive_search":   cc.GoogleDrive.Endpoint,
-		"google_drive_get_file": cc.GoogleDrive.Endpoint,
-		"box_search":   cc.Box.Endpoint,
-		"box_get_file": cc.Box.Endpoint,
-		"slack_search":       cc.Slack.Endpoint,
-		"slack_send_message": cc.Slack.Endpoint,
-		"topcounsel_route_matter": cc.TopCounsel.Endpoint,
-		"topcounsel_get_panel":    cc.TopCounsel.Endpoint,
+		"court_listener_search":             cc.CourtListener.Endpoint,
+		"court_listener_opinion":            cc.CourtListener.Endpoint,
+		"court_listener_docket":             cc.CourtListener.Endpoint,
+		"westlaw_research":                  cc.Westlaw.Endpoint,
+		"westlaw_check_citation":            cc.Westlaw.Endpoint,
+		"everlaw_search_documents":          cc.Everlaw.Endpoint,
+		"everlaw_get_review_set":            cc.Everlaw.Endpoint,
+		"trellis_search_cases":              cc.Trellis.Endpoint,
+		"trellis_get_docket":                cc.Trellis.Endpoint,
+		"trellis_judge_analytics":           cc.Trellis.Endpoint,
+		"descrybe_search_cases":             cc.Descrybe.Endpoint,
+		"descrybe_check_citation":           cc.Descrybe.Endpoint,
+		"ironclad_search_contracts":         cc.Ironclad.Endpoint,
+		"ironclad_get_contract":             cc.Ironclad.Endpoint,
+		"docusign_search_contracts":         cc.DocuSign.Endpoint,
+		"docusign_get_envelope":             cc.DocuSign.Endpoint,
+		"imanage_search":                    cc.IManage.Endpoint,
+		"imanage_get_document":              cc.IManage.Endpoint,
+		"definely_analyze_structure":        cc.Definely.Endpoint,
+		"definely_resolve_definition":       cc.Definely.Endpoint,
+		"lawve_review_contract":             cc.Lawve.Endpoint,
+		"lawve_search_clauses":              cc.Lawve.Endpoint,
+		"google_drive_search":               cc.GoogleDrive.Endpoint,
+		"google_drive_get_file":             cc.GoogleDrive.Endpoint,
+		"box_search":                        cc.Box.Endpoint,
+		"box_get_file":                      cc.Box.Endpoint,
+		"slack_search":                      cc.Slack.Endpoint,
+		"slack_send_message":                cc.Slack.Endpoint,
+		"topcounsel_route_matter":           cc.TopCounsel.Endpoint,
+		"topcounsel_get_panel":              cc.TopCounsel.Endpoint,
 		"solve_intelligence_search_patents": cc.SolveIntel.Endpoint,
 		"solve_intelligence_draft_claims":   cc.SolveIntel.Endpoint,
 	}
