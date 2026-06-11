@@ -60,6 +60,9 @@ class BigLawClient:
     def approve_gate(self, task_id: str, gate_id: str, note: str) -> None:
         self._req("POST", f"/tasks/{task_id}/gates/{gate_id}/approve", json={"note": note})
 
+    def reject_gate(self, task_id: str, gate_id: str, reason: str) -> None:
+        self._req("POST", f"/tasks/{task_id}/gates/{gate_id}/reject", json={"reason": reason})
+
     def task_cost(self, task_id: str) -> dict:
         return self._req("GET", f"/tasks/{task_id}/cost")
 
@@ -69,10 +72,14 @@ class BigLawClient:
         poll_seconds: float,
         timeout_seconds: float,
         on_event=None,
+        gate_policy: str = "approve",
     ) -> dict:
-        """Poll until the task completes or fails, auto-approving human gates.
+        """Poll until the task completes or fails, resolving human gates.
 
-        on_event(kind, payload) is called for "status", "gate_approved" events.
+        gate_policy "approve" passes every flagged finding through; "reject"
+        drops them (the orchestrator removes the finding and continues), which
+        benchmarks the verification gate as a filter. on_event(kind, payload)
+        is called for "status" and "gate_resolved" events.
         Returns the final task object; raises BigLawError on failure/timeout.
         """
         deadline = time.monotonic() + timeout_seconds
@@ -96,10 +103,17 @@ class BigLawClient:
                     gid = gate.get("id")
                     if not gid or gid in gates_seen or gate.get("status") not in (None, "", "pending"):
                         continue
-                    self.approve_gate(task_id, gid, "auto-approved by LAB benchmark driver")
+                    if gate_policy == "reject":
+                        self.reject_gate(task_id, gid, "auto-rejected by LAB benchmark driver (gate-policy=reject)")
+                    else:
+                        self.approve_gate(task_id, gid, "auto-approved by LAB benchmark driver")
                     gates_seen.add(gid)
                     if on_event:
-                        on_event("gate_approved", {"gateId": gid, "findingId": gate.get("findingId")})
+                        on_event("gate_resolved", {
+                            "gateId": gid,
+                            "findingId": gate.get("findingId"),
+                            "action": gate_policy,
+                        })
 
             time.sleep(poll_seconds)
 

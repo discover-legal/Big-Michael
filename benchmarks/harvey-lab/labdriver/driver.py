@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .biglaw import BigLawClient, BigLawError
 from .convert import convert_documents
-from .deliver import render_deliverable
+from .deliver import render_deliverable, split_by_markers, strip_markers
 
 # LAB work_type → BigLaw WorkflowType. Overridable with --workflow.
 WORK_TYPE_TO_WORKFLOW = {
@@ -30,6 +30,13 @@ WORK_TYPE_TO_WORKFLOW = {
     "review": "review",
     "research": "full_bench",
 }
+
+MARKER_INSTRUCTION = (
+    "Structure your final work product as one section per deliverable. Begin "
+    "each section with a line containing exactly:\n=== DELIVERABLE: <filename> ===\n"
+    "using the deliverable filenames listed above, and put that deliverable's "
+    "complete, self-contained content in its section."
+)
 
 
 def deliverable_names(task_cfg: dict) -> list[str]:
@@ -55,7 +62,12 @@ def pick_workflow(task_cfg: dict, override: str | None, deliverables: list[str])
     return WORK_TYPE_TO_WORKFLOW.get(str(task_cfg.get("work_type", "")).lower(), "roundtable")
 
 
-def build_description(task_cfg: dict, doc_names: list[str], deliverables: list[str]) -> str:
+def build_description(
+    task_cfg: dict,
+    doc_names: list[str],
+    deliverables: list[str],
+    use_markers: bool,
+) -> str:
     parts = [str(task_cfg.get("instructions", "")).strip()]
     if doc_names:
         parts.append(
@@ -67,7 +79,36 @@ def build_description(task_cfg: dict, doc_names: list[str], deliverables: list[s
         + ", ".join(deliverables)
         + ". Produce a complete, self-contained work product covering every deliverable."
     )
+    if use_markers:
+        parts.append(MARKER_INSTRUCTION)
     return "\n\n".join(p for p in parts if p)
+
+
+def run_one_biglaw_task(
+    client: BigLawClient,
+    description: str,
+    workflow: str,
+    doc_ids: list[str],
+    args: argparse.Namespace,
+    log,
+    gates: list[dict],
+) -> dict:
+    """Submit one BigLaw task, resolve its gates per policy, return the final task."""
+    task = client.submit_task(description, workflow, doc_ids, args.jurisdiction)
+    task_id = task["id"]
+    log("task_submitted", {"taskId": task_id, "workflow": workflow, "gatePolicy": args.gate_policy})
+
+    def on_event(kind: str, payload: dict) -> None:
+        if kind == "gate_resolved":
+            gates.append({"taskId": task_id, **payload})
+        log(kind, payload)
+
+    final = client.wait_for_task(
+        task_id, args.poll, args.timeout, on_event=on_event, gate_policy=args.gate_policy
+    )
+    if not (final.get("output") or "").strip():
+        raise BigLawError(f"task {task_id} completed with an empty synthesis")
+    return final
 
 
 def run_task(args: argparse.Namespace) -> Path:
@@ -80,6 +121,7 @@ def run_task(args: argparse.Namespace) -> Path:
 
     deliverables = deliverable_names(task_cfg)
     workflow = pick_workflow(task_cfg, args.workflow, deliverables)
+    multi = len(deliverables) > 1
 
     results_root = Path(args.results_dir).expanduser().resolve() if args.results_dir else labs_dir / "results"
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -105,11 +147,13 @@ def run_task(args: argparse.Namespace) -> Path:
         "task": args.task,
         "workflow_type": workflow,
         "jurisdiction": args.jurisdiction,
+        "split_mode": args.split_mode,
+        "gate_policy": args.gate_policy,
         "api": args.api,
         "started_at": datetime.now(timezone.utc).isoformat(),
     }, indent=2), encoding="utf-8")
 
-    # 1. Convert + ingest the task's documents.
+    # 1. Convert + ingest the task's documents (shared across submissions).
     converted, skipped = convert_documents(task_dir / "documents")
     for name in skipped:
         log("document_skipped", {"document": name})
@@ -119,56 +163,73 @@ def run_task(args: argparse.Namespace) -> Path:
         doc_names.append(rel)
     log("documents_ingested", {"count": len(doc_ids), "skipped": len(skipped)})
 
-    # 2. Submit and babysit the BigLaw task, auto-approving human gates.
-    description = build_description(task_cfg, doc_names, deliverables)
-    task = client.submit_task(description, workflow, doc_ids, args.jurisdiction)
-    task_id = task["id"]
-    log("task_submitted", {"taskId": task_id, "workflow": workflow})
+    # 2. Run BigLaw and map each deliverable to its content + optional table.
+    gates: list[dict] = []
+    finals: list[dict] = []
+    outputs: dict[str, tuple[str, dict | None]] = {}
 
-    gates_approved = 0
-
-    def on_event(kind: str, payload: dict) -> None:
-        nonlocal gates_approved
-        if kind == "gate_approved":
-            gates_approved += 1
-        log(kind, payload)
-
-    final = client.wait_for_task(task_id, args.poll, args.timeout, on_event=on_event)
-    synthesis = final.get("output") or ""
-    if not synthesis.strip():
-        raise BigLawError(f"task {task_id} completed with an empty synthesis")
+    if multi and args.split_mode == "per-task":
+        for name in deliverables:
+            description = build_description(task_cfg, doc_names, [name], use_markers=False)
+            # An .xlsx deliverable still wants tabulate even if its siblings don't.
+            wf = pick_workflow(task_cfg, args.workflow, [name])
+            final = run_one_biglaw_task(client, description, wf, doc_ids, args, log, gates)
+            finals.append(final)
+            outputs[name] = (final["output"], final.get("table"))
+    else:
+        use_markers = multi and args.split_mode == "markers"
+        description = build_description(task_cfg, doc_names, deliverables, use_markers)
+        final = run_one_biglaw_task(client, description, workflow, doc_ids, args, log, gates)
+        finals.append(final)
+        synthesis, table = final["output"], final.get("table")
+        sections = split_by_markers(synthesis, deliverables) if use_markers else {}
+        if use_markers:
+            log("synthesis_split", {
+                "matched": sorted(sections),
+                "fallback": sorted(set(deliverables) - set(sections)),
+            })
+        for name in deliverables:
+            outputs[name] = (sections.get(name, strip_markers(synthesis)), table)
 
     # 3. Render deliverables where LAB's evaluation phase will look for them.
-    for name in deliverables:
+    for name, (text, table) in outputs.items():
         dest = output_dir / name
-        render_deliverable(synthesis, dest, biglaw_table=final.get("table"))
+        render_deliverable(text, dest, biglaw_table=table)
         log("deliverable_written", {"file": str(dest.relative_to(run_dir))})
 
     # 4. metrics.json — key names follow the harness conventions best-effort;
     # eval folds these into scores.json metadata, it does not gate on them.
-    try:
-        cost = client.task_cost(task_id).get("summary", {})
-    except BigLawError:
-        cost = {}
+    in_tok = out_tok = 0
+    cost_usd = 0.0
+    for final in finals:
+        try:
+            cost = client.task_cost(final["id"]).get("summary", {})
+        except BigLawError:
+            cost = {}
+        in_tok += (cost.get("totalInputTokens", 0) + cost.get("totalCacheReadTokens", 0)
+                   + cost.get("totalCacheWriteTokens", 0))
+        out_tok += cost.get("totalOutputTokens", 0)
+        cost_usd += cost.get("totalUsd", 0)
     duration = time.monotonic() - started
-    in_tok = cost.get("totalInputTokens", 0) + cost.get("totalCacheReadTokens", 0) + cost.get("totalCacheWriteTokens", 0)
-    out_tok = cost.get("totalOutputTokens", 0)
     (run_dir / "metrics.json").write_text(json.dumps({
         "input_tokens": in_tok,
         "output_tokens": out_tok,
         "total_tokens": in_tok + out_tok,
-        "turns": len(final.get("rounds") or []),
+        "turns": sum(len(f.get("rounds") or []) for f in finals),
         "duration_seconds": round(duration, 1),
         "num_documents": len(doc_ids),
         "documents_read": len(doc_ids),
         "completed": True,
         "ended_at": datetime.now(timezone.utc).isoformat(),
         "biglaw": {
-            "task_id": task_id,
+            "task_ids": [f["id"] for f in finals],
             "workflow_type": workflow,
-            "cost_usd": cost.get("totalUsd", 0),
-            "gates_approved": gates_approved,
-            "findings": len(final.get("findings") or []),
+            "split_mode": args.split_mode if multi else "single",
+            "cost_usd": round(cost_usd, 4),
+            "gate_policy": args.gate_policy,
+            "gates": gates,
+            "gates_resolved": len(gates),
+            "findings": sum(len(f.get("findings") or []) for f in finals),
             "documents_skipped": skipped,
         },
     }, indent=2), encoding="utf-8")
@@ -200,10 +261,16 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--workflow", choices=["roundtable", "review", "full_bench", "tabulate", "adversarial", "counsel"],
                    help="override the work_type→workflow mapping")
     p.add_argument("--jurisdiction", default="US", help="BigLaw jurisdiction tag (default US)")
+    p.add_argument("--split-mode", choices=["markers", "per-task", "duplicate"], default="markers",
+                   help="multi-deliverable handling: split one synthesis by markers (default), "
+                        "one BigLaw task per deliverable, or duplicate the synthesis into each file")
+    p.add_argument("--gate-policy", choices=["approve", "reject"], default="approve",
+                   help="resolve human gates by approving flagged findings (default) or "
+                        "rejecting them (benchmarks the verification gate as a filter)")
     p.add_argument("--model-dir", default="biglaw", help="model segment of the run-id (default biglaw)")
     p.add_argument("--results-dir", help="results root (default <labs-dir>/results, where evaluation.run_eval looks)")
     p.add_argument("--poll", type=float, default=10.0, help="poll interval seconds (default 10)")
-    p.add_argument("--timeout", type=float, default=3600.0, help="per-task timeout seconds (default 3600)")
+    p.add_argument("--timeout", type=float, default=3600.0, help="per-BigLaw-task timeout seconds (default 3600)")
     p.add_argument("--list", action="store_true", help="list available tasks and exit")
     args = p.parse_args(argv)
 

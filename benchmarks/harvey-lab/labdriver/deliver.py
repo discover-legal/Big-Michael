@@ -158,6 +158,35 @@ def _pandoc_render(text: str, dest: Path) -> None:
         raise RuntimeError(f"pandoc failed: {proc.stderr.strip()[:200]}")
 
 
+# ─── Per-deliverable splitting ────────────────────────────────────────────────
+
+_MARKER = re.compile(r"^\s*={2,}\s*DELIVERABLE:\s*`?(.+?)`?\s*={2,}\s*$", re.MULTILINE | re.IGNORECASE)
+
+
+def split_by_markers(text: str, deliverables: list[str]) -> dict[str, str]:
+    """Map deliverable filenames to their `=== DELIVERABLE: name ===` sections.
+
+    Matching is by full relative name or basename, case-insensitive. Returns
+    only the deliverables that were found; callers fall back to the full
+    synthesis for any that are missing.
+    """
+    sections: dict[str, str] = {}
+    matches = list(_MARKER.finditer(text))
+    for i, m in enumerate(matches):
+        name = m.group(1).strip().lower()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = text[m.end():end].strip()
+        for d in deliverables:
+            if d not in sections and name in (d.lower(), Path(d).name.lower()):
+                sections[d] = body
+                break
+    return sections
+
+
+def strip_markers(text: str) -> str:
+    return _MARKER.sub("", text).strip()
+
+
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 def render_deliverable(text: str, dest: Path, biglaw_table: dict | None = None) -> None:
