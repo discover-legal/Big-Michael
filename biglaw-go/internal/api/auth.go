@@ -39,8 +39,14 @@ func (s *Server) registerAuthRoutes(r *gin.Engine) {
 		}
 	}
 
+	// Boolean map per provider — the shape the login screen (and the TS
+	// implementation) expect: { google: bool, microsoft: bool, linkedin: bool }.
 	r.GET("/auth/providers", rate, func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"providers": auth.ConfiguredProviders(s.cfg)})
+		out := gin.H{}
+		for _, p := range auth.Providers {
+			out[string(p)] = auth.IsConfigured(s.cfg, p)
+		}
+		c.JSON(http.StatusOK, out)
 	})
 
 	// Static paths per provider — no :param segments (they conflict with the
