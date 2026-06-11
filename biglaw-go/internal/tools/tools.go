@@ -123,6 +123,7 @@ func (r *Registry) registerAll() {
 	r.Register(r.findInDocumentTool())
 	// Connector stubs — return structured errors when unconfigured.
 	r.registerConnectors()
+	r.registerClioTools()
 }
 
 // ─── web_search ──────────────────────────────────────────────────────────────

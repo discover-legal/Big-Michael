@@ -177,6 +177,8 @@ func New(
 	s.registerEnginesRoutes(r) // playbooks, redline, headnotes, precedents, citations, briefing
 	s.registerContentRoutes(r) // document library/upload, table.csv, profile cost, tone
 	s.registerRemyRoutes(r)    // client-voice briefs + matter notifications (Remy/CNTXT)
+	s.registerAuthRoutes(r)    // browser OAuth login + signed-cookie sessions
+	s.registerClioRoutes(r)    // Clio OAuth connect flow, matter import, time sync
 
 	s.router = r
 
@@ -198,6 +200,22 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		if !s.cfg.Auth.Enabled {
 			u := auth.LocalPartner
 			c.Set(ctxUserKey, &u)
+			c.Next()
+			return
+		}
+
+		// A valid signed session cookie (browser OAuth login) is an
+		// alternative credential to the bearer token. Checked before the
+		// /auth/ bypass so partner-gated auth routes (e.g. the Clio connect
+		// flow) see the logged-in user.
+		if u := s.sessionUserFromCookie(c); u != nil {
+			c.Set(ctxUserKey, u)
+			c.Next()
+			return
+		}
+
+		// The login flow itself must be reachable without credentials.
+		if strings.HasPrefix(c.Request.URL.Path, "/auth/") {
 			c.Next()
 			return
 		}

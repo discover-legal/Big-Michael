@@ -244,6 +244,12 @@ func (c *ClioClient) IsConnected() bool {
 	return c.tokens != nil
 }
 
+// IsConfigured reports whether the Clio OAuth app credentials are present.
+// Mirrors Config.clio.enabled in the TS implementation (CLIO_CLIENT_ID set).
+func (c *ClioClient) IsConfigured() bool {
+	return os.Getenv("CLIO_CLIENT_ID") != ""
+}
+
 // Status returns the connection status.
 func (c *ClioClient) Status() map[string]interface{} {
 	c.mu.Lock()
@@ -314,6 +320,14 @@ func (c *ClioClient) ListMatters(status string, limit, page int) (interface{}, e
 	return c.Get("/api/v4/matters.json", params)
 }
 
+// GetMatter returns full matter details including client, practice area,
+// responsible attorney, and custom fields.
+func (c *ClioClient) GetMatter(id int) (interface{}, error) {
+	return c.Get(fmt.Sprintf("/api/v4/matters/%d.json", id), map[string]string{
+		"fields": "id,display_number,description,status,client{id,name,email_addresses},practice_area{name},open_date,close_date,custom_fields{value,field_name},responsible_attorney{id,name},originating_attorney{id,name}",
+	})
+}
+
 // ListDocuments lists documents for a matter.
 func (c *ClioClient) ListDocuments(matterID int, limit int) (interface{}, error) {
 	return c.Get("/api/v4/documents.json", map[string]string{
@@ -321,6 +335,40 @@ func (c *ClioClient) ListDocuments(matterID int, limit int) (interface{}, error)
 		"fields":    "id,name,content_type,latest_document_version{id,fully_uploaded}",
 		"limit":     fmt.Sprintf("%d", limit),
 	})
+}
+
+// DownloadDocument fetches the raw bytes of a document. Clio serves the
+// content via a redirect to blob storage, which the default client follows
+// (the Authorization header is dropped on cross-host redirects). The body is
+// capped at 2 MB, matching the TS getBuffer().
+func (c *ClioClient) DownloadDocument(documentID int) ([]byte, error) {
+	token, err := c.ensureValid()
+	if err != nil {
+		return nil, err
+	}
+	path := fmt.Sprintf("/api/v4/documents/%d/download", documentID)
+	client := &http.Client{Timeout: 60 * time.Second}
+	req, err := http.NewRequest("GET", c.base+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("Clio download %s: HTTP %d", path, resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, clioResponseCap+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > clioResponseCap {
+		return nil, fmt.Errorf("Clio download exceeded 2 MB cap")
+	}
+	return data, nil
 }
 
 // CreateActivity logs a time entry in Clio.
@@ -335,6 +383,31 @@ func (c *ClioClient) CreateActivity(matterID int, description, dateOn string, du
 		},
 	}
 	return c.post("/api/v4/activities.json", body)
+}
+
+// CreateNote posts a note to a matter — used to save synthesis output and
+// research memos back into the client file.
+func (c *ClioClient) CreateNote(matterID int, subject, detail string) (interface{}, error) {
+	body := map[string]interface{}{
+		"data": map[string]interface{}{
+			"subject": subject,
+			"detail":  detail,
+			"matter":  map[string]int{"id": matterID},
+		},
+	}
+	return c.post("/api/v4/notes.json", body)
+}
+
+// ListContacts lists contacts, optionally filtered by type (Person or Company).
+func (c *ClioClient) ListContacts(contactType string, limit int) (interface{}, error) {
+	params := map[string]string{
+		"fields": "id,name,type,email_addresses,phone_numbers",
+		"limit":  fmt.Sprintf("%d", limit),
+	}
+	if contactType != "" {
+		params["type"] = contactType
+	}
+	return c.Get("/api/v4/contacts.json", params)
 }
 
 func (c *ClioClient) post(path string, body interface{}) (interface{}, error) {

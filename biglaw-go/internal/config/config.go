@@ -91,6 +91,15 @@ type AuthConfig struct {
 	BaseURL        string
 	UIURL          string
 	AdminEmails    []string
+	// OAuth app credentials — register an app with each provider and set the
+	// matching env vars (see docs/AUTH_SETUP.md). A provider is offered on the
+	// login page only when both its client ID and secret are present.
+	GoogleClientID        string
+	GoogleClientSecret    string
+	MicrosoftClientID     string
+	MicrosoftClientSecret string
+	LinkedInClientID      string
+	LinkedInClientSecret  string
 }
 
 type AgentsConfig struct {
@@ -380,6 +389,13 @@ func Load() *Config {
 			BaseURL:        env("PUBLIC_BASE_URL", "http://localhost:3101"),
 			UIURL:          env("PUBLIC_UI_URL", "http://localhost:5173"),
 			AdminEmails:    envList("ADMIN_EMAILS", ""),
+
+			GoogleClientID:        env("GOOGLE_CLIENT_ID", ""),
+			GoogleClientSecret:    env("GOOGLE_CLIENT_SECRET", ""),
+			MicrosoftClientID:     env("MICROSOFT_CLIENT_ID", ""),
+			MicrosoftClientSecret: env("MICROSOFT_CLIENT_SECRET", ""),
+			LinkedInClientID:      env("LINKEDIN_CLIENT_ID", ""),
+			LinkedInClientSecret:  env("LINKEDIN_CLIENT_SECRET", ""),
 		},
 		Agents: AgentsConfig{
 			MaxToolIterations: envInt("AGENT_MAX_TOOL_ITERATIONS", 6),

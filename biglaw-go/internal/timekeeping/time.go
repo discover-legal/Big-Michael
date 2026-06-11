@@ -227,6 +227,32 @@ func (s *TimeStore) MarkClioSynced(id string) {
 	s.persist()
 }
 
+// SplitClioUnsynced partitions billable entries for a Clio sync run: entries
+// with a positive duration that have never been synced go to toSync; already
+// synced ones are counted as skipped. Open entries (durationMs <= 0) are
+// excluded from both, mirroring the TS /time-entries/sync-to-clio filter.
+func SplitClioUnsynced(entries []types.TimeEntry) (toSync []types.TimeEntry, skipped int) {
+	for _, e := range entries {
+		if e.DurationMs <= 0 {
+			continue
+		}
+		if e.ClioSyncedAt != "" {
+			skipped++
+			continue
+		}
+		toSync = append(toSync, e)
+	}
+	return toSync, skipped
+}
+
+// ClioDurationHours converts an entry to decimal hours for a Clio activity:
+// the larger of the 6-minute billing-unit total and the raw elapsed time,
+// rounded to two decimal places (TS: max(billingUnits*0.1, durationMs/3.6e6)).
+func ClioDurationHours(e types.TimeEntry) float64 {
+	h := math.Max(float64(e.BillingUnits)*0.1, float64(e.DurationMs)/3_600_000.0)
+	return math.Round(h*100) / 100
+}
+
 // ExportJSON returns filtered entries as a slice (suitable for JSON marshalling).
 func (s *TimeStore) ExportJSON(filter TimeFilter) []types.TimeEntry {
 	return s.List(filter)
