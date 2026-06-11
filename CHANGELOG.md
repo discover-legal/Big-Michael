@@ -79,6 +79,16 @@ next post.
   host.docker.internal; lenient JSON-repair parse layer for small-model output;
   Infisical secrets loader wired into Go startup (was ported but never called)
 
+### TopoFlow / AgensFlow (parallel branch: claude/lpm-functionality-plan)
+- Two-level coordination substrate over DyTopo: fast within-trajectory graph
+  induction + AgensFlow, a slow cross-trajectory UCB1 contextual bandit that
+  learns which skills, model bindings, and topologies pay off (tabular stats,
+  frozen encoder, no neural training)
+- Python implementation (M1–M9, 44 tests) then reimplemented natively in Go
+  (`biglaw-go/internal/topoflow`, 41 tests under -race)
+- ⚠ Not yet merged into the go-port branch — merge before shipping the post's
+  claims in a release
+
 ### Benchmarks
 - Go vs TS, identical routes/data, autocannon 50×10s: 1.25× (`/health`),
   3.8× (`/templates`, 33 KB), 6.9× (`/agents`, 850 KB; p50 389 ms → 53 ms) —
