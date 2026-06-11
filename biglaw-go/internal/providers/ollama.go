@@ -35,8 +35,13 @@ func NewOllamaProvider(cfg *config.Config) *OllamaProvider {
 		baseURL = cfg.Local.LocalInferenceURL
 		apiKey = cfg.Local.LocalInferenceKey
 	}
+	// The OpenAI convention (and our .env examples) is a base URL that already
+	// ends in /v1 — e.g. http://localhost:11434/v1. Chat() appends the full
+	// /v1/chat/completions path, so strip a trailing /v1 to avoid /v1/v1/.
+	baseURL = strings.TrimRight(baseURL, "/")
+	baseURL = strings.TrimSuffix(baseURL, "/v1")
 	return &OllamaProvider{
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL: baseURL,
 		apiKey:  apiKey,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}

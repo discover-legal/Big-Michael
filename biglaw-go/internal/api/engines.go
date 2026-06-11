@@ -69,13 +69,21 @@ var (
 	enginesInitErr error
 )
 
-// engines builds all engine singletons on first use. Every claude-* model ID
-// resolves to the Anthropic provider in the registry; engines that mix tiers
-// (e.g. redline: Haiku extract + Sonnet analyse) route per-call by model ID,
-// matching the TS engines' MODELS constants.
+// engines builds all engine singletons on first use. Model selection goes
+// through routing.SelectModel so local-inference configs are honored: with
+// LOCAL_INFERENCE_TIERS=all the whole drafting bench runs on the local
+// OpenAI-compatible endpoint; otherwise the TS engines' cloud model mix
+// (Haiku extract / Sonnet analyse / Opus draft).
 func (s *Server) engines() (*enginesBundle, error) {
 	enginesOnce.Do(func() {
-		provider, err := s.orch.Providers().Get(routing.ModelSonnet)
+		primary := routing.SelectModel(s.cfg, routing.SelectParams{TaskType: routing.TaskReasoning})
+		sonnetID, haikuID, opusID := routing.ModelSonnet, routing.ModelHaiku, routing.ModelOpus
+		if routing.IsLocalModel(primary) || routing.IsOllamaModel(primary) {
+			resolved := routing.ResolveModelID(primary)
+			sonnetID, haikuID, opusID = resolved, resolved, resolved
+		}
+
+		provider, err := s.orch.Providers().Get(primary)
 		if err != nil {
 			enginesInitErr = err
 			return
@@ -89,12 +97,12 @@ func (s *Server) engines() (*enginesBundle, error) {
 
 		enginesShared = &enginesBundle{
 			playbooks: store,
-			builder:   playbook.NewBuilder(provider, routing.ModelHaiku),
-			redline:   redline.New(provider, routing.ModelSonnet, routing.ModelHaiku),
-			headnotes: headnotes.New(provider, routing.ModelSonnet, routing.ModelHaiku),
-			precedent: precedent.New(provider, routing.ModelOpus, routing.ModelHaiku),
-			citations: citations.New(provider, routing.ModelHaiku),
-			briefing:  briefing.New(provider, routing.ModelSonnet),
+			builder:   playbook.NewBuilder(provider, haikuID),
+			redline:   redline.New(provider, sonnetID, haikuID),
+			headnotes: headnotes.New(provider, sonnetID, haikuID),
+			precedent: precedent.New(provider, opusID, haikuID),
+			citations: citations.New(provider, haikuID),
+			briefing:  briefing.New(provider, sonnetID),
 		}
 	})
 	if enginesInitErr != nil {

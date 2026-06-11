@@ -93,6 +93,26 @@ func (s *Store) Init() error {
 	return json.Unmarshal(data, &s.playbooks)
 }
 
+// NormalizeClauseType canonicalises a clause-type label for matching.
+// Playbooks store snake_case keys ("governing_law") while model extraction
+// produces free-form names ("Governing Law") — lookups must not depend on
+// which form they receive. Lowercases and collapses non-alphanumeric runs
+// to single underscores.
+func NormalizeClauseType(s string) string {
+	var b strings.Builder
+	prevUnderscore := true // suppress leading underscore
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevUnderscore = false
+		} else if !prevUnderscore {
+			b.WriteRune('_')
+			prevUnderscore = true
+		}
+	}
+	return strings.TrimRight(b.String(), "_")
+}
+
 // List returns playbooks matching the optional filters.
 func (s *Store) List(scope types.PlaybookScope, ownerID, practiceArea string) []types.Playbook {
 	s.mu.RLock()
@@ -185,7 +205,7 @@ func (s *Store) Resolve(clauseType string, opts ResolveOpts) *ResolvedClause {
 			}
 			for _, e := range pb.Entries {
 				if _, already := byScope[scope]; !already &&
-					strings.EqualFold(e.ClauseType, clauseType) {
+					NormalizeClauseType(e.ClauseType) == NormalizeClauseType(clauseType) {
 					byScope[scope] = e
 				}
 			}

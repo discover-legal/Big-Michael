@@ -37,6 +37,7 @@ import (
 	"github.com/discover-legal/biglaw-go/internal/memory"
 	"github.com/discover-legal/biglaw-go/internal/orchestrator"
 	"github.com/discover-legal/biglaw-go/internal/providers"
+	"github.com/discover-legal/biglaw-go/internal/secrets"
 	"github.com/discover-legal/biglaw-go/internal/settings"
 	"github.com/discover-legal/biglaw-go/internal/templates"
 	"github.com/discover-legal/biglaw-go/internal/timekeeping"
@@ -45,8 +46,11 @@ import (
 )
 
 func main() {
-	// Load .env if present (silently ignore missing file).
+	// Load .env if present (silently ignore missing file), then overlay
+	// Infisical-managed secrets (mirrors the TS entry point: dotenv →
+	// Infisical → config). No-op when INFISICAL_* vars are absent.
 	_ = godotenv.Load()
+	secrets.Load()
 
 	cfg := config.Load()
 

@@ -62,6 +62,23 @@ next post.
 - Personal activity rail (self-scoped, server-enforced; closable)
 - Partner-only firm-wide audit browser with event/actor/task filters
 
+### Playbook review (Spellbook-shaped rework)
+- Drafting workspace restructured around the real workflow: **Playbook review**
+  (apply the whole cascade to a contract) leads; **Draft** (generate from
+  playbook); **Playbooks** (manage positions; cascade resolver demoted to an
+  inspector)
+- Review now detects **missing clauses** — playbook-expected protections absent
+  from the draft, flagged with severity and model-drafted insert language
+- Per-finding accept/dismiss dispositions + markdown markup export
+- Fixed: playbook never engaged in Go redline (free-form clause names vs
+  snake_case keys — normalized matching, unit-tested); extraction prompt
+  hallucinated practice-area topics on small models; playbook clause vocabulary
+  now anchors extraction labels
+- Local inference: engines now honor LOCAL_INFERENCE_TIERS=all routing;
+  OpenAI-compat base URL /v1 normalization; container reaches host Ollama via
+  host.docker.internal; lenient JSON-repair parse layer for small-model output;
+  Infisical secrets loader wired into Go startup (was ported but never called)
+
 ### Benchmarks
 - Go vs TS, identical routes/data, autocannon 50×10s: 1.25× (`/health`),
   3.8× (`/templates`, 33 KB), 6.9× (`/agents`, 850 KB; p50 389 ms → 53 ms) —

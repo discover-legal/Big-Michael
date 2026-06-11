@@ -50,6 +50,13 @@ services:
       JOBS_FILE: /app/data/.jobs.json
       AUDIT_LOG_FILE: /app/data/audit.jsonl
       DEADLINES_RULES_DIR: /app/deadlines/rules
+      # Host-side inference (Ollama / LM Studio): "localhost" inside the
+      # container is the container itself — route to the Docker host gateway.
+      # Adjust the port here if your local endpoint differs from ../.env.
+      LOCAL_INFERENCE_URL: http://host.docker.internal:11434/v1
+      OLLAMA_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3102:3101"
     volumes:

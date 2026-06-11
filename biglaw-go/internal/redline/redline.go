@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -57,22 +58,36 @@ type Issue struct {
 	Severity         RedlineSeverity `json:"severity"`
 }
 
+// MissingClause is a playbook position with no corresponding clause in the
+// counterparty draft — protections the firm expects that simply aren't there.
+type MissingClause struct {
+	ClauseType     string          `json:"clauseType"`
+	FirmPosition   string          `json:"firmPosition"`
+	PositionSource string          `json:"positionSource"`
+	Severity       RedlineSeverity `json:"severity"`
+	IsRedLine      bool            `json:"isRedLine"`
+	SuggestedText  string          `json:"suggestedText,omitempty"`
+	Rationale      string          `json:"rationale"`
+}
+
 // Report is the full redline review output.
 type Report struct {
-	ID               string  `json:"id"`
-	DocumentID       string  `json:"documentId,omitempty"`
-	DocumentTitle    string  `json:"documentTitle,omitempty"`
-	PracticeArea     string  `json:"practiceArea,omitempty"`
-	Jurisdiction     string  `json:"jurisdiction,omitempty"`
-	TotalClauses     int     `json:"totalClauses"`
-	AcceptCount      int     `json:"acceptCount"`
-	RedlineCount     int     `json:"redlineCount"`
-	EscalateCount    int     `json:"escalateCount"`
-	DeleteCount      int     `json:"deleteCount"`
-	CriticalCount    int     `json:"criticalCount"`
-	Issues           []Issue `json:"issues"`
-	ExecutiveSummary string  `json:"executiveSummary"`
-	GeneratedAt      string  `json:"generatedAt"`
+	ID               string          `json:"id"`
+	DocumentID       string          `json:"documentId,omitempty"`
+	DocumentTitle    string          `json:"documentTitle,omitempty"`
+	PracticeArea     string          `json:"practiceArea,omitempty"`
+	Jurisdiction     string          `json:"jurisdiction,omitempty"`
+	TotalClauses     int             `json:"totalClauses"`
+	AcceptCount      int             `json:"acceptCount"`
+	RedlineCount     int             `json:"redlineCount"`
+	EscalateCount    int             `json:"escalateCount"`
+	DeleteCount      int             `json:"deleteCount"`
+	CriticalCount    int             `json:"criticalCount"`
+	MissingCount     int             `json:"missingCount"`
+	Issues           []Issue         `json:"issues"`
+	MissingClauses   []MissingClause `json:"missingClauses"`
+	ExecutiveSummary string          `json:"executiveSummary"`
+	GeneratedAt      string          `json:"generatedAt"`
 }
 
 // RedlineOpts parameterises a redline run.
@@ -103,8 +118,9 @@ func New(provider providers.Provider, sonnetModel, haikuModel string) *Engine {
 
 // Redline generates a redline report for a counterparty draft.
 func (e *Engine) Redline(documentText string, store *playbook.Store, opts RedlineOpts) (*Report, error) {
-	clauses, err := e.extractClauses(documentText, opts.PracticeArea, opts.TaskID)
+	clauses, err := e.extractClauses(documentText, opts.PracticeArea, playbookVocabulary(store, opts), opts.TaskID)
 	if err != nil || len(clauses) == 0 {
+		slog.Warn("RedlineEngine: no clauses extracted — returning empty report", "error", err, "docChars", len(documentText))
 		return e.emptyReport(opts), nil
 	}
 
@@ -120,6 +136,7 @@ func (e *Engine) Redline(documentText string, store *playbook.Store, opts Redlin
 		issues = append(issues, bIssues...)
 	}
 
+	missing := e.detectMissingClauses(clauses, store, opts)
 	summary := e.generateSummary(issues, opts)
 
 	r := &Report{
@@ -130,6 +147,8 @@ func (e *Engine) Redline(documentText string, store *playbook.Store, opts Redlin
 		Jurisdiction:  opts.Jurisdiction,
 		TotalClauses:  len(issues),
 		Issues:        issues,
+		MissingClauses: missing,
+		MissingCount:  len(missing),
 		ExecutiveSummary: summary,
 		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
@@ -160,22 +179,48 @@ type rawClause struct {
 	Text       string `json:"text"`
 }
 
-func (e *Engine) extractClauses(text, practiceArea, taskID string) ([]rawClause, error) {
+// playbookVocabulary returns the clause-type labels known to the applicable
+// playbooks so extraction can label clauses in the firm's own vocabulary —
+// without it, "confidentiality" vs "Confidential Information" never match.
+func playbookVocabulary(store *playbook.Store, opts RedlineOpts) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, pb := range store.List("", "", opts.PracticeArea) {
+		for _, en := range pb.Entries {
+			if !seen[en.ClauseType] {
+				seen[en.ClauseType] = true
+				out = append(out, en.ClauseType)
+			}
+		}
+	}
+	return out
+}
+
+func (e *Engine) extractClauses(text, practiceArea string, vocabulary []string, taskID string) ([]rawClause, error) {
 	start := time.Now()
 	area := practiceArea
 	if area == "" {
 		area = "transactional"
 	}
 
-	system := fmt.Sprintf(`You are a contract analysis assistant.
-Extract every distinct legal clause from the contract text. For each clause:
-- Identify its type (e.g. "MAC/MAE definition", "Indemnification cap", "Non-compete")
-- Extract the full verbatim text of the clause
+	vocabHint := ""
+	if len(vocabulary) > 0 {
+		vocabHint = fmt.Sprintf("\n\nThe firm's playbook uses these clause-type labels — when a clause matches one of these concepts, use that exact label as clauseType: %s.",
+			strings.Join(vocabulary, ", "))
+	}
+
+	system := fmt.Sprintf(`You are a contract analysis assistant. The contract below relates to %s work.
+
+Extract every distinct legal clause that actually appears in the contract text. For each clause:
+- clauseType: a short label for what the clause is, taken from its heading or subject matter (e.g. "Confidentiality", "Limitation of liability", "Governing law")
+- text: the verbatim text of the clause from the document
+
+Only report clauses present in the document — never invent clause types that are not there.%s
 
 Return a JSON array:
 [{"clauseType": "...", "text": "..."}]
 
-Focus on %s clauses. Include up to 40 clauses. Skip boilerplate recitals.`, area)
+Include up to 40 clauses. Skip boilerplate recitals.`, area, vocabHint)
 
 	resp, err := e.provider.Chat(providers.ChatParams{
 		Model:       e.haiku,
@@ -193,16 +238,135 @@ Focus on %s clauses. Include up to 40 clauses. Skip boilerplate recitals.`, area
 	recordCost(e.haiku, resp, dms, taskID)
 
 	raw := textFrom(resp)
-	s := strings.Index(raw, "[")
-	eIdx := strings.LastIndex(raw, "]")
-	if s < 0 || eIdx <= s {
-		return nil, nil
-	}
 	var clauses []rawClause
-	if err := json.Unmarshal([]byte(raw[s:eIdx+1]), &clauses); err != nil {
+	if err := parseJSONArray(raw, &clauses); err != nil {
+		slog.Warn("RedlineEngine: clause extraction parse failed", "error", err, "rawPrefix", truncate(raw, 300))
 		return nil, nil
 	}
 	return clauses, nil
+}
+
+// ─── Step 1b: missing-clause detection ───────────────────────────────────────
+// A playbook review has two halves: what's wrong with the clauses that ARE in
+// the draft (Step 2), and which firm-expected protections are simply ABSENT.
+// Clause-type naming is free-form on both sides, so the absence judgment is
+// made by the model rather than by string matching.
+
+func (e *Engine) detectMissingClauses(found []rawClause, store *playbook.Store, opts RedlineOpts) []MissingClause {
+	// Union of clause types across the applicable playbooks, each resolved
+	// through the cascade so the effective tier's position is used.
+	type expected struct {
+		entry  types.PlaybookEntry
+		source string
+	}
+	expectedByType := map[string]expected{}
+	for _, pb := range store.List("", "", opts.PracticeArea) {
+		for _, en := range pb.Entries {
+			if _, seen := expectedByType[en.ClauseType]; seen {
+				continue
+			}
+			resolved := store.Resolve(en.ClauseType, playbook.ResolveOpts{
+				PracticeArea: opts.PracticeArea,
+				MatterNumber: opts.MatterNumber,
+				ClientID:     opts.ClientID,
+				ProfileID:    opts.ProfileID,
+			})
+			if resolved != nil {
+				expectedByType[en.ClauseType] = expected{entry: resolved.EffectiveEntry, source: string(resolved.ResolvedFrom)}
+			}
+		}
+	}
+	if len(expectedByType) == 0 {
+		return nil
+	}
+
+	var expBlocks, foundTypes []string
+	count := 0
+	for ct, ex := range expectedByType {
+		if count >= 40 {
+			break
+		}
+		count++
+		expBlocks = append(expBlocks, fmt.Sprintf("- %s: %s", ct, truncate(ex.entry.StandardPosition, 300)))
+	}
+	for _, c := range found {
+		foundTypes = append(foundTypes, c.ClauseType)
+	}
+
+	system := `You are a senior transactional lawyer. Given (a) the clause types your firm's playbook expects in this kind of agreement, with the firm's position on each, and (b) the clause types actually present in a counterparty draft, identify which expected protections are MISSING from the draft.
+
+Treat differently-worded names for the same concept as present (e.g. "Indemnification cap" covers "indemnity"). Only report genuine absences that matter.
+
+For each missing clause return:
+- clauseType: the playbook's clause type, verbatim
+- suggestedText: insertable clause language implementing the firm position (2-5 sentences)
+- rationale: 1 sentence on the risk of leaving it out
+- severity: "critical", "high", "medium", or "low"
+
+Return a JSON array (empty array if nothing material is missing):
+[{"clauseType":"...","suggestedText":"...","rationale":"...","severity":"..."}]`
+
+	user := fmt.Sprintf("PLAYBOOK EXPECTS:\n%s\n\nCLAUSES PRESENT IN DRAFT:\n%s",
+		strings.Join(expBlocks, "\n"), strings.Join(foundTypes, ", "))
+
+	start := time.Now()
+	resp, err := e.provider.Chat(providers.ChatParams{
+		Model:       e.sonnet,
+		MaxTokens:   2500,
+		System:      system,
+		CacheSystem: true,
+		Messages:    []providers.Message{{Role: "user", Content: user}},
+	})
+	if err != nil {
+		slog.Warn("RedlineEngine: missing-clause detection failed", "error", err)
+		return nil
+	}
+	recordCost(e.sonnet, resp, time.Since(start).Milliseconds(), opts.TaskID)
+
+	raw := textFrom(resp)
+	var parsed []struct {
+		ClauseType    string `json:"clauseType"`
+		SuggestedText string `json:"suggestedText"`
+		Rationale     string `json:"rationale"`
+		Severity      string `json:"severity"`
+	}
+	if err := parseJSONArray(raw, &parsed); err != nil {
+		slog.Warn("RedlineEngine: missing-clause parse failed", "error", err, "rawPrefix", truncate(raw, 300))
+		return nil
+	}
+
+	// Map model-returned clause types back to playbook entries with the same
+	// normalization Resolve uses — the model may restyle "limitation_of_liability"
+	// as "Limitation of Liability".
+	normalized := map[string]string{}
+	for ct := range expectedByType {
+		normalized[playbook.NormalizeClauseType(ct)] = ct
+	}
+
+	out := make([]MissingClause, 0, len(parsed))
+	for _, m := range parsed {
+		key, ok := normalized[playbook.NormalizeClauseType(m.ClauseType)]
+		if !ok {
+			continue // model invented a clause type — drop it
+		}
+		ex := expectedByType[key]
+		sev := RedlineSeverity(m.Severity)
+		switch sev {
+		case SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow:
+		default:
+			sev = SeverityMedium
+		}
+		out = append(out, MissingClause{
+			ClauseType:     key,
+			FirmPosition:   ex.entry.StandardPosition,
+			PositionSource: ex.source,
+			Severity:       sev,
+			IsRedLine:      len(ex.entry.RedLines) > 0,
+			SuggestedText:  m.SuggestedText,
+			Rationale:      m.Rationale,
+		})
+	}
+	return out
 }
 
 // ─── Step 2: batch analysis ───────────────────────────────────────────────────
@@ -285,13 +449,9 @@ Return a JSON array — one object per clause in input order:
 	recordCost(e.sonnet, resp, dms, opts.TaskID)
 
 	raw := textFrom(resp)
-	s := strings.Index(raw, "[")
-	eIdx := strings.LastIndex(raw, "]")
-	if s < 0 || eIdx <= s {
-		return fallbackIssues(clauses, positions)
-	}
 	var parsed []map[string]interface{}
-	if err := json.Unmarshal([]byte(raw[s:eIdx+1]), &parsed); err != nil {
+	if err := parseJSONArray(raw, &parsed); err != nil {
+		slog.Warn("RedlineEngine: batch analysis parse failed", "error", err, "rawPrefix", truncate(raw, 300))
 		return fallbackIssues(clauses, positions)
 	}
 
@@ -460,6 +620,49 @@ func recordCost(model string, resp *providers.ChatResponse, dms int64, taskID st
 		Context: "redline", TaskID: taskID,
 	})
 }
+
+// parseJSONArray extracts and unmarshals the first JSON array in raw into v.
+// Lenient: strips trailing commas before ] and } — small local models emit
+// them constantly, and a review that silently returns nothing is worse than
+// a forgiving parse.
+func parseJSONArray(raw string, v interface{}) error {
+	s := strings.Index(raw, "[")
+	e := strings.LastIndex(raw, "]")
+	if s < 0 || e <= s {
+		return fmt.Errorf("no JSON array found")
+	}
+	frag := raw[s : e+1]
+	if err := json.Unmarshal([]byte(frag), v); err == nil {
+		return nil
+	}
+	frag = trailingCommaRe.ReplaceAllString(frag, "$1")
+	if err := json.Unmarshal([]byte(frag), v); err == nil {
+		return nil
+	}
+	// Quote bare-word values ("severity": Low → "severity": "Low"),
+	// leaving true/false/null intact.
+	frag = bareWordValueRe.ReplaceAllStringFunc(frag, func(m string) string {
+		parts := bareWordValueRe.FindStringSubmatch(m)
+		word := parts[2]
+		switch strings.ToLower(word) {
+		case "true", "false", "null":
+			return m
+		}
+		return parts[1] + `"` + word + `"` + parts[3]
+	})
+	if err := json.Unmarshal([]byte(frag), v); err == nil {
+		return nil
+	}
+	// Quote bare object keys ({severity: → {"severity":).
+	frag = bareKeyRe.ReplaceAllString(frag, `$1"$2"$3`)
+	return json.Unmarshal([]byte(frag), v)
+}
+
+var (
+	trailingCommaRe = regexp.MustCompile(`,\s*([\]}])`)
+	bareWordValueRe = regexp.MustCompile(`(:\s*)([A-Za-z][A-Za-z _-]*?)(\s*[,}\]])`)
+	bareKeyRe       = regexp.MustCompile(`([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*:)`)
+)
 
 func textFrom(resp *providers.ChatResponse) string {
 	for _, blk := range resp.Content {

@@ -698,6 +698,17 @@ export interface RedlineIssue {
   severity: "critical" | "high" | "medium" | "low";
 }
 
+/** A playbook position absent from the counterparty draft. */
+export interface MissingClause {
+  clauseType: string;
+  firmPosition: string;
+  positionSource: string;
+  severity: "critical" | "high" | "medium" | "low";
+  isRedLine: boolean;
+  suggestedText?: string;
+  rationale: string;
+}
+
 export interface RedlineReport {
   id: string;
   documentId?: string;
@@ -710,7 +721,9 @@ export interface RedlineReport {
   escalateCount: number;
   deleteCount: number;
   criticalCount: number;
+  missingCount?: number;
   issues: RedlineIssue[];
+  missingClauses?: MissingClause[];
   executiveSummary: string;
   generatedAt: string;
 }
