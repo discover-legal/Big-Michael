@@ -64,3 +64,6 @@ SECURITY_AUDIT.json
 .claude/worktrees/
 __pycache__/
 *.pyc
+
+# Harvey LAB sweep progress logs (run output)
+benchmarks/harvey-lab/sweep-*.jsonl

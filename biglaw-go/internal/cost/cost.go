@@ -91,13 +91,31 @@ var basePricing = map[string][2]float64{
 	"claude-3-5-sonnet-20241022": {3.00, 15.00},
 	"claude-3-haiku-20240307":    {0.25, 1.25},
 	"claude-3-opus-20240229":     {15.00, 75.00},
+	// OpenAI-hosted models routed via the OPENAI_MODEL chat shortcut. Defaults
+	// are 0 (untracked) so we never present a fabricated rate — set the real
+	// list price with COST_GPT_IN / COST_GPT_OUT (USD per million tokens) in
+	// .env, e.g. COST_GPT_IN=1.25 COST_GPT_OUT=10.00. The model IDs must be
+	// present here for the "gpt"/"embed" family overrides below to find them.
+	"gpt-5.5":                 {0, 0},
+	"gpt-5":                   {0, 0},
+	"text-embedding-3-small":  {0, 0},
+	"text-embedding-3-large":  {0, 0},
 }
 
 // pricingFamilies are the model families whose pricing can be overridden at
 // startup via COST_<FAMILY>_IN / COST_<FAMILY>_OUT env vars (USD per million
 // tokens), e.g. COST_HAIKU_IN=1.00 COST_HAIKU_OUT=5.00. An override applies
 // to every model in basePricing whose ID contains the family substring.
-var pricingFamilies = []string{"haiku", "sonnet", "opus"}
+// "gpt" matches gpt-5.5 / gpt-5; "text-embedding" matches the OpenAI embedding
+// models. Override their (zero) defaults with COST_GPT_IN/_OUT and
+// COST_TEXT-EMBEDDING_IN/_OUT — though the env key is awkward for the latter,
+// so "embed" is also accepted as an alias for the embedding family.
+var pricingFamilies = []string{"haiku", "sonnet", "opus", "gpt", "embed"}
+
+// familyMatch maps a pricing family to the model-ID substring it applies to.
+// Most families are their own substring; "embed" is an alias that targets the
+// text-embedding-* model IDs.
+var familyMatch = map[string]string{"embed": "text-embedding"}
 
 func init() {
 	applyPricingEnvOverrides(basePricing)
@@ -114,8 +132,12 @@ func applyPricingEnvOverrides(pricing map[string][2]float64) {
 		if !inOK && !outOK {
 			continue
 		}
+		match := family
+		if m, ok := familyMatch[family]; ok {
+			match = m
+		}
 		for model, p := range pricing {
-			if !strings.Contains(model, family) {
+			if !strings.Contains(model, match) {
 				continue
 			}
 			if inOK {

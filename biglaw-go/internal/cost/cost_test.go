@@ -15,6 +15,31 @@ func samplePricing() map[string][2]float64 {
 		"claude-3-5-haiku-20241022": {1.00, 5.00},
 		"claude-sonnet-4-6":         {3.00, 15.00},
 		"claude-opus-4-8":           {15.00, 75.00},
+		"gpt-5.5":                   {0, 0},
+		"text-embedding-3-small":    {0, 0},
+	}
+}
+
+// COST_GPT_IN/_OUT prices the OpenAI chat models; the "embed" alias prices the
+// text-embedding-* IDs. Both default to 0 (untracked) until overridden.
+func TestApplyPricingEnvOverrides_OpenAIFamilies(t *testing.T) {
+	t.Setenv("COST_GPT_IN", "1.25")
+	t.Setenv("COST_GPT_OUT", "10.00")
+	t.Setenv("COST_EMBED_IN", "0.02")
+
+	pricing := samplePricing()
+	applyPricingEnvOverrides(pricing)
+
+	if got := pricing["gpt-5.5"]; got != [2]float64{1.25, 10.00} {
+		t.Errorf("gpt-5.5 = %v, want {1.25 10}", got)
+	}
+	// "embed" alias targets text-embedding-*; only the input rate was set.
+	if got := pricing["text-embedding-3-small"]; got != [2]float64{0.02, 0} {
+		t.Errorf("text-embedding-3-small = %v, want {0.02 0}", got)
+	}
+	// The "gpt" family must not bleed into Claude models.
+	if got := pricing["claude-opus-4-8"]; got != [2]float64{15.00, 75.00} {
+		t.Errorf("opus changed unexpectedly: %v", got)
 	}
 }
 
